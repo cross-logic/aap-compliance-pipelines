@@ -9,13 +9,17 @@ backend:
   baseUrl: http://localhost:7007
   listen:
     port: 7007
+  cors:
+    origin: http://localhost:3000
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
   database:
     client: better-sqlite3
     connection: ':memory:'
 
-# AAP Connection
-# Override baseUrl and checkSSL in app-config.local.yaml (gitignored)
+# AAP Connection — default for local dev
+# Override in app-config.local.yaml (gitignored) for different environments
 ansible:
   rhaap:
-    baseUrl: ${AAP_BASE_URL}
-    checkSSL: true
+    baseUrl: https://aap-aap-operator.apps.192.168.128.128.nip.io
+    checkSSL: false
