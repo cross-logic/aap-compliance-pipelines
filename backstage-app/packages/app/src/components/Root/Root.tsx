@@ -69,8 +69,7 @@ const SidebarLogo = () => {
 export const Root = ({ children }: PropsWithChildren<{}>) => (
   <SidebarPage>
     <Sidebar>
-      <SidebarLogo />
-      <SidebarDivider />
+      <div style={{ marginTop: 64 }} />
       <SidebarGroup label="Menu" icon={<MenuIcon />}>
         <SidebarItem icon={SecurityIcon} to="/compliance" text="Templates" />
         <SidebarItem icon={HistoryIcon} to="/compliance/results/42" text="History" />
