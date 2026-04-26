@@ -1,5 +1,5 @@
 import { PropsWithChildren } from 'react';
-import { makeStyles } from '@material-ui/core';
+import { makeStyles, ThemeProvider, createMuiTheme } from '@material-ui/core';
 import {
   Sidebar,
   sidebarConfig,
@@ -86,21 +86,44 @@ const SidebarLogo = () => {
   );
 };
 
-export const Root = ({ children }: PropsWithChildren<{}>) => (
-  <SidebarPage>
-    <Sidebar>
-      <SidebarLogo />
-      <SidebarDivider />
-      <SidebarGroup label="Menu" icon={<MenuIcon />}>
-        <SidebarItem icon={SecurityIcon} to="/compliance" text="Templates" />
-        <SidebarItem icon={HistoryIcon} to="/compliance/results/42" text="History" />
-      </SidebarGroup>
-      <SidebarSpace />
-      <SidebarDivider />
-      <SidebarGroup label="Settings" icon={<SettingsIcon />} to="/settings">
-        <SidebarItem icon={SettingsIcon} to="/settings" text="Administration" />
-      </SidebarGroup>
-    </Sidebar>
-    {children}
-  </SidebarPage>
-);
+const useDarkSidebarStyles = makeStyles({
+  darkSidebar: {
+    '& nav': {
+      backgroundColor: '#212427',
+      color: '#ffffff',
+    },
+    '& nav a, & nav span, & nav p, & nav div': {
+      color: '#ffffff !important',
+    },
+    '& nav svg': {
+      color: '#ffffff !important',
+    },
+    '& nav hr': {
+      backgroundColor: 'rgba(255,255,255,0.12)',
+    },
+  },
+});
+
+export const Root = ({ children }: PropsWithChildren<{}>) => {
+  const classes = useDarkSidebarStyles();
+  return (
+    <SidebarPage>
+      <div className={classes.darkSidebar}>
+        <Sidebar>
+          <SidebarLogo />
+          <SidebarDivider />
+          <SidebarGroup label="Menu" icon={<MenuIcon />}>
+            <SidebarItem icon={SecurityIcon} to="/compliance" text="Templates" />
+            <SidebarItem icon={HistoryIcon} to="/compliance/results/42" text="History" />
+          </SidebarGroup>
+          <SidebarSpace />
+          <SidebarDivider />
+          <SidebarGroup label="Settings" icon={<SettingsIcon />} to="/settings">
+            <SidebarItem icon={SettingsIcon} to="/settings" text="Administration" />
+          </SidebarGroup>
+        </Sidebar>
+      </div>
+      {children}
+    </SidebarPage>
+  );
+};
