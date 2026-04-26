@@ -20,11 +20,11 @@ import SettingsIcon from '@material-ui/icons/Settings';
 const useStyles = makeStyles({
   sidebarLogoRoot: {
     width: sidebarConfig.drawerWidthClosed,
-    height: 3 * sidebarConfig.logoHeight,
+    height: 48,
     display: 'flex',
     flexFlow: 'row nowrap',
     alignItems: 'center',
-    marginBottom: -14,
+    marginTop: 64,
   },
   sidebarLogoLink: {
     width: sidebarConfig.drawerWidthClosed,
