@@ -15,7 +15,6 @@ import {
   LinearProgress,
   Chip,
   Box,
-  Divider,
   makeStyles,
 } from '@material-ui/core';
 import PlayCircleFilledIcon from '@material-ui/icons/PlayCircleFilled';
@@ -24,11 +23,8 @@ import HistoryIcon from '@material-ui/icons/History';
 import { ComplianceGauge } from './ComplianceGauge';
 
 const useStyles = makeStyles(theme => ({
-  gaugeRow: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
+  section: {
+    marginBottom: theme.spacing(2),
   },
   statCard: {
     textAlign: 'center',
@@ -44,15 +40,9 @@ const useStyles = makeStyles(theme => ({
     fontSize: '0.8rem',
     marginTop: theme.spacing(0.5),
   },
-  critical: {
-    color: '#C9190B',
-  },
-  warning: {
-    color: '#F0AB00',
-  },
-  success: {
-    color: '#3E8635',
-  },
+  critical: { color: '#C9190B' },
+  warning: { color: '#F0AB00' },
+  success: { color: '#3E8635' },
   quickAction: {
     display: 'flex',
     alignItems: 'center',
@@ -73,9 +63,7 @@ const useStyles = makeStyles(theme => ({
     alignItems: 'center',
     padding: theme.spacing(1.5, 0),
     borderBottom: `1px solid ${theme.palette.divider}`,
-    '&:last-child': {
-      borderBottom: 'none',
-    },
+    '&:last-child': { borderBottom: 'none' },
   },
   frameworkCard: {
     height: '100%',
@@ -101,9 +89,9 @@ export const ComplianceDashboard = () => {
   const navigate = useNavigate();
 
   return (
-    <Grid container spacing={2}>
-      {/* Compliance Gauges Row */}
-      <Grid item xs={12}>
+    <div>
+      {/* Compliance Gauges */}
+      <div className={classes.section}>
         <InfoCard title="Compliance Posture">
           <Grid container spacing={2} justifyContent="center">
             <Grid item xs={6} sm={3}>
@@ -120,113 +108,120 @@ export const ComplianceDashboard = () => {
             </Grid>
           </Grid>
         </InfoCard>
-      </Grid>
+      </div>
 
       {/* Key Metrics */}
-      <Grid item xs={6} sm={3}>
-        <InfoCard>
-          <div className={classes.statCard}>
-            <Typography className={`${classes.statValue}`}>12</Typography>
-            <Typography className={classes.statLabel}>Hosts Scanned</Typography>
-          </div>
-        </InfoCard>
-      </Grid>
-      <Grid item xs={6} sm={3}>
-        <InfoCard>
-          <div className={classes.statCard}>
-            <Typography className={`${classes.statValue} ${classes.critical}`}>8</Typography>
-            <Typography className={classes.statLabel}>Critical (CAT I)</Typography>
-          </div>
-        </InfoCard>
-      </Grid>
-      <Grid item xs={6} sm={3}>
-        <InfoCard>
-          <div className={classes.statCard}>
-            <Typography className={`${classes.statValue} ${classes.warning}`}>15</Typography>
-            <Typography className={classes.statLabel}>Pending Remediation</Typography>
-          </div>
-        </InfoCard>
-      </Grid>
-      <Grid item xs={6} sm={3}>
-        <InfoCard>
-          <div className={classes.statCard}>
-            <Typography className={`${classes.statValue} ${classes.success}`}>3</Typography>
-            <Typography className={classes.statLabel}>Active Profiles</Typography>
-          </div>
-        </InfoCard>
-      </Grid>
+      <div className={classes.section}>
+        <Grid container spacing={2}>
+          <Grid item xs={6} sm={3}>
+            <InfoCard>
+              <div className={classes.statCard}>
+                <Typography className={classes.statValue}>12</Typography>
+                <Typography className={classes.statLabel}>Hosts Scanned</Typography>
+              </div>
+            </InfoCard>
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <InfoCard>
+              <div className={classes.statCard}>
+                <Typography className={`${classes.statValue} ${classes.critical}`}>8</Typography>
+                <Typography className={classes.statLabel}>Critical (CAT I)</Typography>
+              </div>
+            </InfoCard>
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <InfoCard>
+              <div className={classes.statCard}>
+                <Typography className={`${classes.statValue} ${classes.warning}`}>15</Typography>
+                <Typography className={classes.statLabel}>Pending Remediation</Typography>
+              </div>
+            </InfoCard>
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <InfoCard>
+              <div className={classes.statCard}>
+                <Typography className={`${classes.statValue} ${classes.success}`}>3</Typography>
+                <Typography className={classes.statLabel}>Active Profiles</Typography>
+              </div>
+            </InfoCard>
+          </Grid>
+        </Grid>
+      </div>
 
       {/* Quick Actions + Recent Scans */}
-      <Grid item xs={12} md={4}>
-        <InfoCard title="Quick Actions">
-          <Card variant="outlined">
-            <CardActionArea onClick={() => navigate('scan')}>
-              <div className={classes.quickAction}>
-                <PlayCircleFilledIcon className={classes.actionIcon} />
-                <div>
-                  <Typography variant="subtitle1">New Scan</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Scan infrastructure against a compliance profile
-                  </Typography>
+      <div className={classes.section}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={4}>
+            <InfoCard title="Quick Actions">
+              <Card variant="outlined">
+                <CardActionArea onClick={() => navigate('scan')}>
+                  <div className={classes.quickAction}>
+                    <PlayCircleFilledIcon className={classes.actionIcon} />
+                    <div>
+                      <Typography variant="subtitle1">New Scan</Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        Scan infrastructure against a compliance profile
+                      </Typography>
+                    </div>
+                  </div>
+                </CardActionArea>
+              </Card>
+              <Box mt={1} />
+              <Card variant="outlined">
+                <CardActionArea onClick={() => navigate('profiles/all')}>
+                  <div className={classes.quickAction}>
+                    <SecurityIcon className={classes.actionIcon} />
+                    <div>
+                      <Typography variant="subtitle1">Browse Profiles</Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        View compliance frameworks and benchmarks
+                      </Typography>
+                    </div>
+                  </div>
+                </CardActionArea>
+              </Card>
+            </InfoCard>
+          </Grid>
+          <Grid item xs={12} md={8}>
+            <InfoCard
+              title="Recent Scans"
+              action={
+                <Chip
+                  icon={<HistoryIcon />}
+                  label="View All"
+                  variant="outlined"
+                  size="small"
+                  clickable
+                />
+              }
+            >
+              {MOCK_SCANS.map(scan => (
+                <div key={scan.id} className={classes.scanRow}>
+                  <div>
+                    <Typography variant="subtitle2">{scan.profile}</Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      {scan.hosts} &middot; {scan.timestamp}
+                    </Typography>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {scan.passRate >= 80 ? (
+                      <StatusOK />
+                    ) : scan.passRate >= 65 ? (
+                      <StatusWarning />
+                    ) : (
+                      <StatusError />
+                    )}
+                    <Typography variant="subtitle2">{scan.passRate}%</Typography>
+                  </div>
                 </div>
-              </div>
-            </CardActionArea>
-          </Card>
-          <Box mt={1} />
-          <Card variant="outlined">
-            <CardActionArea onClick={() => navigate('profiles/all')}>
-              <div className={classes.quickAction}>
-                <SecurityIcon className={classes.actionIcon} />
-                <div>
-                  <Typography variant="subtitle1">Browse Profiles</Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    View compliance frameworks and benchmarks
-                  </Typography>
-                </div>
-              </div>
-            </CardActionArea>
-          </Card>
-        </InfoCard>
-      </Grid>
-
-      <Grid item xs={12} md={8}>
-        <InfoCard
-          title="Recent Scans"
-          action={
-            <Chip
-              icon={<HistoryIcon />}
-              label="View All"
-              variant="outlined"
-              size="small"
-              clickable
-            />
-          }
-        >
-          {MOCK_SCANS.map(scan => (
-            <div key={scan.id} className={classes.scanRow}>
-              <div>
-                <Typography variant="subtitle2">{scan.profile}</Typography>
-                <Typography variant="body2" color="textSecondary">
-                  {scan.hosts} &middot; {scan.timestamp}
-                </Typography>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {scan.passRate >= 80 ? (
-                  <StatusOK />
-                ) : scan.passRate >= 65 ? (
-                  <StatusWarning />
-                ) : (
-                  <StatusError />
-                )}
-                <Typography variant="subtitle2">{scan.passRate}%</Typography>
-              </div>
-            </div>
-          ))}
-        </InfoCard>
-      </Grid>
+              ))}
+            </InfoCard>
+          </Grid>
+        </Grid>
+      </div>
 
       {/* Framework Cards */}
-      <Grid item xs={12}>
+      <div className={classes.section}>
         <InfoCard title="Active Compliance Frameworks">
           <Grid container spacing={2}>
             {FRAMEWORKS.map(fw => (
@@ -262,7 +257,7 @@ export const ComplianceDashboard = () => {
             ))}
           </Grid>
         </InfoCard>
-      </Grid>
-    </Grid>
+      </div>
+    </div>
   );
 };
