@@ -25,6 +25,7 @@ import BuildIcon from '@material-ui/icons/Build';
 import SettingsIcon from '@material-ui/icons/Settings';
 
 import { CompliancePage } from '@aap-compliance/plugin-compliance';
+import { GlobalHeader } from './GlobalHeader';
 
 const app = createApp({
   bindRoutes() {},
@@ -110,6 +111,7 @@ export default app.createRoot(
   <>
     <AlertDisplay />
     <AppRouter>
+      <GlobalHeader />
       <Root>{routes}</Root>
     </AppRouter>
   </>,
