@@ -15,39 +15,43 @@ import {
   LinearProgress,
   Chip,
   Box,
+  Divider,
   makeStyles,
 } from '@material-ui/core';
-import SecurityIcon from '@material-ui/icons/Security';
-import AssessmentIcon from '@material-ui/icons/Assessment';
 import PlayCircleFilledIcon from '@material-ui/icons/PlayCircleFilled';
+import SecurityIcon from '@material-ui/icons/Security';
 import HistoryIcon from '@material-ui/icons/History';
+import { ComplianceGauge } from './ComplianceGauge';
 
 const useStyles = makeStyles(theme => ({
+  gaugeRow: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+  },
   statCard: {
     textAlign: 'center',
-    padding: theme.spacing(2),
+    padding: theme.spacing(1.5),
   },
   statValue: {
-    fontSize: '2.5rem',
+    fontSize: '1.75rem',
     fontWeight: 700,
     lineHeight: 1.2,
   },
   statLabel: {
     color: theme.palette.text.secondary,
-    fontSize: '0.875rem',
+    fontSize: '0.8rem',
     marginTop: theme.spacing(0.5),
   },
-  passRate: {
-    color: theme.palette.success?.main ?? '#4caf50',
+  critical: {
+    color: '#C9190B',
   },
-  failRate: {
-    color: theme.palette.error?.main ?? '#f44336',
+  warning: {
+    color: '#F0AB00',
   },
-  warningRate: {
-    color: theme.palette.warning?.main ?? '#ff9800',
-  },
-  profileCard: {
-    height: '100%',
+  success: {
+    color: '#3E8635',
   },
   quickAction: {
     display: 'flex',
@@ -60,10 +64,10 @@ const useStyles = makeStyles(theme => ({
     color: theme.palette.primary.main,
   },
   complianceBar: {
-    height: 8,
-    borderRadius: 4,
+    height: 6,
+    borderRadius: 3,
   },
-  recentScanRow: {
+  scanRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -73,42 +77,23 @@ const useStyles = makeStyles(theme => ({
       borderBottom: 'none',
     },
   },
+  frameworkCard: {
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
 }));
 
-const MOCK_STATS = {
-  hostsScanned: 12,
-  complianceRate: 72,
-  criticalFindings: 8,
-  lastScanTime: '2 hours ago',
-  activePolicies: 3,
-  pendingRemediations: 15,
-};
+const MOCK_SCANS = [
+  { id: 1, profile: 'RHEL 9 STIG V2R8', hosts: 'production-web-servers', passRate: 78, timestamp: '2 hours ago' },
+  { id: 2, profile: 'CIS RHEL 9 L1', hosts: 'staging-db-servers', passRate: 85, timestamp: '1 day ago' },
+  { id: 3, profile: 'RHEL 9 STIG V2R8', hosts: 'dev-servers', passRate: 62, timestamp: '3 days ago' },
+];
 
-const MOCK_RECENT_SCANS = [
-  {
-    id: 1,
-    profile: 'RHEL 9 STIG V2R8',
-    hosts: 'production-web-servers',
-    passRate: 78,
-    timestamp: '2 hours ago',
-    status: 'completed' as const,
-  },
-  {
-    id: 2,
-    profile: 'CIS RHEL 9 L1',
-    hosts: 'staging-db-servers',
-    passRate: 85,
-    timestamp: '1 day ago',
-    status: 'completed' as const,
-  },
-  {
-    id: 3,
-    profile: 'RHEL 9 STIG V2R8',
-    hosts: 'dev-servers',
-    passRate: 62,
-    timestamp: '3 days ago',
-    status: 'completed' as const,
-  },
+const FRAMEWORKS = [
+  { name: 'DISA STIG V2R8', target: 'RHEL 9', rules: 366, rate: 78, lastScan: '2 hours ago' },
+  { name: 'CIS Benchmark L1', target: 'RHEL 9', rules: 189, rate: 85, lastScan: '1 day ago' },
+  { name: 'PCI-DSS v4.0', target: 'RHEL 9', rules: 142, rate: 62, lastScan: '3 days ago' },
 ];
 
 export const ComplianceDashboard = () => {
@@ -116,234 +101,168 @@ export const ComplianceDashboard = () => {
   const navigate = useNavigate();
 
   return (
-    <>
-      <Grid container spacing={3}>
-          {/* Stats Row */}
-          <Grid item xs={12} sm={6} md={3}>
-            <InfoCard>
-              <div className={classes.statCard}>
-                <Typography className={`${classes.statValue} ${classes.passRate}`}>
-                  {MOCK_STATS.complianceRate}%
-                </Typography>
-                <Typography className={classes.statLabel}>
-                  Overall Compliance
-                </Typography>
-                <LinearProgress
-                  variant="determinate"
-                  value={MOCK_STATS.complianceRate}
-                  className={classes.complianceBar}
-                  style={{ marginTop: 8 }}
-                />
-              </div>
-            </InfoCard>
+    <Grid container spacing={3}>
+      {/* Compliance Gauges Row */}
+      <Grid item xs={12}>
+        <InfoCard title="Compliance Posture">
+          <Grid container spacing={2} justifyContent="center">
+            <Grid item xs={6} sm={3}>
+              <ComplianceGauge value={72} label="Overall" />
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <ComplianceGauge value={78} label="DISA STIG" />
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <ComplianceGauge value={85} label="CIS L1" />
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <ComplianceGauge value={62} label="PCI-DSS" />
+            </Grid>
           </Grid>
+        </InfoCard>
+      </Grid>
 
-          <Grid item xs={12} sm={6} md={3}>
-            <InfoCard>
-              <div className={classes.statCard}>
-                <Typography className={classes.statValue}>
-                  {MOCK_STATS.hostsScanned}
-                </Typography>
-                <Typography className={classes.statLabel}>
-                  Hosts Scanned
-                </Typography>
-              </div>
-            </InfoCard>
-          </Grid>
+      {/* Key Metrics */}
+      <Grid item xs={6} sm={3}>
+        <InfoCard>
+          <div className={classes.statCard}>
+            <Typography className={`${classes.statValue}`}>12</Typography>
+            <Typography className={classes.statLabel}>Hosts Scanned</Typography>
+          </div>
+        </InfoCard>
+      </Grid>
+      <Grid item xs={6} sm={3}>
+        <InfoCard>
+          <div className={classes.statCard}>
+            <Typography className={`${classes.statValue} ${classes.critical}`}>8</Typography>
+            <Typography className={classes.statLabel}>Critical (CAT I)</Typography>
+          </div>
+        </InfoCard>
+      </Grid>
+      <Grid item xs={6} sm={3}>
+        <InfoCard>
+          <div className={classes.statCard}>
+            <Typography className={`${classes.statValue} ${classes.warning}`}>15</Typography>
+            <Typography className={classes.statLabel}>Pending Remediation</Typography>
+          </div>
+        </InfoCard>
+      </Grid>
+      <Grid item xs={6} sm={3}>
+        <InfoCard>
+          <div className={classes.statCard}>
+            <Typography className={`${classes.statValue} ${classes.success}`}>3</Typography>
+            <Typography className={classes.statLabel}>Active Profiles</Typography>
+          </div>
+        </InfoCard>
+      </Grid>
 
-          <Grid item xs={12} sm={6} md={3}>
-            <InfoCard>
-              <div className={classes.statCard}>
-                <Typography className={`${classes.statValue} ${classes.failRate}`}>
-                  {MOCK_STATS.criticalFindings}
-                </Typography>
-                <Typography className={classes.statLabel}>
-                  Critical Findings (CAT I)
-                </Typography>
-              </div>
-            </InfoCard>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <InfoCard>
-              <div className={classes.statCard}>
-                <Typography className={`${classes.statValue} ${classes.warningRate}`}>
-                  {MOCK_STATS.pendingRemediations}
-                </Typography>
-                <Typography className={classes.statLabel}>
-                  Pending Remediations
-                </Typography>
-              </div>
-            </InfoCard>
-          </Grid>
-
-          {/* Quick Actions */}
-          <Grid item xs={12} md={4}>
-            <InfoCard title="Quick Actions">
-              <Card variant="outlined">
-                <CardActionArea onClick={() => navigate('scan')}>
-                  <div className={classes.quickAction}>
-                    <PlayCircleFilledIcon className={classes.actionIcon} />
-                    <div>
-                      <Typography variant="subtitle1">New Scan</Typography>
-                      <Typography variant="body2" color="textSecondary">
-                        Launch a compliance scan against your infrastructure
-                      </Typography>
-                    </div>
-                  </div>
-                </CardActionArea>
-              </Card>
-              <Box mt={1} />
-              <Card variant="outlined">
-                <CardActionArea onClick={() => navigate('profiles/all')}>
-                  <div className={classes.quickAction}>
-                    <SecurityIcon className={classes.actionIcon} />
-                    <div>
-                      <Typography variant="subtitle1">
-                        Browse Profiles
-                      </Typography>
-                      <Typography variant="body2" color="textSecondary">
-                        View available compliance frameworks and profiles
-                      </Typography>
-                    </div>
-                  </div>
-                </CardActionArea>
-              </Card>
-              <Box mt={1} />
-              <Card variant="outlined">
-                <CardActionArea onClick={() => navigate('results/42')}>
-                  <div className={classes.quickAction}>
-                    <AssessmentIcon className={classes.actionIcon} />
-                    <div>
-                      <Typography variant="subtitle1">
-                        Latest Results
-                      </Typography>
-                      <Typography variant="body2" color="textSecondary">
-                        View most recent scan results and findings
-                      </Typography>
-                    </div>
-                  </div>
-                </CardActionArea>
-              </Card>
-            </InfoCard>
-          </Grid>
-
-          {/* Recent Scans */}
-          <Grid item xs={12} md={8}>
-            <InfoCard
-              title="Recent Scans"
-              subheader="Latest compliance scan results"
-              action={
-                <Chip
-                  icon={<HistoryIcon />}
-                  label="View All"
-                  variant="outlined"
-                  size="small"
-                  clickable
-                />
-              }
-            >
-              {MOCK_RECENT_SCANS.map(scan => (
-                <div key={scan.id} className={classes.recentScanRow}>
-                  <div>
-                    <Typography variant="subtitle2">{scan.profile}</Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      {scan.hosts} &middot; {scan.timestamp}
-                    </Typography>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {scan.passRate >= 80 ? (
-                      <StatusOK />
-                    ) : scan.passRate >= 65 ? (
-                      <StatusWarning />
-                    ) : (
-                      <StatusError />
-                    )}
-                    <Typography variant="subtitle2">
-                      {scan.passRate}% pass
-                    </Typography>
-                  </div>
+      {/* Quick Actions + Recent Scans */}
+      <Grid item xs={12} md={4}>
+        <InfoCard title="Quick Actions">
+          <Card variant="outlined">
+            <CardActionArea onClick={() => navigate('scan')}>
+              <div className={classes.quickAction}>
+                <PlayCircleFilledIcon className={classes.actionIcon} />
+                <div>
+                  <Typography variant="subtitle1">New Scan</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Scan infrastructure against a compliance profile
+                  </Typography>
                 </div>
-              ))}
-            </InfoCard>
-          </Grid>
+              </div>
+            </CardActionArea>
+          </Card>
+          <Box mt={1} />
+          <Card variant="outlined">
+            <CardActionArea onClick={() => navigate('profiles/all')}>
+              <div className={classes.quickAction}>
+                <SecurityIcon className={classes.actionIcon} />
+                <div>
+                  <Typography variant="subtitle1">Browse Profiles</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    View compliance frameworks and benchmarks
+                  </Typography>
+                </div>
+              </div>
+            </CardActionArea>
+          </Card>
+        </InfoCard>
+      </Grid>
 
-          {/* Active Compliance Profiles */}
-          <Grid item xs={12}>
-            <InfoCard
-              title="Active Compliance Profiles"
-              subheader="Profiles configured for your environment"
-            >
-              <Grid container spacing={2}>
-                {[
-                  {
-                    name: 'DISA STIG V2R8',
-                    target: 'RHEL 9',
-                    rules: 366,
-                    lastScan: '2 hours ago',
-                    rate: 78,
-                  },
-                  {
-                    name: 'CIS Benchmark L1',
-                    target: 'RHEL 9',
-                    rules: 189,
-                    lastScan: '1 day ago',
-                    rate: 85,
-                  },
-                  {
-                    name: 'PCI-DSS v4.0',
-                    target: 'RHEL 9',
-                    rules: 142,
-                    lastScan: '3 days ago',
-                    rate: 62,
-                  },
-                ].map(profile => (
-                  <Grid item xs={12} sm={6} md={4} key={profile.name}>
-                    <Card variant="outlined" className={classes.profileCard}>
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom>
-                          {profile.name}
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          {profile.target} &middot; {profile.rules} rules
-                        </Typography>
-                        <Box mt={2}>
-                          <Box
-                            display="flex"
-                            justifyContent="space-between"
-                            mb={0.5}
-                          >
-                            <Typography variant="caption">
-                              Compliance
-                            </Typography>
-                            <Typography variant="caption">
-                              {profile.rate}%
-                            </Typography>
-                          </Box>
-                          <LinearProgress
-                            variant="determinate"
-                            value={profile.rate}
-                            className={classes.complianceBar}
-                            color={
-                              profile.rate >= 80 ? 'primary' : 'secondary'
-                            }
-                          />
-                        </Box>
-                        <Typography
-                          variant="caption"
-                          color="textSecondary"
-                          style={{ marginTop: 8, display: 'block' }}
-                        >
-                          Last scan: {profile.lastScan}
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
+      <Grid item xs={12} md={8}>
+        <InfoCard
+          title="Recent Scans"
+          action={
+            <Chip
+              icon={<HistoryIcon />}
+              label="View All"
+              variant="outlined"
+              size="small"
+              clickable
+            />
+          }
+        >
+          {MOCK_SCANS.map(scan => (
+            <div key={scan.id} className={classes.scanRow}>
+              <div>
+                <Typography variant="subtitle2">{scan.profile}</Typography>
+                <Typography variant="body2" color="textSecondary">
+                  {scan.hosts} &middot; {scan.timestamp}
+                </Typography>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {scan.passRate >= 80 ? (
+                  <StatusOK />
+                ) : scan.passRate >= 65 ? (
+                  <StatusWarning />
+                ) : (
+                  <StatusError />
+                )}
+                <Typography variant="subtitle2">{scan.passRate}%</Typography>
+              </div>
+            </div>
+          ))}
+        </InfoCard>
+      </Grid>
+
+      {/* Framework Cards */}
+      <Grid item xs={12}>
+        <InfoCard title="Active Compliance Frameworks">
+          <Grid container spacing={2}>
+            {FRAMEWORKS.map(fw => (
+              <Grid item xs={12} sm={4} key={fw.name}>
+                <Card variant="outlined" className={classes.frameworkCard}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>{fw.name}</Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      {fw.target} &middot; {fw.rules} rules
+                    </Typography>
+                    <Box mt={2}>
+                      <Box display="flex" justifyContent="space-between" mb={0.5}>
+                        <Typography variant="caption">Compliance</Typography>
+                        <Typography variant="caption">{fw.rate}%</Typography>
+                      </Box>
+                      <LinearProgress
+                        variant="determinate"
+                        value={fw.rate}
+                        className={classes.complianceBar}
+                        color={fw.rate >= 80 ? 'primary' : 'secondary'}
+                      />
+                    </Box>
+                    <Typography
+                      variant="caption"
+                      color="textSecondary"
+                      style={{ marginTop: 8, display: 'block' }}
+                    >
+                      Last scan: {fw.lastScan}
+                    </Typography>
+                  </CardContent>
+                </Card>
               </Grid>
-            </InfoCard>
+            ))}
           </Grid>
-        </Grid>
-    </>
+        </InfoCard>
+      </Grid>
+    </Grid>
   );
 };
