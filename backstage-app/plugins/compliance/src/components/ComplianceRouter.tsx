@@ -6,7 +6,6 @@ import {
   HeaderTabs,
   Content,
 } from '@backstage/core-components';
-import { Box } from '@material-ui/core';
 import { ComplianceDashboard } from './ComplianceDashboard';
 import { ProfileBrowser } from './ProfileBrowser';
 import { ScanLauncher } from './ScanLauncher';
@@ -49,10 +48,11 @@ const ComplianceRouter = () => {
   };
 
   return (
-    <Page themeId="tool">
+    <Page themeId="app">
       <Header
         title="Compliance"
         subtitle="Scan, review, and remediate infrastructure compliance"
+        style={{ background: 'inherit' }}
       />
       <HeaderTabs
         selectedIndex={selectedTab}
@@ -60,16 +60,14 @@ const ComplianceRouter = () => {
         tabs={TABS}
       />
       <Content>
-        <Box style={{ overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
-          <Routes>
-            <Route path="/" element={<ComplianceDashboard />} />
-            <Route path="/profiles/:profileId" element={<ProfileBrowser />} />
-            <Route path="/scan" element={<ScanLauncher />} />
-            <Route path="/results/:jobId" element={<ResultsViewer />} />
-            <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
-            <Route path="/execute/:jobId" element={<RemediationExecution />} />
-          </Routes>
-        </Box>
+        <Routes>
+          <Route path="/" element={<ComplianceDashboard />} />
+          <Route path="/profiles/:profileId" element={<ProfileBrowser />} />
+          <Route path="/scan" element={<ScanLauncher />} />
+          <Route path="/results/:jobId" element={<ResultsViewer />} />
+          <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
+          <Route path="/execute/:jobId" element={<RemediationExecution />} />
+        </Routes>
       </Content>
     </Page>
   );

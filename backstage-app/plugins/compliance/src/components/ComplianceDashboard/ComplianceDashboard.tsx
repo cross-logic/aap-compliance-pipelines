@@ -7,7 +7,6 @@ import {
   StatusWarning,
 } from '@backstage/core-components';
 import {
-  Grid,
   Card,
   CardContent,
   CardActionArea,
@@ -25,6 +24,30 @@ import { ComplianceGauge } from './ComplianceGauge';
 const useStyles = makeStyles(theme => ({
   section: {
     marginBottom: theme.spacing(2),
+  },
+  row: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: theme.spacing(2),
+  },
+  gaugeItem: {
+    flex: '1 1 120px',
+    minWidth: 120,
+    maxWidth: 200,
+  },
+  statItem: {
+    flex: '1 1 140px',
+    minWidth: 140,
+  },
+  actionsColumn: {
+    flex: '1 1 280px',
+    maxWidth: 400,
+  },
+  scansColumn: {
+    flex: '2 1 400px',
+  },
+  frameworkItem: {
+    flex: '1 1 250px',
   },
   statCard: {
     textAlign: 'center',
@@ -67,8 +90,6 @@ const useStyles = makeStyles(theme => ({
   },
   frameworkCard: {
     height: '100%',
-    display: 'flex',
-    flexDirection: 'column' as const,
   },
 }));
 
@@ -93,65 +114,65 @@ export const ComplianceDashboard = () => {
       {/* Compliance Gauges */}
       <div className={classes.section}>
         <InfoCard title="Compliance Posture">
-          <Grid container spacing={2} justifyContent="center">
-            <Grid item xs={6} sm={3}>
+          <div className={classes.row} style={{ justifyContent: 'center' }}>
+            <div className={classes.gaugeItem}>
               <ComplianceGauge value={72} label="Overall" />
-            </Grid>
-            <Grid item xs={6} sm={3}>
+            </div>
+            <div className={classes.gaugeItem}>
               <ComplianceGauge value={78} label="DISA STIG" />
-            </Grid>
-            <Grid item xs={6} sm={3}>
+            </div>
+            <div className={classes.gaugeItem}>
               <ComplianceGauge value={85} label="CIS L1" />
-            </Grid>
-            <Grid item xs={6} sm={3}>
+            </div>
+            <div className={classes.gaugeItem}>
               <ComplianceGauge value={62} label="PCI-DSS" />
-            </Grid>
-          </Grid>
+            </div>
+          </div>
         </InfoCard>
       </div>
 
       {/* Key Metrics */}
       <div className={classes.section}>
-        <Grid container spacing={2}>
-          <Grid item xs={6} sm={3}>
+        <div className={classes.row}>
+          <div className={classes.statItem}>
             <InfoCard>
               <div className={classes.statCard}>
                 <Typography className={classes.statValue}>12</Typography>
                 <Typography className={classes.statLabel}>Hosts Scanned</Typography>
               </div>
             </InfoCard>
-          </Grid>
-          <Grid item xs={6} sm={3}>
+          </div>
+          <div className={classes.statItem}>
             <InfoCard>
               <div className={classes.statCard}>
                 <Typography className={`${classes.statValue} ${classes.critical}`}>8</Typography>
                 <Typography className={classes.statLabel}>Critical (CAT I)</Typography>
               </div>
             </InfoCard>
-          </Grid>
-          <Grid item xs={6} sm={3}>
+          </div>
+          <div className={classes.statItem}>
             <InfoCard>
               <div className={classes.statCard}>
                 <Typography className={`${classes.statValue} ${classes.warning}`}>15</Typography>
                 <Typography className={classes.statLabel}>Pending Remediation</Typography>
               </div>
             </InfoCard>
-          </Grid>
-          <Grid item xs={6} sm={3}>
+          </div>
+          <div className={classes.statItem}>
             <InfoCard>
               <div className={classes.statCard}>
                 <Typography className={`${classes.statValue} ${classes.success}`}>3</Typography>
                 <Typography className={classes.statLabel}>Active Profiles</Typography>
               </div>
             </InfoCard>
-          </Grid>
-        </Grid>
+          </div>
+        </div>
       </div>
 
       {/* Quick Actions + Recent Scans */}
       <div className={classes.section}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={4}>
+        <div className={classes.row}>
+          <div className={classes.actionsColumn}>
             <InfoCard title="Quick Actions">
               <Card variant="outlined">
                 <CardActionArea onClick={() => navigate('scan')}>
@@ -181,8 +202,8 @@ export const ComplianceDashboard = () => {
                 </CardActionArea>
               </Card>
             </InfoCard>
-          </Grid>
-          <Grid item xs={12} md={8}>
+          </div>
+          <div className={classes.scansColumn}>
             <InfoCard
               title="Recent Scans"
               action={
@@ -216,16 +237,16 @@ export const ComplianceDashboard = () => {
                 </div>
               ))}
             </InfoCard>
-          </Grid>
-        </Grid>
+          </div>
+        </div>
       </div>
 
       {/* Framework Cards */}
       <div className={classes.section}>
         <InfoCard title="Active Compliance Frameworks">
-          <Grid container spacing={2}>
+          <div className={classes.row}>
             {FRAMEWORKS.map(fw => (
-              <Grid item xs={12} sm={4} key={fw.name}>
+              <div className={classes.frameworkItem} key={fw.name}>
                 <Card variant="outlined" className={classes.frameworkCard}>
                   <CardContent>
                     <Typography variant="h6" gutterBottom>{fw.name}</Typography>
@@ -253,9 +274,9 @@ export const ComplianceDashboard = () => {
                     </Typography>
                   </CardContent>
                 </Card>
-              </Grid>
+              </div>
             ))}
-          </Grid>
+          </div>
         </InfoCard>
       </div>
     </div>
