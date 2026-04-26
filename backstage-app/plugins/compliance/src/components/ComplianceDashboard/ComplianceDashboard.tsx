@@ -101,7 +101,7 @@ export const ComplianceDashboard = () => {
   const navigate = useNavigate();
 
   return (
-    <Grid container spacing={3}>
+    <Grid container spacing={3} style={{ maxWidth: '100%', overflow: 'hidden' }}>
       {/* Compliance Gauges Row */}
       <Grid item xs={12}>
         <InfoCard title="Compliance Posture">
