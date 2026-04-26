@@ -59,16 +59,16 @@ export const ComplianceRouter = () => {
         onChange={handleTabChange}
         tabs={TABS}
       />
-      <Content noPadding>
-        <div style={{ padding: 24, overflow: 'hidden' }}>
-        <Routes>
-          <Route path="/" element={<ComplianceDashboard />} />
-          <Route path="/profiles/:profileId" element={<ProfileBrowser />} />
-          <Route path="/scan" element={<ScanLauncher />} />
-          <Route path="/results/:jobId" element={<ResultsViewer />} />
-          <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
-          <Route path="/execute/:jobId" element={<RemediationExecution />} />
-        </Routes>
+      <Content>
+        <div style={{ overflow: 'hidden' }}>
+          <Routes>
+            <Route path="/" element={<ComplianceDashboard />} />
+            <Route path="/profiles/:profileId" element={<ProfileBrowser />} />
+            <Route path="/scan" element={<ScanLauncher />} />
+            <Route path="/results/:jobId" element={<ResultsViewer />} />
+            <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
+            <Route path="/execute/:jobId" element={<RemediationExecution />} />
+          </Routes>
         </div>
       </Content>
     </Page>
