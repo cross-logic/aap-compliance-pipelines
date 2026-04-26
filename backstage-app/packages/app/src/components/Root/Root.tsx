@@ -60,14 +60,7 @@ const SidebarLogo = () => {
   return (
     <div className={classes.sidebarLogoRoot}>
       <Link to="/" underline="none" className={classes.sidebarLogoLink} aria-label="Home">
-        <div className={classes.logoContainer}>
-          <RedHatLogo size={isOpen ? 28 : 22} />
-          {isOpen && (
-            <div className={classes.logoText}>
-              Ansible<br />Automation<br />Platform
-            </div>
-          )}
-        </div>
+        <RedHatLogo size={isOpen ? 28 : 22} />
       </Link>
     </div>
   );
