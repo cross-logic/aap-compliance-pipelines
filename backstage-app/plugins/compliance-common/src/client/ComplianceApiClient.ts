@@ -20,7 +20,7 @@ export class ComplianceApiClient {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.token = options.token;
     this.agent = new Agent({
-      connect: { rejectUnauthorized: options.checkSSL ?? false },
+      connect: { rejectUnauthorized: options.checkSSL ?? true },
     });
   }
 

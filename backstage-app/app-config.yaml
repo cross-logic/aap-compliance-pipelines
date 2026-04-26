@@ -13,9 +13,9 @@ backend:
     client: better-sqlite3
     connection: ':memory:'
 
-# AAP Connection — points to the lab VM
+# AAP Connection
+# Override baseUrl and checkSSL in app-config.local.yaml (gitignored)
 ansible:
   rhaap:
-    baseUrl: https://aap-aap-operator.apps.192.168.128.128.nip.io
-    # Auth configured in app-config.local.yaml (gitignored)
-    checkSSL: false
+    baseUrl: ${AAP_BASE_URL}
+    checkSSL: true
