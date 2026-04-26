@@ -6,7 +6,6 @@ import {
   HeaderTabs,
   Content,
 } from '@backstage/core-components';
-import SecurityIcon from '@material-ui/icons/Security';
 import { ComplianceDashboard } from './ComplianceDashboard';
 import { ProfileBrowser } from './ProfileBrowser';
 import { ScanLauncher } from './ScanLauncher';
@@ -28,7 +27,7 @@ const tabRouteMap: Record<string, string> = {
   results: 'results/42',
 };
 
-export const ComplianceRouter = () => {
+const ComplianceRouter = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -74,3 +73,5 @@ export const ComplianceRouter = () => {
     </Page>
   );
 };
+
+export { ComplianceRouter };
