@@ -7,6 +7,7 @@ const useStyles = makeStyles(theme => ({
     flexDirection: 'column',
     alignItems: 'center',
     padding: theme.spacing(1, 0),
+    width: '100%',
   },
   label: {
     marginTop: theme.spacing(0.5),
@@ -18,8 +19,6 @@ const useStyles = makeStyles(theme => ({
 
 interface ComplianceGaugeProps {
   value: number;
-  size?: number;
-  strokeWidth?: number;
   label?: string;
 }
 
@@ -32,65 +31,85 @@ const getColor = (value: number): string => {
 
 export const ComplianceGauge: React.FC<ComplianceGaugeProps> = ({
   value,
-  size = 140,
-  strokeWidth = 10,
   label,
 }) => {
   const classes = useStyles();
 
+  const size = 120;
+  const strokeWidth = 10;
   const radius = (size - strokeWidth) / 2;
   const cx = size / 2;
   const cy = size / 2;
 
-  // Arc from 150° to 390° = 240° sweep, leaving a 120° gap at the bottom
-  const startDeg = 150;
-  const endDeg = 390;
-  const sweepDeg = endDeg - startDeg;
+  // We want an arc that opens at the bottom.
+  // Using standard math angles where 0° = right, 90° = bottom:
+  // Start at bottom-left (about 120°), sweep clockwise to bottom-right (about 420° = 60°)
+  // That's a 300° arc with a 60° gap at the bottom... but we want wider.
+  // Let's do: start at 210° in SVG coords (bottom-left), end at 330° (bottom-right)
+  // going the LONG way around (through top). That's a 240° arc, 120° gap.
 
-  const toRad = (deg: number) => ((deg - 90) * Math.PI) / 180;
+  // SVG angles: 0° = 3 o'clock, goes clockwise
+  // We want gap centered at 6 o'clock (270° in SVG)
+  // So start = 270 - 120 = 150° ... no wait.
+  // Gap is 120°, centered at bottom (180° in our math).
+  // Start angle (bottom-left): 180 + 60 = 240° from top...
 
-  const arcPoint = (deg: number) => ({
-    x: cx + radius * Math.cos(toRad(deg)),
-    y: cy + radius * Math.sin(toRad(deg)),
+  // Simplest approach: use parametric angles.
+  // 0° = top center. Clockwise.
+  // We want the arc to start at bottom-left and go clockwise all the way around to bottom-right.
+  // Bottom = 180°. Gap = 120° centered at bottom.
+  // So: arc starts at 180+60 = 240° (if 0=top, CW) and ends at 180-60 = 120°
+  // Going CW from 240° to 120° (next revolution) = 240° of arc. ✓
+
+  // Convert to SVG path coords:
+  const degToRad = (d: number) => (d * Math.PI) / 180;
+
+  // Angle 0 = top, clockwise
+  const pointOnCircle = (angleDeg: number) => ({
+    x: cx + radius * Math.sin(degToRad(angleDeg)),
+    y: cy - radius * Math.cos(degToRad(angleDeg)),
   });
 
-  const makeArc = (from: number, to: number) => {
-    const start = arcPoint(from);
-    const end = arcPoint(to);
-    const sweep = to - from;
-    const largeArc = sweep > 180 ? 1 : 0;
-    return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`;
-  };
+  const arcStartDeg = 240; // bottom-left
+  const arcEndDeg = 120 + 360; // bottom-right (next revolution)
+  const totalSweepDeg = arcEndDeg - arcStartDeg; // 240°
 
   const clampedValue = Math.min(Math.max(value, 0), 100);
-  const valueDeg = startDeg + (sweepDeg * clampedValue) / 100;
+  const valueSweepDeg = (totalSweepDeg * clampedValue) / 100;
+  const valueEndDeg = arcStartDeg + valueSweepDeg;
+
+  const makeSvgArc = (fromDeg: number, toDeg: number) => {
+    const startPt = pointOnCircle(fromDeg % 360);
+    const endPt = pointOnCircle(toDeg % 360);
+    const sweep = toDeg - fromDeg;
+    const largeArc = sweep > 180 ? 1 : 0;
+    return `M ${startPt.x} ${startPt.y} A ${radius} ${radius} 0 ${largeArc} 1 ${endPt.x} ${endPt.y}`;
+  };
+
   const color = getColor(value);
 
-  // Clip the SVG height to cut off space below the arc gap
-  const bottomPoint = arcPoint(startDeg);
-  const svgHeight = bottomPoint.y + strokeWidth;
+  // Clip SVG at the top of the gap (just below center + some margin)
+  const gapTopY = pointOnCircle(arcStartDeg).y;
+  const svgHeight = gapTopY + strokeWidth / 2 + 2;
 
   return (
     <div className={classes.container}>
       <svg
-        width="100%"
-        height="auto"
         viewBox={`0 0 ${size} ${svgHeight}`}
-        preserveAspectRatio="xMidYMid meet"
-        style={{ maxWidth: size }}
+        style={{ width: '100%', maxWidth: size, height: 'auto' }}
       >
         {/* Background track */}
         <path
-          d={makeArc(startDeg, endDeg)}
+          d={makeSvgArc(arcStartDeg, arcEndDeg)}
           fill="none"
           stroke="#e0e0e0"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
         />
         {/* Value arc */}
-        {clampedValue > 0 && (
+        {clampedValue > 0.5 && (
           <path
-            d={makeArc(startDeg, valueDeg)}
+            d={makeSvgArc(arcStartDeg, valueEndDeg)}
             fill="none"
             stroke={color}
             strokeWidth={strokeWidth}
@@ -100,11 +119,11 @@ export const ComplianceGauge: React.FC<ComplianceGaugeProps> = ({
         {/* Center percentage */}
         <text
           x={cx}
-          y={cy}
+          y={cy - 2}
           textAnchor="middle"
           dominantBaseline="central"
           fill={color}
-          fontSize={size * 0.24}
+          fontSize="28"
           fontWeight={700}
           fontFamily='"Red Hat Text", "Red Hat Display", sans-serif'
         >
