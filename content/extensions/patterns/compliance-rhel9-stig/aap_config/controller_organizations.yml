@@ -1,0 +1,5 @@
+---
+controller_organizations:
+  - name: compliance-prototype
+    description: "Compliance pipeline prototype — isolated from production resources"
+    state: present

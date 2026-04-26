@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-dynamic/
+.yarn/cache
+.yarn/install-state.gz
+*.tsbuildinfo
+app-config.local.yaml
+.env
+.DS_Store
+coverage/

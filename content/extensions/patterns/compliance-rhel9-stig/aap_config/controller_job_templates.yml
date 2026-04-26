@@ -1,0 +1,34 @@
+---
+controller_templates:
+  - name: compliance-scan-rhel9-stig
+    organization: compliance-prototype
+    description: "Scan RHEL 9 hosts against DISA STIG V2R8 using OpenSCAP"
+    job_type: check
+    inventory: compliance-rhel9-inventory
+    project: compliance-content
+    playbook: playbooks/scan-rhel9-stig.yml
+    ask_inventory_on_launch: true
+    ask_limit_on_launch: true
+    survey_enabled: true
+    survey_spec: "{{ lookup('file', 'template_surveys/scan-survey.yml') | from_yaml }}"
+
+  - name: compliance-remediate-rhel9-stig
+    organization: compliance-prototype
+    description: "Remediate selected STIG findings on RHEL 9 hosts"
+    job_type: run
+    inventory: compliance-rhel9-inventory
+    project: compliance-content
+    playbook: playbooks/remediate-rhel9-stig.yml
+    ask_inventory_on_launch: true
+    ask_limit_on_launch: true
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  - name: compliance-verify-rhel9-stig
+    organization: compliance-prototype
+    description: "Verification re-scan after remediation"
+    job_type: check
+    inventory: compliance-rhel9-inventory
+    project: compliance-content
+    playbook: playbooks/scan-rhel9-stig.yml
+    ask_inventory_on_launch: true

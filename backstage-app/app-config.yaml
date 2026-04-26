@@ -1,0 +1,21 @@
+app:
+  title: AAP Compliance Pipelines
+  baseUrl: http://localhost:3000
+
+organization:
+  name: AAP Compliance Prototype
+
+backend:
+  baseUrl: http://localhost:7007
+  listen:
+    port: 7007
+  database:
+    client: better-sqlite3
+    connection: ':memory:'
+
+# AAP Connection — points to the lab VM
+ansible:
+  rhaap:
+    baseUrl: https://aap-aap-operator.apps.192.168.128.128.nip.io
+    # Auth configured in app-config.local.yaml (gitignored)
+    checkSSL: false
