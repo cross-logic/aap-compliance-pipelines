@@ -2,9 +2,9 @@ import React from 'react';
 import { Navigate, Route } from 'react-router-dom';
 import { createApp } from '@backstage/app-defaults';
 import { AppRouter, FlatRoutes } from '@backstage/core-app-api';
-import { AlertDisplay, CssBaseline } from '@backstage/core-components';
+import { AlertDisplay } from '@backstage/core-components';
 import { getThemes } from '@red-hat-developer-hub/backstage-plugin-theme';
-import MuiCssBaseline from '@material-ui/core/CssBaseline';
+import CssBaseline from '@material-ui/core/CssBaseline';
 
 import { CompliancePage } from '@aap-compliance/plugin-compliance';
 import { Root } from './components/Root';
@@ -24,7 +24,7 @@ const routes = (
 
 export default app.createRoot(
   <>
-    <MuiCssBaseline />
+    <CssBaseline />
     <AlertDisplay />
     <AppRouter>
       <GlobalHeader />

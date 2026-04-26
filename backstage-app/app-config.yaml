@@ -1,6 +1,26 @@
 app:
-  title: AAP Compliance Pipelines
+  title: Ansible self-service automation portal
   baseUrl: http://localhost:3000
+  branding:
+    theme:
+      light:
+        variant: rhdh
+        mode: light
+        palette:
+          primary:
+            main: '#0066CC'
+          navigation:
+            background: '#212427'
+            indicator: '#0066CC'
+            color: '#ffffff'
+            selectedColor: '#ffffff'
+            navItem:
+              hoverBackground: '#2c2f33'
+          rhdh:
+            general:
+              sidebarBackgroundColor: '#212427'
+              appBarBackgroundColor: '#151515'
+              appBarForegroundColor: '#ffffff'
 
 organization:
   name: AAP Compliance Prototype
@@ -18,7 +38,6 @@ backend:
     connection: ':memory:'
 
 # AAP Connection — default for local dev
-# Override in app-config.local.yaml (gitignored) for different environments
 ansible:
   rhaap:
     baseUrl: https://aap-aap-operator.apps.192.168.128.128.nip.io
