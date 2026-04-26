@@ -6,6 +6,15 @@ import {
   HeaderTabs,
   Content,
 } from '@backstage/core-components';
+import { makeStyles } from '@material-ui/core';
+
+const useStyles = makeStyles({
+  contentOverride: {
+    '& > :first-child': {
+      overflowX: 'hidden',
+    },
+  },
+});
 import { ComplianceDashboard } from './ComplianceDashboard';
 import { ProfileBrowser } from './ProfileBrowser';
 import { ScanLauncher } from './ScanLauncher';
@@ -28,6 +37,7 @@ const tabRouteMap: Record<string, string> = {
 };
 
 const ComplianceRouter = () => {
+  const classes = useStyles();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -58,8 +68,7 @@ const ComplianceRouter = () => {
         onChange={handleTabChange}
         tabs={TABS}
       />
-      <Content>
-        <div style={{ overflow: 'hidden' }}>
+      <Content className={classes.contentOverride}>
           <Routes>
             <Route path="/" element={<ComplianceDashboard />} />
             <Route path="/profiles/:profileId" element={<ProfileBrowser />} />
@@ -68,7 +77,6 @@ const ComplianceRouter = () => {
             <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
             <Route path="/execute/:jobId" element={<RemediationExecution />} />
           </Routes>
-        </div>
       </Content>
     </Page>
   );
