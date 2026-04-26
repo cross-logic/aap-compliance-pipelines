@@ -1,9 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Header,
-  Page,
-  Content,
   InfoCard,
   Breadcrumbs,
   StatusWarning,
@@ -353,13 +350,8 @@ export const RemediationProfileBuilder = () => {
   };
 
   return (
-    <Page themeId="tool">
-      <Header
-        title="Remediation Profile Builder"
-        subtitle={`Job #${jobId} — Select and customize remediations`}
-      />
-      <Content>
-        <Breadcrumbs>
+    <>
+      <Breadcrumbs>
           <Typography
             color="primary"
             style={{ cursor: 'pointer' }}
@@ -438,7 +430,7 @@ export const RemediationProfileBuilder = () => {
           return (
             <React.Fragment key={severity}>
               <div className={classes.sectionHeader}>
-                <Box display="flex" alignItems="center" gap={1}>
+                <Box display="flex" alignItems="center" style={{ gap: 8 }}>
                   <Chip
                     label={severityLabel[severity]}
                     size="small"
@@ -457,7 +449,7 @@ export const RemediationProfileBuilder = () => {
         <Divider style={{ margin: '24px 0' }} />
 
         {/* Action Buttons */}
-        <Box display="flex" justifyContent="flex-end" gap={2}>
+        <Box display="flex" justifyContent="flex-end" style={{ gap: 16 }}>
           <Button
             variant="outlined"
             startIcon={<SaveIcon />}
@@ -525,7 +517,6 @@ export const RemediationProfileBuilder = () => {
             </Button>
           </DialogActions>
         </Dialog>
-      </Content>
-    </Page>
+    </>
   );
 };

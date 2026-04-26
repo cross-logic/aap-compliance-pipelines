@@ -1,9 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Header,
-  Page,
-  Content,
   InfoCard,
   StatusOK,
   StatusError,
@@ -119,13 +116,8 @@ export const ComplianceDashboard = () => {
   const navigate = useNavigate();
 
   return (
-    <Page themeId="tool">
-      <Header
-        title="Compliance"
-        subtitle="Scan, review, and remediate infrastructure compliance"
-      />
-      <Content>
-        <Grid container spacing={3}>
+    <>
+      <Grid container spacing={3}>
           {/* Stats Row */}
           <Grid item xs={12} sm={6} md={3}>
             <InfoCard>
@@ -352,7 +344,6 @@ export const ComplianceDashboard = () => {
             </InfoCard>
           </Grid>
         </Grid>
-      </Content>
-    </Page>
+    </>
   );
 };

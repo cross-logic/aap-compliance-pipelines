@@ -1,9 +1,6 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Header,
-  Page,
-  Content,
   InfoCard,
   Breadcrumbs,
 } from '@backstage/core-components';
@@ -131,10 +128,8 @@ export const ProfileBrowser = () => {
 
   if (selectedProfile) {
     return (
-      <Page themeId="tool">
-        <Header title={selectedProfile.name} subtitle={selectedProfile.framework} />
-        <Content>
-          <Breadcrumbs>
+      <>
+        <Breadcrumbs>
             <Typography
               color="primary"
               style={{ cursor: 'pointer' }}
@@ -245,19 +240,13 @@ export const ProfileBrowser = () => {
               </Button>
             </Grid>
           </Grid>
-        </Content>
-      </Page>
+      </>
     );
   }
 
   return (
-    <Page themeId="tool">
-      <Header
-        title="Compliance Profiles"
-        subtitle="Available compliance frameworks and security benchmarks"
-      />
-      <Content>
-        <Breadcrumbs>
+    <>
+      <Breadcrumbs>
           <Typography
             color="primary"
             style={{ cursor: 'pointer' }}
@@ -275,7 +264,7 @@ export const ProfileBrowser = () => {
             <Grid item xs={12} sm={6} md={4} key={profile.id}>
               <Card variant="outlined" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent style={{ flex: 1 }}>
-                  <Box display="flex" alignItems="center" mb={1} gap={1}>
+                  <Box display="flex" alignItems="center" mb={1} style={{ gap: 8 }}>
                     {profile.icon}
                     <Chip
                       label={profile.framework}
@@ -290,7 +279,7 @@ export const ProfileBrowser = () => {
                   <Typography variant="body2" color="textSecondary" paragraph>
                     {profile.description.slice(0, 150)}...
                   </Typography>
-                  <Box display="flex" gap={2} flexWrap="wrap">
+                  <Box display="flex" style={{ gap: 16 }} flexWrap="wrap">
                     <Typography variant="caption">
                       {profile.ruleCount} rules
                     </Typography>
@@ -314,7 +303,7 @@ export const ProfileBrowser = () => {
                     size="small"
                     color="primary"
                     variant="outlined"
-                    onClick={() => navigate(`/compliance/scan?profile=${selectedProfile?.id ?? ''}`)}
+                    onClick={() => navigate(`/compliance/scan?profile=${profile.id}`)}
                   >
                     Scan
                   </Button>
@@ -323,7 +312,6 @@ export const ProfileBrowser = () => {
             </Grid>
           ))}
         </Grid>
-      </Content>
-    </Page>
+    </>
   );
 };

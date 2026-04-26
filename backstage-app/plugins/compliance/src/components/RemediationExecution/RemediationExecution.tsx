@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Header,
-  Page,
-  Content,
   InfoCard,
   Breadcrumbs,
   StatusOK,
@@ -154,13 +151,8 @@ export const RemediationExecution = () => {
   };
 
   return (
-    <Page themeId="tool">
-      <Header
-        title="Remediation Execution"
-        subtitle={`Applying ${tasks.length} rules to production-web-servers`}
-      />
-      <Content>
-        <Breadcrumbs>
+    <>
+      <Breadcrumbs>
           <Typography
             color="primary"
             style={{ cursor: 'pointer' }}
@@ -246,7 +238,7 @@ export const RemediationExecution = () => {
                         {tasks.length} rules were applied before cancellation.
                         Remaining rules were not executed.
                       </Typography>
-                      <Box mt={2} display="flex" gap={2} justifyContent="center">
+                      <Box mt={2} display="flex" style={{ gap: 16 }} justifyContent="center">
                         <Button
                           variant="outlined"
                           onClick={() => navigate(`/compliance/remediation/${jobId}`)}
@@ -331,7 +323,7 @@ export const RemediationExecution = () => {
               </Grid>
 
               <Grid item xs={12}>
-                <Box display="flex" justifyContent="flex-end" gap={2}>
+                <Box display="flex" justifyContent="flex-end" style={{ gap: 16 }}>
                   <Button
                     variant="outlined"
                     startIcon={<RefreshIcon />}
@@ -382,7 +374,6 @@ export const RemediationExecution = () => {
             </InfoCard>
           </Grid>
         </Grid>
-      </Content>
-    </Page>
+    </>
   );
 };

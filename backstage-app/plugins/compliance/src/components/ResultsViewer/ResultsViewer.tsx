@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Header,
-  Page,
-  Content,
   InfoCard,
   Breadcrumbs,
   StatusOK,
@@ -134,13 +131,8 @@ export const ResultsViewer = () => {
   };
 
   return (
-    <Page themeId="tool">
-      <Header
-        title="Scan Results"
-        subtitle={`Job #${jobId} — DISA STIG V2R8 — production-web-servers`}
-      />
-      <Content>
-        <Breadcrumbs>
+    <>
+      <Breadcrumbs>
           <Typography
             color="primary"
             style={{ cursor: 'pointer' }}
@@ -364,7 +356,6 @@ export const ResultsViewer = () => {
             </InfoCard>
           </Grid>
         </Grid>
-      </Content>
-    </Page>
+    </>
   );
 };

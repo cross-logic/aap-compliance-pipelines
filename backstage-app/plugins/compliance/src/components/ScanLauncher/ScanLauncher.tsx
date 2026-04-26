@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Header,
-  Page,
-  Content,
   InfoCard,
   Breadcrumbs,
   Progress,
@@ -123,7 +120,7 @@ export const ScanLauncher = () => {
                     onClick={() => setSelectedProfile(p.id)}
                   >
                     <CardContent>
-                      <Box display="flex" alignItems="center" gap={1} mb={1}>
+                      <Box display="flex" alignItems="center" style={{ gap: 8 }} mb={1}>
                         <SecurityIcon color="primary" />
                         <Chip label={p.version} size="small" variant="outlined" />
                       </Box>
@@ -308,10 +305,8 @@ export const ScanLauncher = () => {
   };
 
   return (
-    <Page themeId="tool">
-      <Header title="New Compliance Scan" subtitle="Scan your infrastructure against a compliance profile" />
-      <Content>
-        <Breadcrumbs>
+    <>
+      <Breadcrumbs>
           <Typography
             color="primary"
             style={{ cursor: 'pointer' }}
@@ -360,7 +355,6 @@ export const ScanLauncher = () => {
             </Box>
           </Grid>
         </Grid>
-      </Content>
-    </Page>
+    </>
   );
 };
