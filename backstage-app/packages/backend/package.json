@@ -1,0 +1,21 @@
+{
+  "name": "backend",
+  "version": "0.1.0",
+  "private": true,
+  "backstage": {
+    "role": "backend"
+  },
+  "dependencies": {
+    "@backstage/backend-defaults": "^0.14.2",
+    "@backstage/backend-plugin-api": "^1.9.0"
+  },
+  "devDependencies": {
+    "@backstage/cli": "^0.34.6",
+    "typescript": "~5.8.0"
+  },
+  "scripts": {
+    "start": "backstage-cli package start",
+    "build": "backstage-cli package build",
+    "test": "backstage-cli package test"
+  }
+}
