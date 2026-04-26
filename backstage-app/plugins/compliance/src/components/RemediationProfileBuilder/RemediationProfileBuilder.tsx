@@ -403,6 +403,24 @@ export const RemediationProfileBuilder = () => {
             >
               CAT I Only
             </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                setSelections(prev => {
+                  const updated = { ...prev };
+                  failedFindings.forEach(f => {
+                    updated[f.ruleId] = {
+                      ...updated[f.ruleId],
+                      enabled: f.severity === 'CAT_I' || f.severity === 'CAT_II',
+                    };
+                  });
+                  return updated;
+                });
+              }}
+            >
+              CAT I + II
+            </Button>
             <Button size="small" variant="outlined" onClick={clearAll}>
               Clear All
             </Button>

@@ -223,6 +223,44 @@ export const RemediationExecution = () => {
                         {tasks.filter(t => t.status === 'completed').length}/
                         {tasks.length} rules applied
                       </Typography>
+                      <Box mt={2}>
+                        <Button
+                          variant="outlined"
+                          color="secondary"
+                          onClick={() => {
+                            setPhase('failed');
+                          }}
+                        >
+                          Cancel Remediation
+                        </Button>
+                      </Box>
+                    </>
+                  )}
+                  {phase === 'failed' && (
+                    <>
+                      <Typography variant="h6" color="error" gutterBottom>
+                        Remediation Cancelled
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        {tasks.filter(t => t.status === 'completed').length} of{' '}
+                        {tasks.length} rules were applied before cancellation.
+                        Remaining rules were not executed.
+                      </Typography>
+                      <Box mt={2} display="flex" gap={2} justifyContent="center">
+                        <Button
+                          variant="outlined"
+                          onClick={() => navigate(`/compliance/remediation/${jobId}`)}
+                        >
+                          Back to Profile Builder
+                        </Button>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          onClick={() => navigate('/compliance/scan')}
+                        >
+                          Run Verification Scan
+                        </Button>
+                      </Box>
                     </>
                   )}
                   {phase === 'verifying' && (

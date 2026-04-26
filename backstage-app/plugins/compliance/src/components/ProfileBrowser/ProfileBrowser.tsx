@@ -239,7 +239,7 @@ export const ProfileBrowser = () => {
                 color="primary"
                 fullWidth
                 size="large"
-                onClick={() => navigate('/compliance/scan')}
+                onClick={() => navigate(`/compliance/scan?profile=${selectedProfile?.id ?? ''}`)}
               >
                 Scan with this Profile
               </Button>
@@ -314,7 +314,7 @@ export const ProfileBrowser = () => {
                     size="small"
                     color="primary"
                     variant="outlined"
-                    onClick={() => navigate('/compliance/scan')}
+                    onClick={() => navigate(`/compliance/scan?profile=${selectedProfile?.id ?? ''}`)}
                   >
                     Scan
                   </Button>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Header,
   Page,
@@ -12,6 +12,10 @@ import {
   Grid,
   Typography,
   Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Stepper,
   Step,
   StepLabel,
@@ -79,11 +83,14 @@ const steps = ['Select Profile', 'Select Targets', 'Review & Launch'];
 export const ScanLauncher = () => {
   const classes = useStyles();
   const navigate = useNavigate();
-  const [activeStep, setActiveStep] = useState(0);
-  const [selectedProfile, setSelectedProfile] = useState('');
+  const [searchParams] = useSearchParams();
+  const preselectedProfile = searchParams.get('profile') ?? '';
+  const [activeStep, setActiveStep] = useState(preselectedProfile ? 1 : 0);
+  const [selectedProfile, setSelectedProfile] = useState(preselectedProfile);
   const [selectedInventory, setSelectedInventory] = useState('');
   const [evaluateOnly, setEvaluateOnly] = useState(true);
   const [launching, setLaunching] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   const profile = PROFILES.find(p => p.id === selectedProfile);
   const inventory = INVENTORIES.find(i => i.id.toString() === selectedInventory);
@@ -163,7 +170,13 @@ export const ScanLauncher = () => {
               control={
                 <Switch
                   checked={evaluateOnly}
-                  onChange={e => setEvaluateOnly(e.target.checked)}
+                  onChange={e => {
+                    if (!e.target.checked) {
+                      setConfirmDialogOpen(true);
+                    } else {
+                      setEvaluateOnly(true);
+                    }
+                  }}
                   color="primary"
                 />
               }
@@ -177,6 +190,36 @@ export const ScanLauncher = () => {
                 </div>
               }
             />
+
+            <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)}>
+              <DialogTitle>Enable Auto-Remediation?</DialogTitle>
+              <DialogContent>
+                <Typography variant="body1" paragraph>
+                  Disabling &quot;Evaluate only&quot; will automatically apply ALL remediation
+                  rules to the target hosts. This can break running services and
+                  production workloads.
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  For most use cases, we recommend scanning first (evaluate only),
+                  then using the Remediation Profile Builder to selectively choose
+                  which rules to apply.
+                </Typography>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setConfirmDialogOpen(false)} color="primary">
+                  Keep Evaluate Only
+                </Button>
+                <Button
+                  onClick={() => {
+                    setEvaluateOnly(false);
+                    setConfirmDialogOpen(false);
+                  }}
+                  color="secondary"
+                >
+                  Enable Auto-Remediation
+                </Button>
+              </DialogActions>
+            </Dialog>
           </div>
         );
 

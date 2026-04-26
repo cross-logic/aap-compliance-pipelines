@@ -203,7 +203,7 @@ export const ComplianceDashboard = () => {
               </Card>
               <Box mt={1} />
               <Card variant="outlined">
-                <CardActionArea onClick={() => navigate('profiles/rhel9-stig')}>
+                <CardActionArea onClick={() => navigate('profiles/all')}>
                   <div className={classes.quickAction}>
                     <SecurityIcon className={classes.actionIcon} />
                     <div>
@@ -219,15 +219,15 @@ export const ComplianceDashboard = () => {
               </Card>
               <Box mt={1} />
               <Card variant="outlined">
-                <CardActionArea>
+                <CardActionArea onClick={() => navigate('results/42')}>
                   <div className={classes.quickAction}>
                     <AssessmentIcon className={classes.actionIcon} />
                     <div>
                       <Typography variant="subtitle1">
-                        View Reports
+                        Latest Results
                       </Typography>
                       <Typography variant="body2" color="textSecondary">
-                        Compliance posture reports and audit evidence
+                        View most recent scan results and findings
                       </Typography>
                     </div>
                   </div>
