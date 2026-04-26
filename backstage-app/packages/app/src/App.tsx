@@ -1,6 +1,8 @@
 import React from 'react';
-import { Route, Routes, Navigate } from 'react-router-dom';
+import { Navigate, Route } from 'react-router-dom';
 import { createApp } from '@backstage/app-defaults';
+import { AppRouter, FlatRoutes } from '@backstage/core-app-api';
+import { AlertDisplay } from '@backstage/core-components';
 import { CompliancePage } from '@aap-compliance/plugin-compliance';
 
 const app = createApp({
@@ -8,10 +10,15 @@ const app = createApp({
 });
 
 const routes = (
-  <Routes>
+  <FlatRoutes>
     <Route path="/compliance/*" element={<CompliancePage />} />
     <Route path="/" element={<Navigate to="/compliance" replace />} />
-  </Routes>
+  </FlatRoutes>
 );
 
-export default app.createRoot(routes);
+export default app.createRoot(
+  <>
+    <AlertDisplay />
+    <AppRouter>{routes}</AppRouter>
+  </>,
+);
