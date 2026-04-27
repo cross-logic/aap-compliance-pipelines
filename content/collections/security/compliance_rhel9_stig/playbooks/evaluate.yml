@@ -43,7 +43,7 @@
     - name: Write findings to artifact file
       ansible.builtin.copy:
         content: "{{ compliance_report | to_nice_json }}"
-        dest: "{{ playbook_dir }}/../../artifacts/compliance_report.json"
+        dest: /tmp/compliance_report.json
         mode: '0644'
 
     - name: Display summary
