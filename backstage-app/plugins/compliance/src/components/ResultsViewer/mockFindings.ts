@@ -1,248 +1,266 @@
 import type { Finding } from '@aap-compliance/common';
 
-export const MOCK_FINDINGS: Finding[] = [
+export interface HostFinding {
+  host: string;
+  status: 'pass' | 'fail' | 'error';
+  actualValue: string;
+  expectedValue: string;
+}
+
+export interface MultiHostFinding {
+  ruleId: string;
+  stigId: string;
+  title: string;
+  description: string;
+  fixText: string;
+  checkText: string;
+  severity: 'CAT_I' | 'CAT_II' | 'CAT_III';
+  category: string;
+  disruption: 'low' | 'medium' | 'high';
+  parameters: Array<{
+    name: string;
+    label: string;
+    description: string;
+    type: 'string' | 'number' | 'boolean' | 'select';
+    default: string | number | boolean;
+    value: string | number | boolean;
+    options?: Array<{ label: string; value: string | number }>;
+  }>;
+  hosts: HostFinding[];
+  passCount: number;
+  failCount: number;
+  totalCount: number;
+}
+
+const HOSTS = [
+  'web-prod-01', 'web-prod-02', 'web-prod-03', 'web-prod-04', 'web-prod-05',
+  'web-prod-06', 'web-prod-07', 'web-prod-08', 'web-prod-09', 'web-prod-10',
+  'db-prod-01', 'db-prod-02', 'db-prod-03', 'db-prod-04',
+  'app-prod-01', 'app-prod-02', 'app-prod-03', 'app-prod-04', 'app-prod-05', 'app-prod-06',
+];
+
+const allPass = (expected: string): HostFinding[] =>
+  HOSTS.map(h => ({ host: h, status: 'pass' as const, actualValue: expected, expectedValue: expected }));
+
+const mostPassSomeFail = (
+  expected: string,
+  failHosts: string[],
+  failValues: Record<string, string>,
+): HostFinding[] =>
+  HOSTS.map(h => ({
+    host: h,
+    status: failHosts.includes(h) ? 'fail' as const : 'pass' as const,
+    actualValue: failHosts.includes(h) ? (failValues[h] || 'not set') : expected,
+    expectedValue: expected,
+  }));
+
+const allFail = (expected: string, actualFn: (h: string) => string): HostFinding[] =>
+  HOSTS.map(h => ({ host: h, status: 'fail' as const, actualValue: actualFn(h), expectedValue: expected }));
+
+export const MOCK_MULTI_HOST_FINDINGS: MultiHostFinding[] = [
   {
-    ruleId: 'xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout',
+    ruleId: 'sshd_set_idle_timeout',
     stigId: 'V-257844',
     title: 'Set SSH Client Alive Interval',
-    description:
-      'RHEL 9 must be configured so that all network connections associated with SSH traffic are terminated at the end of the session or after 10 minutes of inactivity.',
-    fixText: 'Configure the SSH daemon to set the idle timeout interval. Edit /etc/ssh/sshd_config and set ClientAliveInterval to 600.',
+    description: 'RHEL 9 must terminate SSH sessions after 10 minutes of inactivity.',
+    fixText: 'Set ClientAliveInterval to 600 in /etc/ssh/sshd_config.',
     checkText: 'Verify the SSH daemon is configured to terminate idle sessions.',
     severity: 'CAT_I',
-    status: 'fail',
     category: 'Access Control',
     disruption: 'low',
-    parameters: [
-      {
-        name: 'var_sshd_set_keepalive',
-        label: 'Client Alive Interval (seconds)',
-        description: 'SSH client alive interval in seconds',
-        type: 'number',
-        default: 600,
-        value: 600,
-      },
-    ],
+    parameters: [{
+      name: 'var_sshd_set_keepalive', label: 'Client Alive Interval (seconds)',
+      description: 'SSH client alive interval', type: 'number', default: 600, value: 600,
+    }],
+    hosts: mostPassSomeFail('600', ['db-prod-03', 'app-prod-05'], { 'db-prod-03': '300', 'app-prod-05': 'not set' }),
+    passCount: 18, failCount: 2, totalCount: 20,
   },
   {
-    ruleId: 'xccdf_org.ssgproject.content_rule_sshd_disable_root_login',
+    ruleId: 'sshd_disable_root_login',
     stigId: 'V-257846',
     title: 'Disable SSH Root Login',
-    description:
-      'RHEL 9 must be configured to prohibit direct login to the root account using remote access via SSH.',
-    fixText: 'Edit /etc/ssh/sshd_config and set PermitRootLogin to no.',
-    checkText: 'Verify SSH is configured to not allow root login.',
+    description: 'RHEL 9 must prohibit direct root login via SSH.',
+    fixText: 'Set PermitRootLogin to no in /etc/ssh/sshd_config.',
+    checkText: 'Verify SSH prohibits direct root login.',
     severity: 'CAT_I',
-    status: 'fail',
     category: 'Access Control',
     disruption: 'low',
     parameters: [],
+    hosts: mostPassSomeFail('no', ['web-prod-03', 'db-prod-01', 'db-prod-02', 'db-prod-03', 'db-prod-04'], {
+      'web-prod-03': 'yes', 'db-prod-01': 'yes', 'db-prod-02': 'yes', 'db-prod-03': 'yes', 'db-prod-04': 'yes',
+    }),
+    passCount: 15, failCount: 5, totalCount: 20,
   },
   {
-    ruleId: 'xccdf_org.ssgproject.content_rule_enable_fips_mode',
+    ruleId: 'enable_fips_mode',
     stigId: 'V-257777',
     title: 'Enable FIPS 140-3 Mode',
-    description:
-      'RHEL 9 must implement NIST FIPS-validated cryptography for all cryptographic functions.',
-    fixText: 'Enable FIPS mode by running: fips-mode-setup --enable',
-    checkText: 'Verify the system is in FIPS mode with: fips-mode-setup --check',
+    description: 'RHEL 9 must implement NIST FIPS-validated cryptography.',
+    fixText: 'Enable FIPS mode: fips-mode-setup --enable',
+    checkText: 'Verify the system is in FIPS mode.',
     severity: 'CAT_I',
-    status: 'fail',
     category: 'System and Communications Protection',
     disruption: 'high',
     parameters: [],
+    hosts: allFail('FIPS', () => 'DEFAULT'),
+    passCount: 0, failCount: 20, totalCount: 20,
   },
   {
-    ruleId: 'xccdf_org.ssgproject.content_rule_accounts_tmout',
+    ruleId: 'accounts_tmout',
     stigId: 'V-257893',
     title: 'Set Account Session Timeout',
-    description:
-      'RHEL 9 must terminate user sessions after 15 minutes of inactivity.',
+    description: 'RHEL 9 must terminate user sessions after 15 minutes of inactivity.',
     fixText: 'Configure TMOUT in /etc/profile.d/ to 900 seconds.',
-    checkText: 'Verify the TMOUT variable is set.',
+    checkText: 'Verify TMOUT is set.',
     severity: 'CAT_II',
-    status: 'fail',
     category: 'Access Control',
     disruption: 'low',
-    parameters: [
-      {
-        name: 'var_accounts_tmout',
-        label: 'Timeout (seconds)',
-        description: 'Session inactivity timeout in seconds',
-        type: 'number',
-        default: 900,
-        value: 900,
-      },
-    ],
+    parameters: [{
+      name: 'var_accounts_tmout', label: 'Timeout (seconds)',
+      description: 'Session inactivity timeout', type: 'number', default: 900, value: 900,
+    }],
+    hosts: mostPassSomeFail('900', ['web-prod-09', 'app-prod-06'], { 'web-prod-09': '1800', 'app-prod-06': 'not set' }),
+    passCount: 18, failCount: 2, totalCount: 20,
   },
   {
-    ruleId: 'xccdf_org.ssgproject.content_rule_audit_rules_dac_modification_chmod',
-    stigId: 'V-257910',
-    title: 'Audit DAC Permission Changes — chmod',
-    description:
-      'RHEL 9 must audit all uses of the chmod, fchmod, and fchmodat system calls.',
-    fixText: 'Add audit rules for chmod, fchmod, and fchmodat to /etc/audit/rules.d/',
-    checkText: 'Verify audit rules for DAC modification.',
-    severity: 'CAT_II',
-    status: 'fail',
-    category: 'Audit and Accountability',
-    disruption: 'low',
-    parameters: [],
-  },
-  {
-    ruleId: 'xccdf_org.ssgproject.content_rule_configure_crypto_policy',
-    stigId: 'V-257778',
-    title: 'Configure System Cryptography Policy',
-    description:
-      'RHEL 9 must configure the system cryptography policy to a level that satisfies security requirements.',
-    fixText: 'Update the system cryptography policy: update-crypto-policies --set FIPS',
-    checkText: 'Verify the current system-wide crypto policy.',
-    severity: 'CAT_II',
-    status: 'fail',
-    category: 'System and Communications Protection',
-    disruption: 'medium',
-    parameters: [
-      {
-        name: 'var_system_crypto_policy',
-        label: 'Crypto Policy',
-        description: 'System-wide cryptographic policy',
-        type: 'select',
-        default: 'FIPS',
-        value: 'FIPS',
-        options: [
-          { label: 'DEFAULT', value: 'DEFAULT' },
-          { label: 'FIPS', value: 'FIPS' },
-          { label: 'FIPS:OSPP', value: 'FIPS:OSPP' },
-          { label: 'FUTURE', value: 'FUTURE' },
-        ],
-      },
-    ],
-  },
-  {
-    ruleId: 'xccdf_org.ssgproject.content_rule_package_aide_installed',
+    ruleId: 'package_aide_installed',
     stigId: 'V-257780',
     title: 'Install AIDE',
-    description: 'RHEL 9 must install the AIDE package for file integrity monitoring.',
+    description: 'RHEL 9 must install AIDE for file integrity monitoring.',
     fixText: 'Install AIDE: dnf install aide',
-    checkText: 'Verify AIDE is installed: rpm -q aide',
+    checkText: 'Verify AIDE is installed.',
     severity: 'CAT_II',
-    status: 'fail',
     category: 'System and Information Integrity',
     disruption: 'low',
     parameters: [],
+    hosts: mostPassSomeFail('installed', [
+      'web-prod-04', 'web-prod-05', 'web-prod-06', 'db-prod-03', 'db-prod-04', 'app-prod-01', 'app-prod-02',
+    ], Object.fromEntries(['web-prod-04', 'web-prod-05', 'web-prod-06', 'db-prod-03', 'db-prod-04', 'app-prod-01', 'app-prod-02'].map(h => [h, 'not installed']))),
+    passCount: 13, failCount: 7, totalCount: 20,
   },
   {
-    ruleId: 'xccdf_org.ssgproject.content_rule_service_auditd_enabled',
+    ruleId: 'service_auditd_enabled',
     stigId: 'V-257783',
     title: 'Enable auditd Service',
     description: 'RHEL 9 audit daemon must be enabled and running.',
     fixText: 'Enable auditd: systemctl enable --now auditd',
     checkText: 'Verify auditd is enabled and running.',
     severity: 'CAT_II',
-    status: 'pass',
     category: 'Audit and Accountability',
     disruption: 'low',
     parameters: [],
+    hosts: allPass('enabled'),
+    passCount: 20, failCount: 0, totalCount: 20,
   },
   {
-    ruleId: 'xccdf_org.ssgproject.content_rule_grub2_password',
+    ruleId: 'grub2_password',
     stigId: 'V-257785',
     title: 'Set GRUB2 Boot Loader Password',
-    description:
-      'RHEL 9 must require a boot loader password for all boot entries.',
+    description: 'RHEL 9 must require a boot loader password.',
     fixText: 'Set GRUB2 password using grub2-setpassword.',
     checkText: 'Verify GRUB2 is password-protected.',
     severity: 'CAT_I',
-    status: 'fail',
     category: 'Configuration Management',
     disruption: 'medium',
     parameters: [],
+    hosts: mostPassSomeFail('set', ['web-prod-01', 'app-prod-03'], { 'web-prod-01': 'not set', 'app-prod-03': 'not set' }),
+    passCount: 18, failCount: 2, totalCount: 20,
   },
   {
-    ruleId: 'xccdf_org.ssgproject.content_rule_no_empty_passwords',
-    stigId: 'V-257832',
-    title: 'Prevent Empty Passwords',
-    description: 'RHEL 9 must not allow accounts configured with blank or null passwords.',
-    fixText: 'Remove nullok from PAM configuration files.',
-    checkText: 'Verify no PAM modules allow empty passwords.',
+    ruleId: 'selinux_enforcing',
+    stigId: 'V-257786',
+    title: 'SELinux Must Be Enforcing',
+    description: 'RHEL 9 must have SELinux in enforcing mode.',
+    fixText: 'Set SELinux to enforcing and reboot.',
+    checkText: 'Verify SELinux is enforcing.',
     severity: 'CAT_I',
-    status: 'pass',
-    category: 'Authentication',
-    disruption: 'low',
+    category: 'Access Control',
+    disruption: 'high',
     parameters: [],
+    hosts: allPass('Enforcing'),
+    passCount: 20, failCount: 0, totalCount: 20,
   },
   {
-    ruleId: 'xccdf_org.ssgproject.content_rule_disable_ctrlaltdel_reboot',
-    stigId: 'V-257790',
-    title: 'Disable Ctrl-Alt-Del Reboot',
-    description: 'RHEL 9 must disable the Ctrl-Alt-Del key sequence for rebooting.',
-    fixText: 'Mask the ctrl-alt-del.target: systemctl mask ctrl-alt-del.target',
-    checkText: 'Verify ctrl-alt-del.target is masked.',
-    severity: 'CAT_I',
-    status: 'fail',
-    category: 'Configuration Management',
-    disruption: 'low',
-    parameters: [],
-  },
-  {
-    ruleId: 'xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_redirects',
-    stigId: 'V-257800',
-    title: 'Disable ICMP Redirect Acceptance',
-    description: 'RHEL 9 must not accept ICMP redirect messages.',
-    fixText: 'Set sysctl net.ipv4.conf.all.accept_redirects = 0',
-    checkText: 'Verify ICMP redirects are disabled.',
+    ruleId: 'configure_crypto_policy',
+    stigId: 'V-257778',
+    title: 'Configure System Cryptography Policy',
+    description: 'System cryptography policy must satisfy security requirements.',
+    fixText: 'Run update-crypto-policies --set FIPS.',
+    checkText: 'Verify system-wide crypto policy.',
     severity: 'CAT_II',
-    status: 'pass',
-    category: 'Network Configuration',
-    disruption: 'low',
-    parameters: [],
-  },
-  {
-    ruleId: 'xccdf_org.ssgproject.content_rule_mount_option_tmp_noexec',
-    stigId: 'V-257793',
-    title: 'Mount /tmp with noexec',
-    description: 'RHEL 9 must mount /tmp with the noexec option.',
-    fixText: 'Add noexec to /tmp mount options in /etc/fstab.',
-    checkText: 'Verify /tmp is mounted with noexec.',
-    severity: 'CAT_II',
-    status: 'fail',
-    category: 'Configuration Management',
+    category: 'System and Communications Protection',
     disruption: 'medium',
-    parameters: [],
+    parameters: [{
+      name: 'var_system_crypto_policy', label: 'Crypto Policy',
+      description: 'System-wide cryptographic policy', type: 'select', default: 'FIPS', value: 'FIPS',
+      options: [
+        { label: 'DEFAULT', value: 'DEFAULT' },
+        { label: 'FIPS', value: 'FIPS' },
+        { label: 'FIPS:OSPP', value: 'FIPS:OSPP' },
+      ],
+    }],
+    hosts: allFail('FIPS', () => 'DEFAULT'),
+    passCount: 0, failCount: 20, totalCount: 20,
   },
   {
-    ruleId: 'xccdf_org.ssgproject.content_rule_banner_etc_issue',
+    ruleId: 'passwd_permissions',
+    stigId: 'V-257820',
+    title: 'Verify /etc/passwd Permissions',
+    description: '/etc/passwd must have permissions 0644 or more restrictive.',
+    fixText: 'Set permissions: chmod 0644 /etc/passwd',
+    checkText: 'Verify /etc/passwd permissions.',
+    severity: 'CAT_II',
+    category: 'Configuration Management',
+    disruption: 'low',
+    parameters: [],
+    hosts: mostPassSomeFail('0644', ['app-prod-04'], { 'app-prod-04': '0666' }),
+    passCount: 19, failCount: 1, totalCount: 20,
+  },
+  {
+    ruleId: 'package_telnet_not_installed',
+    stigId: 'V-257835',
+    title: 'Remove telnet Package',
+    description: 'telnet must not be installed.',
+    fixText: 'Remove telnet: dnf remove telnet',
+    checkText: 'Verify telnet is not installed.',
+    severity: 'CAT_I',
+    category: 'Configuration Management',
+    disruption: 'low',
+    parameters: [],
+    hosts: mostPassSomeFail('not installed', ['db-prod-02'], { 'db-prod-02': 'installed' }),
+    passCount: 19, failCount: 1, totalCount: 20,
+  },
+  {
+    ruleId: 'banner_etc_issue',
     stigId: 'V-257795',
     title: 'Configure Login Banner',
-    description: 'RHEL 9 must display the Standard Mandatory DoD Notice and Consent Banner before login.',
-    fixText: 'Configure the DoD consent banner in /etc/issue.',
-    checkText: 'Verify the login banner contains the required text.',
+    description: 'RHEL 9 must display the DoD consent banner before login.',
+    fixText: 'Configure the consent banner in /etc/issue.',
+    checkText: 'Verify login banner contains required text.',
     severity: 'CAT_II',
-    status: 'fail',
     category: 'Access Control',
     disruption: 'low',
-    parameters: [
-      {
-        name: 'login_banner_text',
-        label: 'Banner Text',
-        description: 'Text to display as login banner',
-        type: 'string',
-        default: 'You are accessing a U.S. Government (USG) Information System (IS)...',
-        value: 'You are accessing a U.S. Government (USG) Information System (IS)...',
-      },
-    ],
-  },
-  {
-    ruleId: 'xccdf_org.ssgproject.content_rule_package_rsyslog_installed',
-    stigId: 'V-257810',
-    title: 'Install rsyslog',
-    description: 'RHEL 9 must install the rsyslog package.',
-    fixText: 'Install rsyslog: dnf install rsyslog',
-    checkText: 'Verify rsyslog is installed.',
-    severity: 'CAT_II',
-    status: 'pass',
-    category: 'Audit and Accountability',
-    disruption: 'low',
-    parameters: [],
+    parameters: [{
+      name: 'login_banner_text', label: 'Banner Text',
+      description: 'Text to display', type: 'string',
+      default: 'You are accessing a U.S. Government Information System...', value: 'You are accessing a U.S. Government Information System...',
+    }],
+    hosts: allFail('DoD banner configured', () => 'no banner'),
+    passCount: 0, failCount: 20, totalCount: 20,
   },
 ];
+
+// Legacy single-host format for backward compatibility
+export const MOCK_FINDINGS: Finding[] = MOCK_MULTI_HOST_FINDINGS.map(mhf => ({
+  ruleId: mhf.ruleId,
+  stigId: mhf.stigId,
+  title: mhf.title,
+  description: mhf.description,
+  fixText: mhf.fixText,
+  checkText: mhf.checkText,
+  severity: mhf.severity,
+  status: mhf.failCount > 0 ? 'fail' as const : 'pass' as const,
+  category: mhf.category,
+  disruption: mhf.disruption,
+  parameters: mhf.parameters,
+}));

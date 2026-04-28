@@ -3,10 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   InfoCard,
   Breadcrumbs,
-  StatusWarning,
 } from '@backstage/core-components';
 import {
-  Grid,
   Typography,
   Button,
   Chip,
@@ -24,16 +22,19 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
   makeStyles,
 } from '@material-ui/core';
 import SettingsIcon from '@material-ui/icons/Settings';
-import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import ExpandLessIcon from '@material-ui/icons/ExpandLess';
 import SaveIcon from '@material-ui/icons/Save';
 import PlayArrowIcon from '@material-ui/icons/PlayArrow';
 import WarningIcon from '@material-ui/icons/Warning';
-import type { Finding, FindingSeverity } from '@aap-compliance/common';
-import { MOCK_FINDINGS } from '../ResultsViewer/mockFindings';
+import InfoIcon from '@material-ui/icons/Info';
+import type { FindingSeverity } from '@aap-compliance/common';
+import { MOCK_MULTI_HOST_FINDINGS, type MultiHostFinding } from '../ResultsViewer/mockFindings';
 
 const useStyles = makeStyles(theme => ({
   findingCard: {
@@ -55,14 +56,11 @@ const useStyles = makeStyles(theme => ({
   findingEnabled: {
     backgroundColor: theme.palette.background.paper,
   },
-  severityChip: {
-    fontWeight: 600,
-    minWidth: 60,
-  },
-  catI: { backgroundColor: '#d32f2f', color: '#fff' },
-  catII: { backgroundColor: '#ed6c02', color: '#fff' },
-  catIII: { backgroundColor: '#0288d1', color: '#fff' },
-  parameterPanel: {
+  severityChip: { fontWeight: 600, minWidth: 60 },
+  catI: { backgroundColor: '#C9190B', color: '#fff' },
+  catII: { backgroundColor: '#F0AB00', color: '#fff' },
+  catIII: { backgroundColor: '#0066CC', color: '#fff' },
+  detailPanel: {
     padding: theme.spacing(2, 3),
     backgroundColor: theme.palette.background.default,
     borderTop: `1px solid ${theme.palette.divider}`,
@@ -76,48 +74,41 @@ const useStyles = makeStyles(theme => ({
     borderRadius: theme.shape.borderRadius,
     marginBottom: theme.spacing(2),
   },
-  summaryCount: {
-    display: 'flex',
-    gap: theme.spacing(3),
-  },
-  bulkActions: {
-    display: 'flex',
-    gap: theme.spacing(1),
-    flexWrap: 'wrap',
-  },
+  summaryCount: { display: 'flex', gap: theme.spacing(3) },
+  bulkActions: { display: 'flex', gap: theme.spacing(1), flexWrap: 'wrap' as const },
   disruptionWarning: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(0.5),
-    color: theme.palette.warning.main,
-    fontSize: '0.75rem',
+    display: 'flex', alignItems: 'center', gap: theme.spacing(0.5),
+    color: theme.palette.warning.main, fontSize: '0.75rem',
   },
   sectionHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: theme.spacing(1.5, 2),
-    backgroundColor: theme.palette.action.hover,
-    borderRadius: theme.shape.borderRadius,
-    marginBottom: theme.spacing(1),
-    marginTop: theme.spacing(2),
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: theme.spacing(1.5, 2), backgroundColor: theme.palette.action.hover,
+    borderRadius: theme.shape.borderRadius, marginBottom: theme.spacing(1), marginTop: theme.spacing(2),
   },
-  titleGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    flex: 1,
-    minWidth: 0,
+  titleGroup: { display: 'flex', flexDirection: 'column' as const, flex: 1, minWidth: 0 },
+  impactText: { color: theme.palette.text.secondary, fontSize: '0.8rem', marginTop: 2 },
+  hostBreakdown: {
+    display: 'flex', alignItems: 'center', gap: theme.spacing(1),
+    fontSize: '0.8rem', color: theme.palette.text.secondary,
   },
-  impactText: {
-    color: theme.palette.text.secondary,
-    fontSize: '0.8rem',
-    marginTop: 2,
+  adviceBanner: {
+    display: 'flex', alignItems: 'flex-start', gap: theme.spacing(1),
+    padding: theme.spacing(1.5, 2), backgroundColor: '#FFF3CD',
+    borderRadius: theme.shape.borderRadius, marginBottom: theme.spacing(1.5),
+    border: '1px solid #FFECB5',
+  },
+  adviceIcon: { color: '#856404', marginTop: 2 },
+  remediationStrategy: {
+    padding: theme.spacing(1.5, 0),
   },
 }));
 
-interface SelectionState {
+type RemediationScope = 'failed_only' | 'standardize_all';
+
+interface RuleSelection {
   enabled: boolean;
   expanded: boolean;
+  scope: RemediationScope;
   parameters: Record<string, string | number | boolean>;
 }
 
@@ -135,16 +126,17 @@ export const RemediationProfileBuilder = () => {
   const [profileName, setProfileName] = useState('');
 
   const failedFindings = useMemo(
-    () => MOCK_FINDINGS.filter(f => f.status === 'fail'),
+    () => MOCK_MULTI_HOST_FINDINGS.filter(f => f.failCount > 0),
     [],
   );
 
-  const [selections, setSelections] = useState<Record<string, SelectionState>>(() => {
-    const initial: Record<string, SelectionState> = {};
+  const [selections, setSelections] = useState<Record<string, RuleSelection>>(() => {
+    const initial: Record<string, RuleSelection> = {};
     failedFindings.forEach(f => {
       initial[f.ruleId] = {
         enabled: f.disruption !== 'high',
         expanded: false,
+        scope: 'failed_only',
         parameters: Object.fromEntries(
           f.parameters.map(p => [p.name, p.default]),
         ),
@@ -167,26 +159,24 @@ export const RemediationProfileBuilder = () => {
     }));
   };
 
-  const updateParameter = (
-    ruleId: string,
-    paramName: string,
-    value: string | number | boolean,
-  ) => {
+  const setScope = (ruleId: string, scope: RemediationScope) => {
     setSelections(prev => ({
       ...prev,
-      [ruleId]: {
-        ...prev[ruleId],
-        parameters: { ...prev[ruleId].parameters, [paramName]: value },
-      },
+      [ruleId]: { ...prev[ruleId], scope },
+    }));
+  };
+
+  const updateParameter = (ruleId: string, paramName: string, value: string | number | boolean) => {
+    setSelections(prev => ({
+      ...prev,
+      [ruleId]: { ...prev[ruleId], parameters: { ...prev[ruleId].parameters, [paramName]: value } },
     }));
   };
 
   const selectAll = () => {
     setSelections(prev => {
       const updated = { ...prev };
-      Object.keys(updated).forEach(k => {
-        updated[k] = { ...updated[k], enabled: true };
-      });
+      Object.keys(updated).forEach(k => { updated[k] = { ...updated[k], enabled: true }; });
       return updated;
     });
   };
@@ -194,21 +184,16 @@ export const RemediationProfileBuilder = () => {
   const clearAll = () => {
     setSelections(prev => {
       const updated = { ...prev };
-      Object.keys(updated).forEach(k => {
-        updated[k] = { ...updated[k], enabled: false };
-      });
+      Object.keys(updated).forEach(k => { updated[k] = { ...updated[k], enabled: false }; });
       return updated;
     });
   };
 
-  const selectBySeverity = (severity: FindingSeverity) => {
+  const selectBySeverity = (...severities: FindingSeverity[]) => {
     setSelections(prev => {
       const updated = { ...prev };
       failedFindings.forEach(f => {
-        updated[f.ruleId] = {
-          ...updated[f.ruleId],
-          enabled: f.severity === severity,
-        };
+        updated[f.ruleId] = { ...updated[f.ruleId], enabled: severities.includes(f.severity) };
       });
       return updated;
     });
@@ -217,12 +202,23 @@ export const RemediationProfileBuilder = () => {
   const enabledCount = Object.values(selections).filter(s => s.enabled).length;
   const disabledCount = Object.values(selections).filter(s => !s.enabled).length;
 
-  const groupedByCategory = useMemo(() => {
-    const groups: Record<FindingSeverity, Finding[]> = {
-      CAT_I: [],
-      CAT_II: [],
-      CAT_III: [],
-    };
+  const totalAffectedHosts = useMemo(() => {
+    const hostSet = new Set<string>();
+    failedFindings.forEach(f => {
+      const sel = selections[f.ruleId];
+      if (sel?.enabled) {
+        if (sel.scope === 'standardize_all') {
+          f.hosts.forEach(h => hostSet.add(h.host));
+        } else {
+          f.hosts.filter(h => h.status === 'fail').forEach(h => hostSet.add(h.host));
+        }
+      }
+    });
+    return hostSet.size;
+  }, [failedFindings, selections]);
+
+  const groupedBySeverity = useMemo(() => {
+    const groups: Record<FindingSeverity, MultiHostFinding[]> = { CAT_I: [], CAT_II: [], CAT_III: [] };
     failedFindings.forEach(f => groups[f.severity].push(f));
     return groups;
   }, [failedFindings]);
@@ -236,24 +232,21 @@ export const RemediationProfileBuilder = () => {
     }
   };
 
-  const renderFinding = (finding: Finding) => {
+  const renderFinding = (finding: MultiHostFinding) => {
     const sel = selections[finding.ruleId];
     if (!sel) return null;
+
+    const failRatio = finding.failCount / finding.totalCount;
+    const showHomogeneityAdvice = finding.failCount > 0 && finding.failCount <= 3 && finding.totalCount >= 10;
 
     return (
       <div
         key={finding.ruleId}
-        className={`${classes.findingCard} ${
-          sel.enabled ? classes.findingEnabled : classes.findingDisabled
-        }`}
+        className={`${classes.findingCard} ${sel.enabled ? classes.findingEnabled : classes.findingDisabled}`}
       >
+        {/* Rule header */}
         <div className={classes.findingHeader}>
-          <Switch
-            checked={sel.enabled}
-            onChange={() => toggleFinding(finding.ruleId)}
-            color="primary"
-            size="small"
-          />
+          <Switch checked={sel.enabled} onChange={() => toggleFinding(finding.ruleId)} color="primary" size="small" />
           <Chip
             label={finding.stigId}
             size="small"
@@ -262,10 +255,16 @@ export const RemediationProfileBuilder = () => {
           />
           <div className={classes.titleGroup}>
             <Typography variant="subtitle2">{finding.title}</Typography>
-            <Typography className={classes.impactText}>
-              {finding.fixText.slice(0, 80)}
-              {finding.fixText.length > 80 ? '...' : ''}
-            </Typography>
+            <div className={classes.hostBreakdown}>
+              <span style={{ color: '#C9190B', fontWeight: 600 }}>{finding.failCount} failed</span>
+              <span>/</span>
+              <span>{finding.totalCount} hosts</span>
+              {finding.hosts.filter(h => h.status === 'fail').length > 0 && (
+                <span style={{ color: '#666' }}>
+                  ({finding.hosts.filter(h => h.status === 'fail').map(h => h.host).join(', ')})
+                </span>
+              )}
+            </div>
           </div>
 
           {finding.disruption === 'high' && (
@@ -275,76 +274,133 @@ export const RemediationProfileBuilder = () => {
             </div>
           )}
 
-          {finding.parameters.length > 0 && (
-            <IconButton
-              size="small"
-              onClick={e => {
-                e.stopPropagation();
-                toggleExpanded(finding.ruleId);
-              }}
-              title="Customize parameters"
-            >
-              {sel.expanded ? <ExpandLessIcon /> : <SettingsIcon fontSize="small" />}
-            </IconButton>
-          )}
+          <IconButton
+            size="small"
+            onClick={e => { e.stopPropagation(); toggleExpanded(finding.ruleId); }}
+          >
+            {sel.expanded ? <ExpandLessIcon /> : <SettingsIcon fontSize="small" />}
+          </IconButton>
         </div>
 
-        {finding.parameters.length > 0 && (
-          <Collapse in={sel.expanded}>
-            <div className={classes.parameterPanel}>
+        {/* Expanded: scope selection, parameters, host detail */}
+        <Collapse in={sel.expanded}>
+          <div className={classes.detailPanel}>
+            {/* Homogeneity advice */}
+            {showHomogeneityAdvice && (
+              <div className={classes.adviceBanner}>
+                <InfoIcon className={classes.adviceIcon} fontSize="small" />
+                <div>
+                  <Typography variant="body2" style={{ color: '#856404', fontWeight: 600 }}>
+                    Only {finding.failCount} of {finding.totalCount} hosts failed this rule.
+                  </Typography>
+                  <Typography variant="caption" style={{ color: '#856404' }}>
+                    Consider whether{' '}
+                    {finding.hosts.filter(h => h.status === 'fail').map(h => h.host).join(', ')}{' '}
+                    should belong to a different inventory with different compliance requirements.
+                  </Typography>
+                </div>
+              </div>
+            )}
+
+            {/* Remediation scope */}
+            <div className={classes.remediationStrategy}>
               <Typography variant="caption" color="textSecondary" gutterBottom>
-                Parameters
+                Remediation Scope
               </Typography>
-              <Grid container spacing={2} style={{ marginTop: 4 }}>
-                {finding.parameters.map(param => (
-                  <Grid item xs={12} sm={6} key={param.name}>
-                    {param.type === 'select' ? (
-                      <FormControl variant="outlined" size="small" fullWidth>
-                        <InputLabel>{param.label}</InputLabel>
-                        <Select
-                          value={sel.parameters[param.name] ?? param.default}
-                          onChange={e =>
-                            updateParameter(
-                              finding.ruleId,
-                              param.name,
-                              e.target.value as string,
-                            )
-                          }
-                          label={param.label}
-                        >
-                          {param.options?.map(opt => (
-                            <MenuItem key={String(opt.value)} value={opt.value}>
-                              {opt.label}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    ) : (
-                      <TextField
-                        label={param.label}
-                        variant="outlined"
-                        size="small"
-                        fullWidth
-                        type={param.type === 'number' ? 'number' : 'text'}
-                        value={sel.parameters[param.name] ?? param.default}
-                        onChange={e =>
-                          updateParameter(
-                            finding.ruleId,
-                            param.name,
-                            param.type === 'number'
-                              ? Number(e.target.value)
-                              : e.target.value,
-                          )
-                        }
-                        helperText={param.description}
-                      />
-                    )}
-                  </Grid>
-                ))}
-              </Grid>
+              <RadioGroup
+                value={sel.scope}
+                onChange={e => setScope(finding.ruleId, e.target.value as RemediationScope)}
+              >
+                <FormControlLabel
+                  value="failed_only"
+                  control={<Radio size="small" color="primary" />}
+                  label={
+                    <Typography variant="body2">
+                      Remediate failed hosts only ({finding.failCount} hosts)
+                    </Typography>
+                  }
+                />
+                <FormControlLabel
+                  value="standardize_all"
+                  control={<Radio size="small" color="primary" />}
+                  label={
+                    <Typography variant="body2">
+                      Apply to all hosts — standardize to same setting ({finding.totalCount} hosts)
+                    </Typography>
+                  }
+                />
+              </RadioGroup>
             </div>
-          </Collapse>
-        )}
+
+            {/* Parameters */}
+            {finding.parameters.length > 0 && (
+              <Box mt={2}>
+                <Typography variant="caption" color="textSecondary" gutterBottom>
+                  Parameters
+                  {sel.scope === 'standardize_all' && (
+                    <span style={{ fontStyle: 'italic' }}> — applied to all {finding.totalCount} hosts</span>
+                  )}
+                </Typography>
+                <Box display="flex" flexWrap="wrap" style={{ gap: 16, marginTop: 8 }}>
+                  {finding.parameters.map(param => (
+                    <div key={param.name} style={{ flex: '1 1 200px', maxWidth: 300 }}>
+                      {param.type === 'select' ? (
+                        <FormControl variant="outlined" size="small" fullWidth>
+                          <InputLabel>{param.label}</InputLabel>
+                          <Select
+                            value={sel.parameters[param.name] ?? param.default}
+                            onChange={e => updateParameter(finding.ruleId, param.name, e.target.value as string)}
+                            label={param.label}
+                          >
+                            {param.options?.map(opt => (
+                              <MenuItem key={String(opt.value)} value={opt.value}>{opt.label}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      ) : (
+                        <TextField
+                          label={param.label}
+                          variant="outlined"
+                          size="small"
+                          fullWidth
+                          type={param.type === 'number' ? 'number' : 'text'}
+                          value={sel.parameters[param.name] ?? param.default}
+                          onChange={e => updateParameter(
+                            finding.ruleId, param.name,
+                            param.type === 'number' ? Number(e.target.value) : e.target.value,
+                          )}
+                          helperText={param.description}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {/* Failed host detail */}
+            <Box mt={2}>
+              <Typography variant="caption" color="textSecondary">
+                Failed Hosts — Actual Values
+              </Typography>
+              <Box mt={1}>
+                {finding.hosts.filter(h => h.status === 'fail').map(h => (
+                  <Box key={h.host} display="flex" style={{ gap: 16 }} py={0.5}>
+                    <Typography variant="body2" style={{ fontFamily: 'monospace', minWidth: 120 }}>
+                      {h.host}
+                    </Typography>
+                    <Typography variant="body2" style={{ fontFamily: 'monospace', color: '#C9190B' }}>
+                      {h.actualValue}
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      (expected: {h.expectedValue})
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          </div>
+        </Collapse>
       </div>
     );
   };
@@ -352,171 +408,117 @@ export const RemediationProfileBuilder = () => {
   return (
     <>
       <Breadcrumbs>
-          <Typography
-            color="primary"
-            style={{ cursor: 'pointer' }}
-            onClick={() => navigate('/compliance')}
-          >
-            Compliance
-          </Typography>
-          <Typography
-            color="primary"
-            style={{ cursor: 'pointer' }}
-            onClick={() => navigate(`/compliance/results/${jobId}`)}
-          >
-            Scan Results
-          </Typography>
-          <Typography>Remediation Profile</Typography>
-        </Breadcrumbs>
+        <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance')}>
+          Compliance
+        </Typography>
+        <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate(`/compliance/results/${jobId}`)}>
+          Scan Results
+        </Typography>
+        <Typography>Remediation Profile</Typography>
+      </Breadcrumbs>
 
-        <Box mt={3} />
+      <Box mt={2} />
 
-        {/* Summary Bar */}
-        <div className={classes.summaryBar}>
-          <div className={classes.summaryCount}>
-            <Typography variant="body1">
-              <strong>{failedFindings.length}</strong> findings
-            </Typography>
-            <Typography variant="body1" style={{ color: '#4caf50' }}>
-              <strong>{enabledCount}</strong> selected
-            </Typography>
-            <Typography variant="body1" color="textSecondary">
-              <strong>{disabledCount}</strong> skipped
-            </Typography>
-          </div>
-          <div className={classes.bulkActions}>
-            <Button size="small" variant="outlined" onClick={selectAll}>
-              Select All
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => selectBySeverity('CAT_I')}
-            >
-              CAT I Only
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => {
-                setSelections(prev => {
-                  const updated = { ...prev };
-                  failedFindings.forEach(f => {
-                    updated[f.ruleId] = {
-                      ...updated[f.ruleId],
-                      enabled: f.severity === 'CAT_I' || f.severity === 'CAT_II',
-                    };
-                  });
-                  return updated;
-                });
-              }}
-            >
-              CAT I + II
-            </Button>
-            <Button size="small" variant="outlined" onClick={clearAll}>
-              Clear All
-            </Button>
-          </div>
+      {/* Summary Bar */}
+      <div className={classes.summaryBar}>
+        <div className={classes.summaryCount}>
+          <Typography variant="body1"><strong>{failedFindings.length}</strong> rules with failures</Typography>
+          <Typography variant="body1" style={{ color: '#3E8635' }}><strong>{enabledCount}</strong> selected</Typography>
+          <Typography variant="body1" color="textSecondary"><strong>{disabledCount}</strong> skipped</Typography>
+          <Typography variant="body1" color="textSecondary"><strong>{totalAffectedHosts}</strong> hosts affected</Typography>
         </div>
+        <div className={classes.bulkActions}>
+          <Button size="small" variant="outlined" onClick={selectAll}>Select All</Button>
+          <Button size="small" variant="outlined" onClick={() => selectBySeverity('CAT_I')}>CAT I Only</Button>
+          <Button size="small" variant="outlined" onClick={() => selectBySeverity('CAT_I', 'CAT_II')}>CAT I + II</Button>
+          <Button size="small" variant="outlined" onClick={clearAll}>Clear All</Button>
+        </div>
+      </div>
 
-        {/* Findings by Severity */}
-        {(['CAT_I', 'CAT_II', 'CAT_III'] as FindingSeverity[]).map(severity => {
-          const group = groupedByCategory[severity];
-          if (group.length === 0) return null;
-          const groupEnabled = group.filter(
-            f => selections[f.ruleId]?.enabled,
-          ).length;
+      {/* Findings by Severity */}
+      {(['CAT_I', 'CAT_II', 'CAT_III'] as FindingSeverity[]).map(severity => {
+        const group = groupedBySeverity[severity];
+        if (group.length === 0) return null;
+        const groupEnabled = group.filter(f => selections[f.ruleId]?.enabled).length;
 
-          return (
-            <React.Fragment key={severity}>
-              <div className={classes.sectionHeader}>
-                <Box display="flex" alignItems="center" style={{ gap: 8 }}>
-                  <Chip
-                    label={severityLabel[severity]}
-                    size="small"
-                    className={`${classes.severityChip} ${getSeverityClass(severity)}`}
-                  />
-                  <Typography variant="body2" color="textSecondary">
-                    {groupEnabled}/{group.length} selected
-                  </Typography>
-                </Box>
-              </div>
-              {group.map(finding => renderFinding(finding))}
-            </React.Fragment>
-          );
-        })}
+        return (
+          <React.Fragment key={severity}>
+            <div className={classes.sectionHeader}>
+              <Box display="flex" alignItems="center" style={{ gap: 8 }}>
+                <Chip
+                  label={severityLabel[severity]}
+                  size="small"
+                  className={`${classes.severityChip} ${getSeverityClass(severity)}`}
+                />
+                <Typography variant="body2" color="textSecondary">
+                  {groupEnabled}/{group.length} selected
+                </Typography>
+              </Box>
+            </div>
+            {group.map(finding => renderFinding(finding))}
+          </React.Fragment>
+        );
+      })}
 
-        <Divider style={{ margin: '24px 0' }} />
+      <Divider style={{ margin: '24px 0' }} />
 
-        {/* Action Buttons */}
-        <Box display="flex" justifyContent="flex-end" style={{ gap: 16 }}>
-          <Button
+      {/* Action Buttons */}
+      <Box display="flex" justifyContent="flex-end" style={{ gap: 16 }}>
+        <Button variant="outlined" startIcon={<SaveIcon />} onClick={() => setSaveDialogOpen(true)}>
+          Save as Profile
+        </Button>
+        <Button
+          variant="contained"
+          color="primary"
+          size="large"
+          startIcon={<PlayArrowIcon />}
+          onClick={() => navigate(`/compliance/execute/${jobId}`)}
+          disabled={enabledCount === 0}
+        >
+          Apply Remediation ({enabledCount} rules, {totalAffectedHosts} hosts)
+        </Button>
+      </Box>
+
+      {/* Save Profile Dialog */}
+      <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Save Remediation Profile</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="textSecondary" paragraph>
+            Save your selections, scope choices, and parameter overrides as a reusable profile.
+            This profile captures institutional knowledge about which rules to enforce,
+            which hosts to target, and what values to apply.
+          </Typography>
+          <TextField
+            label="Profile Name"
             variant="outlined"
-            startIcon={<SaveIcon />}
-            onClick={() => setSaveDialogOpen(true)}
-          >
-            Save as Profile
-          </Button>
+            fullWidth
+            value={profileName}
+            onChange={e => setProfileName(e.target.value)}
+            placeholder="e.g., production-web-servers-stig-v2r8"
+            style={{ marginTop: 8 }}
+          />
+          <TextField
+            label="Description (optional)"
+            variant="outlined"
+            fullWidth
+            multiline
+            rows={3}
+            placeholder="e.g., STIG profile for production web tier — FIPS disabled due to legacy TLS, SSH timeout set to 900"
+            style={{ marginTop: 16 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
           <Button
             variant="contained"
             color="primary"
-            size="large"
-            startIcon={<PlayArrowIcon />}
-            onClick={() => navigate(`/compliance/execute/${jobId}`)}
-            disabled={enabledCount === 0}
+            onClick={() => setSaveDialogOpen(false)}
+            disabled={!profileName}
           >
-            Apply Remediation ({enabledCount} rules)
+            Save Profile
           </Button>
-        </Box>
-
-        {/* Save Profile Dialog */}
-        <Dialog
-          open={saveDialogOpen}
-          onClose={() => setSaveDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Save Remediation Profile</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="textSecondary" paragraph>
-              Save your selections and parameter customizations as a reusable
-              profile. This profile can be applied to future scans without
-              re-configuring each rule.
-            </Typography>
-            <TextField
-              label="Profile Name"
-              variant="outlined"
-              fullWidth
-              value={profileName}
-              onChange={e => setProfileName(e.target.value)}
-              placeholder="e.g., production-web-servers-stig-v2r8"
-              style={{ marginTop: 8 }}
-            />
-            <TextField
-              label="Description (optional)"
-              variant="outlined"
-              fullWidth
-              multiline
-              rows={3}
-              placeholder="e.g., STIG profile for production web tier — FIPS disabled due to legacy TLS requirements"
-              style={{ marginTop: 16 }}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => {
-                setSaveDialogOpen(false);
-                // TODO: Persist profile
-              }}
-              disabled={!profileName}
-            >
-              Save Profile
-            </Button>
-          </DialogActions>
-        </Dialog>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

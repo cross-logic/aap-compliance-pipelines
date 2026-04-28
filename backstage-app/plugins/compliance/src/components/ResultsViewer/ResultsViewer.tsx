@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   InfoCard,
   Breadcrumbs,
@@ -8,7 +8,6 @@ import {
   StatusWarning,
 } from '@backstage/core-components';
 import {
-  Grid,
   Typography,
   Button,
   Chip,
@@ -34,52 +33,83 @@ import SearchIcon from '@material-ui/icons/Search';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import ExpandLessIcon from '@material-ui/icons/ExpandLess';
 import BuildIcon from '@material-ui/icons/Build';
-import type { Finding, FindingSeverity, FindingStatus } from '@aap-compliance/common';
-import { MOCK_FINDINGS } from './mockFindings';
+import CheckCircleIcon from '@material-ui/icons/CheckCircle';
+import ErrorIcon from '@material-ui/icons/Error';
+import type { FindingSeverity } from '@aap-compliance/common';
+import { MOCK_MULTI_HOST_FINDINGS, type MultiHostFinding } from './mockFindings';
 
 const useStyles = makeStyles(theme => ({
   severityChip: {
     fontWeight: 600,
     minWidth: 60,
   },
-  catI: {
-    backgroundColor: theme.palette.error.main,
-    color: '#fff',
-  },
-  catII: {
-    backgroundColor: theme.palette.warning.main,
-    color: '#fff',
-  },
-  catIII: {
-    backgroundColor: theme.palette.info.main,
-    color: '#fff',
-  },
-  pass: {
-    color: theme.palette.success?.main ?? '#4caf50',
-  },
-  fail: {
-    color: theme.palette.error.main,
+  catI: { backgroundColor: '#C9190B', color: '#fff' },
+  catII: { backgroundColor: '#F0AB00', color: '#fff' },
+  catIII: { backgroundColor: '#0066CC', color: '#fff' },
+  passBar: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#e0e0e0',
   },
   findingRow: {
     cursor: 'pointer',
-    '&:hover': {
-      backgroundColor: theme.palette.action.hover,
-    },
+    '&:hover': { backgroundColor: theme.palette.action.hover },
   },
-  expandedDetail: {
-    padding: theme.spacing(2),
+  hostDetailRow: {
     backgroundColor: theme.palette.background.default,
   },
-  summaryBar: {
-    height: 12,
-    borderRadius: 6,
-    marginTop: theme.spacing(1),
+  hostStatusPass: {
+    color: '#3E8635',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+  },
+  hostStatusFail: {
+    color: '#C9190B',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+  },
+  hostCountChip: {
+    fontWeight: 600,
+    fontSize: '0.8rem',
   },
   filterRow: {
     display: 'flex',
     gap: theme.spacing(2),
     alignItems: 'center',
     flexWrap: 'wrap',
+    marginBottom: theme.spacing(2),
+  },
+  summarySection: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: theme.spacing(2),
+    marginBottom: theme.spacing(2),
+  },
+  summaryCard: {
+    flex: '1 1 200px',
+    textAlign: 'center',
+    padding: theme.spacing(2),
+  },
+  summaryValue: {
+    fontSize: '2rem',
+    fontWeight: 700,
+  },
+  summaryLabel: {
+    color: theme.palette.text.secondary,
+    fontSize: '0.8rem',
+  },
+  hostDetail: {
+    padding: theme.spacing(1, 2, 1, 6),
+  },
+  expandedSection: {
+    borderTop: `1px solid ${theme.palette.divider}`,
+  },
+  ruleDescription: {
+    padding: theme.spacing(1.5, 2),
+    backgroundColor: theme.palette.background.default,
+    borderTop: `1px solid ${theme.palette.divider}`,
   },
 }));
 
@@ -99,27 +129,50 @@ export const ResultsViewer = () => {
   const classes = useStyles();
   const navigate = useNavigate();
   const { jobId } = useParams<{ jobId: string }>();
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const [severityFilter, setSeverityFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const findings = MOCK_FINDINGS;
-  const passCount = findings.filter(f => f.status === 'pass').length;
-  const failCount = findings.filter(f => f.status === 'fail').length;
-  const passRate = Math.round((passCount / findings.length) * 100);
+  const severityFilter = searchParams.get('severity') || 'all';
+  const statusFilter = searchParams.get('status') || 'all';
+  const searchQuery = searchParams.get('q') || '';
 
-  const filtered = findings
-    .filter(f => severityFilter === 'all' || f.severity === severityFilter)
-    .filter(f => statusFilter === 'all' || f.status === statusFilter)
-    .filter(
-      f =>
+  const [expandedRule, setExpandedRule] = useState<string | null>(null);
+
+  const findings = MOCK_MULTI_HOST_FINDINGS;
+  const totalHosts = findings[0]?.totalCount || 0;
+  const rulesWithFailures = findings.filter(f => f.failCount > 0).length;
+  const totalRules = findings.length;
+  const overallPassRate = Math.round(
+    (findings.reduce((sum, f) => sum + f.passCount, 0) /
+      findings.reduce((sum, f) => sum + f.totalCount, 0)) * 100,
+  );
+
+  const filtered = useMemo(() =>
+    findings
+      .filter(f => severityFilter === 'all' || f.severity === severityFilter)
+      .filter(f => {
+        if (statusFilter === 'all') return true;
+        if (statusFilter === 'fail') return f.failCount > 0;
+        if (statusFilter === 'pass') return f.failCount === 0;
+        return true;
+      })
+      .filter(f =>
         searchQuery === '' ||
         f.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.stigId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.ruleId.toLowerCase().includes(searchQuery.toLowerCase()),
-    )
-    .sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+        f.stigId.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+      .sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]),
+    [findings, severityFilter, statusFilter, searchQuery],
+  );
+
+  const updateFilter = (key: string, value: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (value === 'all' || value === '') {
+      params.delete(key);
+    } else {
+      params.set(key, value);
+    }
+    setSearchParams(params, { replace: true });
+  };
 
   const getSeverityClass = (severity: FindingSeverity) => {
     switch (severity) {
@@ -133,229 +186,257 @@ export const ResultsViewer = () => {
   return (
     <>
       <Breadcrumbs>
-          <Typography
-            color="primary"
-            style={{ cursor: 'pointer' }}
-            onClick={() => navigate('/compliance')}
-          >
-            Compliance
-          </Typography>
-          <Typography>Scan Results</Typography>
-        </Breadcrumbs>
+        <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance')}>
+          Compliance
+        </Typography>
+        <Typography>Scan Results</Typography>
+      </Breadcrumbs>
 
-        <Box mt={3} />
+      <Box mt={2} />
 
-        <Grid container spacing={3}>
-          {/* Summary Stats */}
-          <Grid item xs={12} sm={4}>
-            <InfoCard>
-              <Box textAlign="center" p={2}>
-                <Typography
-                  variant="h3"
-                  className={passRate >= 80 ? classes.pass : classes.fail}
-                >
-                  {passRate}%
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Compliance Rate
-                </Typography>
-                <LinearProgress
-                  variant="determinate"
-                  value={passRate}
-                  className={classes.summaryBar}
-                  color={passRate >= 80 ? 'primary' : 'secondary'}
-                />
-              </Box>
-            </InfoCard>
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <InfoCard>
-              <Box textAlign="center" p={2}>
-                <Typography variant="h3" className={classes.pass}>
-                  {passCount}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Rules Passing
-                </Typography>
-              </Box>
-            </InfoCard>
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <InfoCard>
-              <Box textAlign="center" p={2}>
-                <Typography variant="h3" className={classes.fail}>
-                  {failCount}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Rules Failing
-                </Typography>
-              </Box>
-            </InfoCard>
-          </Grid>
+      {/* Summary Cards */}
+      <div className={classes.summarySection}>
+        <InfoCard>
+          <div className={classes.summaryCard}>
+            <Typography className={classes.summaryValue} style={{ color: overallPassRate >= 80 ? '#3E8635' : '#C9190B' }}>
+              {overallPassRate}%
+            </Typography>
+            <Typography className={classes.summaryLabel}>Overall Compliance</Typography>
+          </div>
+        </InfoCard>
+        <InfoCard>
+          <div className={classes.summaryCard}>
+            <Typography className={classes.summaryValue}>{totalHosts}</Typography>
+            <Typography className={classes.summaryLabel}>Hosts Scanned</Typography>
+          </div>
+        </InfoCard>
+        <InfoCard>
+          <div className={classes.summaryCard}>
+            <Typography className={classes.summaryValue}>{totalRules}</Typography>
+            <Typography className={classes.summaryLabel}>Rules Evaluated</Typography>
+          </div>
+        </InfoCard>
+        <InfoCard>
+          <div className={classes.summaryCard}>
+            <Typography className={classes.summaryValue} style={{ color: '#C9190B' }}>
+              {rulesWithFailures}
+            </Typography>
+            <Typography className={classes.summaryLabel}>Rules with Failures</Typography>
+          </div>
+        </InfoCard>
+      </div>
 
-          {/* Remediate Button */}
-          <Grid item xs={12}>
-            <Box display="flex" justifyContent="flex-end">
-              <Button
-                variant="contained"
-                color="primary"
-                size="large"
-                startIcon={<BuildIcon />}
-                onClick={() => navigate(`/compliance/remediation/${jobId}`)}
-              >
-                Build Remediation Profile ({failCount} findings)
-              </Button>
-            </Box>
-          </Grid>
+      {/* Remediate Button */}
+      <Box display="flex" justifyContent="flex-end" mb={2}>
+        <Button
+          variant="contained"
+          color="primary"
+          size="large"
+          startIcon={<BuildIcon />}
+          onClick={() => navigate(`/compliance/remediation/${jobId}`)}
+        >
+          Build Remediation Profile ({rulesWithFailures} rules with failures)
+        </Button>
+      </Box>
 
-          {/* Filters */}
-          <Grid item xs={12}>
-            <InfoCard title="Findings">
-              <Box mb={2} className={classes.filterRow}>
-                <TextField
-                  placeholder="Search by title, STIG ID, or rule ID..."
-                  variant="outlined"
-                  size="small"
-                  style={{ minWidth: 300 }}
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-                <FormControl variant="outlined" size="small" style={{ minWidth: 140 }}>
-                  <InputLabel>Severity</InputLabel>
-                  <Select
-                    value={severityFilter}
-                    onChange={e => setSeverityFilter(e.target.value as string)}
-                    label="Severity"
+      {/* Findings Table */}
+      <InfoCard title="Findings by Rule">
+        {/* Filters */}
+        <div className={classes.filterRow}>
+          <TextField
+            placeholder="Search by title or STIG ID..."
+            variant="outlined"
+            size="small"
+            style={{ minWidth: 280 }}
+            value={searchQuery}
+            onChange={e => updateFilter('q', e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start"><SearchIcon /></InputAdornment>
+              ),
+            }}
+          />
+          <FormControl variant="outlined" size="small" style={{ minWidth: 130 }}>
+            <InputLabel>Severity</InputLabel>
+            <Select value={severityFilter} onChange={e => updateFilter('severity', e.target.value as string)} label="Severity">
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="CAT_I">CAT I</MenuItem>
+              <MenuItem value="CAT_II">CAT II</MenuItem>
+              <MenuItem value="CAT_III">CAT III</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl variant="outlined" size="small" style={{ minWidth: 130 }}>
+            <InputLabel>Status</InputLabel>
+            <Select value={statusFilter} onChange={e => updateFilter('status', e.target.value as string)} label="Status">
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="pass">All Pass</MenuItem>
+              <MenuItem value="fail">Has Failures</MenuItem>
+            </Select>
+          </FormControl>
+          <Chip label={`${filtered.length} rules`} variant="outlined" />
+        </div>
+
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell width={40} />
+                <TableCell>Severity</TableCell>
+                <TableCell>STIG ID</TableCell>
+                <TableCell>Title</TableCell>
+                <TableCell align="center">Hosts</TableCell>
+                <TableCell width={200}>Pass Rate</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filtered.map(finding => (
+                <React.Fragment key={finding.ruleId}>
+                  {/* Rule row */}
+                  <TableRow
+                    className={classes.findingRow}
+                    onClick={() => setExpandedRule(expandedRule === finding.ruleId ? null : finding.ruleId)}
                   >
-                    <MenuItem value="all">All</MenuItem>
-                    <MenuItem value="CAT_I">CAT I</MenuItem>
-                    <MenuItem value="CAT_II">CAT II</MenuItem>
-                    <MenuItem value="CAT_III">CAT III</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl variant="outlined" size="small" style={{ minWidth: 120 }}>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value as string)}
-                    label="Status"
-                  >
-                    <MenuItem value="all">All</MenuItem>
-                    <MenuItem value="pass">Pass</MenuItem>
-                    <MenuItem value="fail">Fail</MenuItem>
-                  </Select>
-                </FormControl>
-                <Chip label={`${filtered.length} findings`} variant="outlined" />
-              </Box>
+                    <TableCell>
+                      <IconButton size="small">
+                        {expandedRule === finding.ruleId ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                      </IconButton>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={severityLabel[finding.severity]}
+                        size="small"
+                        className={`${classes.severityChip} ${getSeverityClass(finding.severity)}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" style={{ fontFamily: 'monospace' }}>
+                        {finding.stigId}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{finding.title}</Typography>
+                      {finding.disruption === 'high' && (
+                        <Chip label="High disruption" size="small" color="secondary" style={{ marginTop: 4 }} />
+                      )}
+                    </TableCell>
+                    <TableCell align="center">
+                      {finding.failCount === 0 ? (
+                        <Chip
+                          label={`${finding.passCount}/${finding.totalCount}`}
+                          size="small"
+                          style={{ backgroundColor: '#3E8635', color: '#fff' }}
+                          className={classes.hostCountChip}
+                        />
+                      ) : (
+                        <Box display="flex" justifyContent="center" style={{ gap: 4 }}>
+                          <Chip
+                            label={`${finding.passCount} pass`}
+                            size="small"
+                            style={{ backgroundColor: '#3E8635', color: '#fff', fontSize: '0.7rem' }}
+                          />
+                          <Chip
+                            label={`${finding.failCount} fail`}
+                            size="small"
+                            style={{ backgroundColor: '#C9190B', color: '#fff', fontSize: '0.7rem' }}
+                          />
+                        </Box>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Box display="flex" alignItems="center" style={{ gap: 8 }}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={(finding.passCount / finding.totalCount) * 100}
+                          className={classes.passBar}
+                          style={{ flex: 1 }}
+                          color={finding.passCount === finding.totalCount ? 'primary' : 'secondary'}
+                        />
+                        <Typography variant="caption" style={{ minWidth: 36 }}>
+                          {Math.round((finding.passCount / finding.totalCount) * 100)}%
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
 
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell width={40} />
-                      <TableCell>Status</TableCell>
-                      <TableCell>Severity</TableCell>
-                      <TableCell>STIG ID</TableCell>
-                      <TableCell>Title</TableCell>
-                      <TableCell>Category</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {filtered.map(finding => (
-                      <React.Fragment key={finding.ruleId}>
-                        <TableRow
-                          className={classes.findingRow}
-                          onClick={() =>
-                            setExpandedRow(
-                              expandedRow === finding.ruleId ? null : finding.ruleId,
-                            )
-                          }
-                        >
-                          <TableCell>
-                            <IconButton size="small">
-                              {expandedRow === finding.ruleId ? (
-                                <ExpandLessIcon />
-                              ) : (
-                                <ExpandMoreIcon />
-                              )}
-                            </IconButton>
-                          </TableCell>
-                          <TableCell>
-                            {finding.status === 'pass' ? (
-                              <StatusOK>Pass</StatusOK>
-                            ) : (
-                              <StatusError>Fail</StatusError>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={severityLabel[finding.severity]}
-                              size="small"
-                              className={`${classes.severityChip} ${getSeverityClass(finding.severity)}`}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" style={{ fontFamily: 'monospace' }}>
-                              {finding.stigId}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>{finding.title}</TableCell>
-                          <TableCell>
-                            <Chip label={finding.category} size="small" variant="outlined" />
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell colSpan={6} style={{ padding: 0, border: 'none' }}>
-                            <Collapse in={expandedRow === finding.ruleId}>
-                              <div className={classes.expandedDetail}>
-                                <Grid container spacing={2}>
-                                  <Grid item xs={12}>
-                                    <Typography variant="subtitle2">Description</Typography>
-                                    <Typography variant="body2">{finding.description}</Typography>
-                                  </Grid>
-                                  <Grid item xs={6}>
-                                    <Typography variant="subtitle2">Check</Typography>
-                                    <Typography variant="body2">{finding.checkText}</Typography>
-                                  </Grid>
-                                  <Grid item xs={6}>
-                                    <Typography variant="subtitle2">Fix</Typography>
-                                    <Typography variant="body2">{finding.fixText}</Typography>
-                                  </Grid>
-                                  <Grid item xs={12}>
-                                    <Typography variant="caption" color="textSecondary">
-                                      Rule ID: {finding.ruleId}
-                                    </Typography>
-                                    {finding.disruption === 'high' && (
-                                      <Box mt={1}>
-                                        <Chip
-                                          icon={<StatusWarning />}
-                                          label="High disruption — may break existing services"
-                                          color="secondary"
-                                          size="small"
-                                        />
-                                      </Box>
-                                    )}
-                                  </Grid>
-                                </Grid>
-                              </div>
-                            </Collapse>
-                          </TableCell>
-                        </TableRow>
-                      </React.Fragment>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </InfoCard>
-          </Grid>
-        </Grid>
+                  {/* Expanded detail: description + host-level breakdown */}
+                  <TableRow>
+                    <TableCell colSpan={6} style={{ padding: 0, border: 'none' }}>
+                      <Collapse in={expandedRule === finding.ruleId}>
+                        {/* Rule description */}
+                        <div className={classes.ruleDescription}>
+                          <Typography variant="body2" gutterBottom>{finding.description}</Typography>
+                          <Box display="flex" style={{ gap: 24 }}>
+                            <div>
+                              <Typography variant="caption" color="textSecondary">Check</Typography>
+                              <Typography variant="body2">{finding.checkText}</Typography>
+                            </div>
+                            <div>
+                              <Typography variant="caption" color="textSecondary">Fix</Typography>
+                              <Typography variant="body2">{finding.fixText}</Typography>
+                            </div>
+                          </Box>
+                        </div>
+
+                        {/* Host-level breakdown */}
+                        <div className={classes.expandedSection}>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Host</TableCell>
+                                <TableCell>Status</TableCell>
+                                <TableCell>Actual Value</TableCell>
+                                <TableCell>Expected Value</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {finding.hosts
+                                .sort((a, b) => (a.status === 'fail' ? -1 : 1) - (b.status === 'fail' ? -1 : 1))
+                                .map(hostFinding => (
+                                  <TableRow key={hostFinding.host} className={classes.hostDetailRow}>
+                                    <TableCell>
+                                      <Typography variant="body2" style={{ fontFamily: 'monospace' }}>
+                                        {hostFinding.host}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className={hostFinding.status === 'pass' ? classes.hostStatusPass : classes.hostStatusFail}>
+                                        {hostFinding.status === 'pass'
+                                          ? <><CheckCircleIcon fontSize="small" /> Pass</>
+                                          : <><ErrorIcon fontSize="small" /> Fail</>
+                                        }
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography
+                                        variant="body2"
+                                        style={{
+                                          fontFamily: 'monospace',
+                                          color: hostFinding.status === 'fail' ? '#C9190B' : 'inherit',
+                                          fontWeight: hostFinding.status === 'fail' ? 600 : 400,
+                                        }}
+                                      >
+                                        {hostFinding.actualValue}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography variant="body2" style={{ fontFamily: 'monospace' }}>
+                                        {hostFinding.expectedValue}
+                                      </Typography>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                </React.Fragment>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </InfoCard>
     </>
   );
 };
