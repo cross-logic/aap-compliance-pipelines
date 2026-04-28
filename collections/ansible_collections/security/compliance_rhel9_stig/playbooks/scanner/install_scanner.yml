@@ -1,0 +1,42 @@
+---
+- name: "Scanner: Install OpenSCAP on targets (ephemeral)"
+  hosts: "{{ target_hosts | default('all') }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    scanner_packages:
+      - openscap-scanner
+      - openscap-utils
+      - scap-security-guide
+
+  tasks:
+    - name: Check if OpenSCAP is already installed
+      ansible.builtin.command: rpm -q openscap-scanner
+      register: oscap_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install OpenSCAP scanner packages
+      ansible.builtin.dnf:
+        name: "{{ scanner_packages }}"
+        state: present
+      when: oscap_check.rc != 0
+      register: install_result
+
+    - name: Tag hosts where scanner was installed (for cleanup)
+      ansible.builtin.set_fact:
+        scanner_was_installed: "{{ oscap_check.rc != 0 }}"
+        cacheable: true
+
+    - name: Verify oscap is available
+      ansible.builtin.command: oscap --version
+      register: oscap_version
+      changed_when: false
+
+    - name: Report scanner status
+      ansible.builtin.debug:
+        msg: >
+          OpenSCAP {{ oscap_version.stdout_lines[0] | default('unknown') }}
+          {{ 'freshly installed' if scanner_was_installed else 'already present' }}
+          on {{ inventory_hostname }}

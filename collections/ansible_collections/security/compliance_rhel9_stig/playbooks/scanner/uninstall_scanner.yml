@@ -1,0 +1,33 @@
+---
+- name: "Scanner: Remove OpenSCAP from targets (cleanup)"
+  hosts: "{{ target_hosts | default('all') }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    scanner_packages:
+      - openscap-scanner
+      - openscap-utils
+      - scap-security-guide
+
+  tasks:
+    - name: Check if we installed the scanner (ephemeral flag)
+      ansible.builtin.set_fact:
+        should_uninstall: "{{ scanner_was_installed | default(false) | bool }}"
+
+    - name: Remove OpenSCAP packages (only if we installed them)
+      ansible.builtin.dnf:
+        name: "{{ scanner_packages }}"
+        state: absent
+      when: should_uninstall
+
+    - name: Clean up any remaining scan artifacts
+      ansible.builtin.file:
+        path: /tmp/compliance-scan
+        state: absent
+
+    - name: Report cleanup status
+      ansible.builtin.debug:
+        msg: >
+          {{ inventory_hostname }}:
+          {{ 'scanner removed (was ephemeral)' if should_uninstall else 'scanner kept (was pre-existing)' }}

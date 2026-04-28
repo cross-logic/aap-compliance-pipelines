@@ -1,0 +1,66 @@
+---
+- name: "Scanner: Fetch and normalize OpenSCAP results"
+  hosts: "{{ target_hosts | default('all') }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    results_dir: /tmp/compliance-scan
+    local_results_dir: /tmp/compliance-results
+
+  tasks:
+    - name: Create local results directory
+      ansible.builtin.file:
+        path: "{{ local_results_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+
+    - name: Fetch XCCDF results from target
+      ansible.builtin.fetch:
+        src: "{{ results_dir }}/xccdf-results-{{ inventory_hostname }}.xml"
+        dest: "{{ local_results_dir }}/xccdf-results-{{ inventory_hostname }}.xml"
+        flat: true
+
+    - name: Fetch HTML report from target
+      ansible.builtin.fetch:
+        src: "{{ results_dir }}/report-{{ inventory_hostname }}.html"
+        dest: "{{ local_results_dir }}/report-{{ inventory_hostname }}.html"
+        flat: true
+
+    - name: Clean up results on target
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: absent
+
+- name: "Normalize: Convert XCCDF results to common findings format"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    local_results_dir: /tmp/compliance-results
+    output_file: /tmp/compliance-findings.json
+
+  tasks:
+    - name: Find all XCCDF result files
+      ansible.builtin.find:
+        paths: "{{ local_results_dir }}"
+        patterns: "xccdf-results-*.xml"
+      register: result_files
+
+    - name: Normalize XCCDF results to common findings format
+      security.compliance_rhel9_stig.normalize_xccdf:
+        results_files: "{{ result_files.files | map(attribute='path') | list }}"
+        output_file: "{{ output_file }}"
+      register: normalized
+
+    - name: Display normalized summary
+      ansible.builtin.debug:
+        msg: >
+          Normalized {{ normalized.hosts_processed }} hosts,
+          {{ normalized.total_findings }} findings
+          ({{ normalized.summary.pass }} pass,
+          {{ normalized.summary.fail }} fail).
+          Output: {{ output_file }}

@@ -1,0 +1,45 @@
+---
+- name: "Scanner: Run OpenSCAP STIG scan on targets"
+  hosts: "{{ target_hosts | default('all') }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    compliance_profile: "{{ profile | default('xccdf_org.ssgproject.content_profile_stig') }}"
+    ssg_datastream: /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
+    results_dir: /tmp/compliance-scan
+    fetch_dir: /tmp/compliance-results
+
+  tasks:
+    - name: Create results directory on target
+      ansible.builtin.file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Run OpenSCAP XCCDF evaluation
+      ansible.builtin.command:
+        cmd: >
+          oscap xccdf eval
+          --profile {{ compliance_profile }}
+          --results {{ results_dir }}/xccdf-results-{{ inventory_hostname }}.xml
+          --report {{ results_dir }}/report-{{ inventory_hostname }}.html
+          {{ ssg_datastream }}
+      register: scan_result
+      failed_when: false
+      changed_when: false
+
+    - name: Record scan exit code
+      ansible.builtin.set_fact:
+        scan_exit_code: "{{ scan_result.rc }}"
+        scan_results_file: "{{ results_dir }}/xccdf-results-{{ inventory_hostname }}.xml"
+        scan_report_file: "{{ results_dir }}/report-{{ inventory_hostname }}.html"
+        cacheable: true
+
+    - name: Report scan status
+      ansible.builtin.debug:
+        msg: >
+          OpenSCAP scan complete on {{ inventory_hostname }}.
+          Exit code: {{ scan_result.rc }}
+          (0=all pass, 1=error, 2=some fail, other=partial).
+          Results: {{ scan_results_file }}
