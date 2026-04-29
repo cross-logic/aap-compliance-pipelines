@@ -40,22 +40,58 @@ author:
   - Red Hat Ansible Automation Platform
 '''
 
+EXAMPLES = r'''
+- name: Gather all compliance facts from a target host
+  security.compliance_rhel9_stig.compliance_gather:
+  register: gathered
+
+- name: Gather only SSH and package facts
+  security.compliance_rhel9_stig.compliance_gather:
+    categories:
+      - packages
+      - ssh_config
+  register: gathered
+
+- name: Gather service and sysctl facts for evaluation
+  security.compliance_rhel9_stig.compliance_gather:
+    categories:
+      - services
+      - sysctl
+  register: gathered
+
+- name: Check mode - show what would be gathered without running commands
+  security.compliance_rhel9_stig.compliance_gather:
+    categories:
+      - all
+  check_mode: true
+  register: gathered
+'''
+
 RETURN = r'''
 compliance_facts:
   description: Structured compliance facts organized by category
   returned: always
   type: dict
+errors:
+  description: List of errors encountered during gathering
+  returned: always
+  type: list
+  elements: str
+categories_gathered:
+  description: List of categories that were successfully gathered
+  returned: always
+  type: list
+  elements: str
 '''
 
-import os
-import re
-import subprocess
 import json
+import os
 
 from ansible.module_utils.basic import AnsibleModule
 
 
 def gather_packages(module):
+    """Gather installed RPM packages with version and release information."""
     rc, stdout, stderr = module.run_command(['rpm', '-qa', '--queryformat', '%{NAME}|%{VERSION}|%{RELEASE}\n'])
     packages = {}
     if rc == 0:
@@ -67,6 +103,7 @@ def gather_packages(module):
 
 
 def gather_services(module):
+    """Gather systemd service unit file states."""
     rc, stdout, stderr = module.run_command(['systemctl', 'list-unit-files', '--type=service', '--no-pager', '--no-legend'])
     services = {}
     if rc == 0:
@@ -79,6 +116,7 @@ def gather_services(module):
 
 
 def gather_sysctl(module):
+    """Gather kernel sysctl parameters and their current values."""
     rc, stdout, stderr = module.run_command(['sysctl', '-a'])
     params = {}
     if rc == 0:
@@ -90,6 +128,7 @@ def gather_sysctl(module):
 
 
 def gather_files(module):
+    """Gather metadata and contents of critical configuration files."""
     critical_files = [
         '/etc/passwd', '/etc/shadow', '/etc/group', '/etc/gshadow',
         '/etc/ssh/sshd_config', '/etc/pam.d/system-auth', '/etc/pam.d/password-auth',
@@ -118,6 +157,7 @@ def gather_files(module):
 
 
 def gather_users(module):
+    """Gather local user accounts from /etc/passwd."""
     users = []
     try:
         with open('/etc/passwd', 'r') as f:
@@ -137,6 +177,7 @@ def gather_users(module):
 
 
 def gather_groups(module):
+    """Gather local groups from /etc/group."""
     groups = []
     try:
         with open('/etc/group', 'r') as f:
@@ -154,6 +195,7 @@ def gather_groups(module):
 
 
 def gather_mounts(module):
+    """Gather filesystem mount points and their options."""
     rc, stdout, stderr = module.run_command(['findmnt', '--json', '--noheadings'])
     if rc == 0:
         try:
@@ -178,6 +220,7 @@ def gather_mounts(module):
 
 
 def gather_audit_rules(module):
+    """Gather active audit rules from auditctl."""
     rc, stdout, stderr = module.run_command(['auditctl', '-l'])
     rules = []
     if rc == 0:
@@ -186,6 +229,7 @@ def gather_audit_rules(module):
 
 
 def gather_ssh_config(module):
+    """Gather SSH daemon configuration from sshd_config and config.d drop-ins."""
     config = {}
     try:
         with open('/etc/ssh/sshd_config', 'r') as f:
@@ -216,6 +260,7 @@ def gather_ssh_config(module):
 
 
 def gather_pam_config(module):
+    """Gather PAM configuration for system-auth, password-auth, and postlogin."""
     pam = {}
     for pam_file in ['system-auth', 'password-auth', 'postlogin']:
         path = f'/etc/pam.d/{pam_file}'
@@ -228,11 +273,13 @@ def gather_pam_config(module):
 
 
 def gather_crypto_policy(module):
+    """Gather current system-wide cryptographic policy."""
     rc, stdout, stderr = module.run_command(['update-crypto-policies', '--show'])
     return {'current': stdout.strip() if rc == 0 else 'unknown'}
 
 
 def gather_selinux(module):
+    """Gather SELinux enforcement mode and configuration."""
     rc, stdout, stderr = module.run_command(['getenforce'])
     mode = stdout.strip() if rc == 0 else 'unknown'
     config = {}
@@ -248,11 +295,13 @@ def gather_selinux(module):
 
 
 def gather_firewall(module):
+    """Gather firewalld public zone configuration."""
     rc, stdout, stderr = module.run_command(['firewall-cmd', '--list-all', '--zone=public'])
     return {'public_zone': stdout.strip() if rc == 0 else 'unavailable'}
 
 
 def gather_grub(module):
+    """Gather GRUB bootloader password status."""
     grub = {'password_set': False}
     if os.path.exists('/boot/grub2/user.cfg'):
         try:
@@ -265,6 +314,7 @@ def gather_grub(module):
 
 
 def gather_login_banner(module):
+    """Gather login banner content from /etc/issue, /etc/issue.net, and /etc/motd."""
     banner = {}
     for path in ['/etc/issue', '/etc/issue.net', '/etc/motd']:
         try:
@@ -310,12 +360,14 @@ def main():
     errors = []
 
     for category in categories:
-        if category in CATEGORY_MAP:
-            try:
-                facts[category] = CATEGORY_MAP[category](module)
-            except Exception as e:
-                errors.append(f'{category}: {str(e)}')
-                facts[category] = None
+        if category not in CATEGORY_MAP:
+            module.warn(f'Unknown category requested: {category}')
+            continue
+        try:
+            facts[category] = CATEGORY_MAP[category](module)
+        except (OSError, IOError, ValueError, KeyError) as e:
+            errors.append(f'{category}: {str(e)}')
+            facts[category] = None
 
     module.exit_json(
         changed=False,

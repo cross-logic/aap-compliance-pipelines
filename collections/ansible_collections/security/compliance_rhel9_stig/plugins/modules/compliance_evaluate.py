@@ -36,6 +36,36 @@ author:
   - Red Hat Ansible Automation Platform
 '''
 
+EXAMPLES = r'''
+- name: Evaluate compliance facts against STIG rules
+  security.compliance_rhel9_stig.compliance_evaluate:
+    facts: "{{ gathered.compliance_facts }}"
+    rules: "{{ stig_rules }}"
+    host: "{{ inventory_hostname }}"
+    profile: stig
+  register: evaluation
+  delegate_to: localhost
+
+- name: Evaluate with rules loaded from file
+  block:
+    - name: Load STIG rules
+      ansible.builtin.include_vars:
+        file: rules/stig_rhel9_v2r8.yml
+        name: stig_content
+
+    - name: Run evaluation
+      security.compliance_rhel9_stig.compliance_evaluate:
+        facts: "{{ gathered.compliance_facts }}"
+        rules: "{{ stig_content.rules }}"
+        host: webserver01.example.com
+      register: evaluation
+
+- name: Display failing findings
+  ansible.builtin.debug:
+    msg: "FAIL: {{ item.title }} ({{ item.severity }})"
+  loop: "{{ evaluation.findings | selectattr('status', 'eq', 'fail') }}"
+'''
+
 RETURN = r'''
 findings:
   description: List of compliance findings with pass/fail status
@@ -46,10 +76,17 @@ summary:
   description: Summary counts of pass, fail, error, not_applicable
   returned: always
   type: dict
+host:
+  description: Hostname these findings belong to
+  returned: always
+  type: str
+profile:
+  description: Compliance profile name used for evaluation
+  returned: always
+  type: str
 '''
 
 import re
-import json
 
 from ansible.module_utils.basic import AnsibleModule
 

@@ -1,6 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+# GNU General Public License v3.0+
+
 DOCUMENTATION = r'''
 ---
 module: normalize_xccdf
@@ -25,6 +27,39 @@ author:
   - Red Hat Ansible Automation Platform
 '''
 
+EXAMPLES = r'''
+- name: Normalize XCCDF results from a single host
+  security.compliance_rhel9_stig.normalize_xccdf:
+    results_files:
+      - /tmp/scan-results/xccdf-results-webserver01.xml
+    output_file: /tmp/compliance-report.json
+  register: normalized
+
+- name: Normalize results from multiple hosts
+  security.compliance_rhel9_stig.normalize_xccdf:
+    results_files:
+      - /tmp/scan-results/xccdf-results-webserver01.xml
+      - /tmp/scan-results/xccdf-results-dbserver01.xml
+      - /tmp/scan-results/xccdf-results-appserver01.xml
+    output_file: /var/lib/compliance/combined-report.json
+  register: normalized
+
+- name: Check mode - parse without writing output
+  security.compliance_rhel9_stig.normalize_xccdf:
+    results_files:
+      - /tmp/scan-results/xccdf-results-webserver01.xml
+    output_file: /tmp/compliance-report.json
+  check_mode: true
+  register: normalized
+
+- name: Display summary after normalization
+  ansible.builtin.debug:
+    msg: >
+      Processed {{ normalized.hosts_processed }} hosts,
+      {{ normalized.total_findings }} findings
+      ({{ normalized.summary.pass }} pass, {{ normalized.summary.fail }} fail)
+'''
+
 RETURN = r'''
 hosts_processed:
   description: Number of hosts whose results were normalized
@@ -38,6 +73,10 @@ summary:
   description: Aggregate pass/fail/error counts
   returned: always
   type: dict
+output_file:
+  description: Path to the written output file
+  returned: always
+  type: str
 '''
 
 import json
@@ -73,12 +112,14 @@ STATUS_MAP = {
 
 
 def extract_host_from_filename(filepath):
+    """Extract hostname from XCCDF result filename convention."""
     basename = os.path.basename(filepath)
     match = re.search(r'xccdf-results-(.+)\.xml', basename)
     return match.group(1) if match else basename
 
 
 def find_ns(root):
+    """Detect XCCDF namespace version from the root element tag."""
     tag = root.tag
     if '{http://checklists.nist.gov/xccdf/1.2}' in tag:
         return 'http://checklists.nist.gov/xccdf/1.2'
@@ -88,6 +129,7 @@ def find_ns(root):
 
 
 def parse_xccdf_results(filepath):
+    """Parse an XCCDF result XML file and return normalized findings."""
     tree = ET.parse(filepath)
     root = tree.getroot()
     ns = find_ns(root)
@@ -198,7 +240,9 @@ def main():
                     summary[status] += 1
         except ET.ParseError as e:
             module.warn(f'Failed to parse {filepath}: {e}')
-        except Exception as e:
+        except (OSError, IOError) as e:
+            module.warn(f'Error reading {filepath}: {e}')
+        except (KeyError, ValueError) as e:
             module.warn(f'Error processing {filepath}: {e}')
 
     report = {
@@ -220,7 +264,7 @@ def main():
             json.dump(report, f, indent=2)
 
     module.exit_json(
-        changed=True,
+        changed=not module.check_mode,
         hosts_processed=hosts_processed,
         total_findings=len(all_findings),
         summary=summary,
