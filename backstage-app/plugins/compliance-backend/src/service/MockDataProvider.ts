@@ -1,0 +1,332 @@
+/**
+ * Mock data provider for demo / offline mode.
+ *
+ * Returns the same data shapes the frontend already expects,
+ * so switching from mock to live is transparent.
+ */
+import type {
+  ComplianceProfile,
+  MultiHostFinding,
+  DashboardStats,
+  LaunchScanResponse,
+  LaunchRemediationResponse,
+  PostureSnapshot,
+  RemediationProfile,
+} from '@aap-compliance/common';
+
+// ─── Built-in profiles ────────────────────────────────────────────────
+
+const BUILTIN_PROFILES: ComplianceProfile[] = [
+  {
+    id: 'rhel9-stig',
+    name: 'DISA STIG for RHEL 9',
+    framework: 'DISA_STIG',
+    version: 'V2R8',
+    description:
+      'Security Technical Implementation Guide for Red Hat Enterprise Linux 9, based on DISA STIG V2R8.',
+    applicableOs: ['RHEL 9'],
+    ruleCount: 366,
+    lastUpdated: '2025-10-25',
+    source: 'ComplianceAsCode/content',
+  },
+  {
+    id: 'rhel9-cis-l1',
+    name: 'CIS Benchmark RHEL 9 — Level 1 Server',
+    framework: 'CIS',
+    version: '1.0.0',
+    description:
+      'CIS Benchmark Level 1 for RHEL 9 servers.',
+    applicableOs: ['RHEL 9'],
+    ruleCount: 189,
+    lastUpdated: '2025-06-15',
+    source: 'ComplianceAsCode/content',
+  },
+  {
+    id: 'rhel9-pci-dss',
+    name: 'PCI-DSS v4.0 for RHEL 9',
+    framework: 'PCI_DSS',
+    version: '4.0',
+    description:
+      'Payment Card Industry Data Security Standard v4.0 controls mapped to RHEL 9.',
+    applicableOs: ['RHEL 9'],
+    ruleCount: 142,
+    lastUpdated: '2025-03-20',
+    source: 'ComplianceAsCode/content',
+  },
+];
+
+// ─── Mock hosts and helper builders ───────────────────────────────────
+
+const HOSTS = [
+  'web-prod-01', 'web-prod-02', 'web-prod-03', 'web-prod-04', 'web-prod-05',
+  'web-prod-06', 'web-prod-07', 'web-prod-08', 'web-prod-09', 'web-prod-10',
+  'db-prod-01', 'db-prod-02', 'db-prod-03', 'db-prod-04',
+  'app-prod-01', 'app-prod-02', 'app-prod-03', 'app-prod-04', 'app-prod-05', 'app-prod-06',
+];
+
+type HostFinding = { host: string; status: 'pass' | 'fail' | 'error'; actualValue: string; expectedValue: string };
+
+const allPass = (expected: string): HostFinding[] =>
+  HOSTS.map(h => ({ host: h, status: 'pass' as const, actualValue: expected, expectedValue: expected }));
+
+const mostPassSomeFail = (
+  expected: string,
+  failHosts: string[],
+  failValues: Record<string, string>,
+): HostFinding[] =>
+  HOSTS.map(h => ({
+    host: h,
+    status: failHosts.includes(h) ? 'fail' as const : 'pass' as const,
+    actualValue: failHosts.includes(h) ? (failValues[h] || 'not set') : expected,
+    expectedValue: expected,
+  }));
+
+const allFail = (expected: string, actualFn: (h: string) => string): HostFinding[] =>
+  HOSTS.map(h => ({ host: h, status: 'fail' as const, actualValue: actualFn(h), expectedValue: expected }));
+
+// ─── Mock findings ────────────────────────────────────────────────────
+
+const MOCK_FINDINGS: MultiHostFinding[] = [
+  {
+    ruleId: 'sshd_set_idle_timeout', stigId: 'V-257844',
+    title: 'Set SSH Client Alive Interval',
+    description: 'RHEL 9 must terminate SSH sessions after 10 minutes of inactivity.',
+    fixText: 'Set ClientAliveInterval to 600 in /etc/ssh/sshd_config.',
+    checkText: 'Verify the SSH daemon is configured to terminate idle sessions.',
+    severity: 'CAT_I', category: 'Access Control', disruption: 'low',
+    parameters: [{ name: 'var_sshd_set_keepalive', label: 'Client Alive Interval (seconds)', description: 'SSH client alive interval', type: 'number', default: 600, value: 600 }],
+    hosts: mostPassSomeFail('600', ['db-prod-03', 'app-prod-05'], { 'db-prod-03': '300', 'app-prod-05': 'not set' }),
+    passCount: 18, failCount: 2, totalCount: 20,
+  },
+  {
+    ruleId: 'sshd_disable_root_login', stigId: 'V-257846',
+    title: 'Disable SSH Root Login',
+    description: 'RHEL 9 must prohibit direct root login via SSH.',
+    fixText: 'Set PermitRootLogin to no in /etc/ssh/sshd_config.',
+    checkText: 'Verify SSH prohibits direct root login.',
+    severity: 'CAT_I', category: 'Access Control', disruption: 'low',
+    parameters: [],
+    hosts: mostPassSomeFail('no', ['web-prod-03', 'db-prod-01', 'db-prod-02', 'db-prod-03', 'db-prod-04'], {
+      'web-prod-03': 'yes', 'db-prod-01': 'yes', 'db-prod-02': 'yes', 'db-prod-03': 'yes', 'db-prod-04': 'yes',
+    }),
+    passCount: 15, failCount: 5, totalCount: 20,
+  },
+  {
+    ruleId: 'enable_fips_mode', stigId: 'V-257777',
+    title: 'Enable FIPS 140-3 Mode',
+    description: 'RHEL 9 must implement NIST FIPS-validated cryptography.',
+    fixText: 'Enable FIPS mode: fips-mode-setup --enable',
+    checkText: 'Verify the system is in FIPS mode.',
+    severity: 'CAT_I', category: 'System and Communications Protection', disruption: 'high',
+    parameters: [],
+    hosts: allFail('FIPS', () => 'DEFAULT'),
+    passCount: 0, failCount: 20, totalCount: 20,
+  },
+  {
+    ruleId: 'accounts_tmout', stigId: 'V-257893',
+    title: 'Set Account Session Timeout',
+    description: 'RHEL 9 must terminate user sessions after 15 minutes of inactivity.',
+    fixText: 'Configure TMOUT in /etc/profile.d/ to 900 seconds.',
+    checkText: 'Verify TMOUT is set.',
+    severity: 'CAT_II', category: 'Access Control', disruption: 'low',
+    parameters: [{ name: 'var_accounts_tmout', label: 'Timeout (seconds)', description: 'Session inactivity timeout', type: 'number', default: 900, value: 900 }],
+    hosts: mostPassSomeFail('900', ['web-prod-09', 'app-prod-06'], { 'web-prod-09': '1800', 'app-prod-06': 'not set' }),
+    passCount: 18, failCount: 2, totalCount: 20,
+  },
+  {
+    ruleId: 'package_aide_installed', stigId: 'V-257780',
+    title: 'Install AIDE',
+    description: 'RHEL 9 must install AIDE for file integrity monitoring.',
+    fixText: 'Install AIDE: dnf install aide',
+    checkText: 'Verify AIDE is installed.',
+    severity: 'CAT_II', category: 'System and Information Integrity', disruption: 'low',
+    parameters: [],
+    hosts: mostPassSomeFail('installed', [
+      'web-prod-04', 'web-prod-05', 'web-prod-06', 'db-prod-03', 'db-prod-04', 'app-prod-01', 'app-prod-02',
+    ], Object.fromEntries(['web-prod-04', 'web-prod-05', 'web-prod-06', 'db-prod-03', 'db-prod-04', 'app-prod-01', 'app-prod-02'].map(h => [h, 'not installed']))),
+    passCount: 13, failCount: 7, totalCount: 20,
+  },
+  {
+    ruleId: 'service_auditd_enabled', stigId: 'V-257783',
+    title: 'Enable auditd Service',
+    description: 'RHEL 9 audit daemon must be enabled and running.',
+    fixText: 'Enable auditd: systemctl enable --now auditd',
+    checkText: 'Verify auditd is enabled and running.',
+    severity: 'CAT_II', category: 'Audit and Accountability', disruption: 'low',
+    parameters: [],
+    hosts: allPass('enabled'),
+    passCount: 20, failCount: 0, totalCount: 20,
+  },
+  {
+    ruleId: 'grub2_password', stigId: 'V-257785',
+    title: 'Set GRUB2 Boot Loader Password',
+    description: 'RHEL 9 must require a boot loader password.',
+    fixText: 'Set GRUB2 password using grub2-setpassword.',
+    checkText: 'Verify GRUB2 is password-protected.',
+    severity: 'CAT_I', category: 'Configuration Management', disruption: 'medium',
+    parameters: [],
+    hosts: mostPassSomeFail('set', ['web-prod-01', 'app-prod-03'], { 'web-prod-01': 'not set', 'app-prod-03': 'not set' }),
+    passCount: 18, failCount: 2, totalCount: 20,
+  },
+  {
+    ruleId: 'selinux_enforcing', stigId: 'V-257786',
+    title: 'SELinux Must Be Enforcing',
+    description: 'RHEL 9 must have SELinux in enforcing mode.',
+    fixText: 'Set SELinux to enforcing and reboot.',
+    checkText: 'Verify SELinux is enforcing.',
+    severity: 'CAT_I', category: 'Access Control', disruption: 'high',
+    parameters: [],
+    hosts: allPass('Enforcing'),
+    passCount: 20, failCount: 0, totalCount: 20,
+  },
+  {
+    ruleId: 'configure_crypto_policy', stigId: 'V-257778',
+    title: 'Configure System Cryptography Policy',
+    description: 'System cryptography policy must satisfy security requirements.',
+    fixText: 'Run update-crypto-policies --set FIPS.',
+    checkText: 'Verify system-wide crypto policy.',
+    severity: 'CAT_II', category: 'System and Communications Protection', disruption: 'medium',
+    parameters: [{ name: 'var_system_crypto_policy', label: 'Crypto Policy', description: 'System-wide cryptographic policy', type: 'select', default: 'FIPS', value: 'FIPS', options: [{ label: 'DEFAULT', value: 'DEFAULT' }, { label: 'FIPS', value: 'FIPS' }, { label: 'FIPS:OSPP', value: 'FIPS:OSPP' }] }],
+    hosts: allFail('FIPS', () => 'DEFAULT'),
+    passCount: 0, failCount: 20, totalCount: 20,
+  },
+  {
+    ruleId: 'passwd_permissions', stigId: 'V-257820',
+    title: 'Verify /etc/passwd Permissions',
+    description: '/etc/passwd must have permissions 0644 or more restrictive.',
+    fixText: 'Set permissions: chmod 0644 /etc/passwd',
+    checkText: 'Verify /etc/passwd permissions.',
+    severity: 'CAT_II', category: 'Configuration Management', disruption: 'low',
+    parameters: [],
+    hosts: mostPassSomeFail('0644', ['app-prod-04'], { 'app-prod-04': '0666' }),
+    passCount: 19, failCount: 1, totalCount: 20,
+  },
+  {
+    ruleId: 'package_telnet_not_installed', stigId: 'V-257835',
+    title: 'Remove telnet Package',
+    description: 'telnet must not be installed.',
+    fixText: 'Remove telnet: dnf remove telnet',
+    checkText: 'Verify telnet is not installed.',
+    severity: 'CAT_I', category: 'Configuration Management', disruption: 'low',
+    parameters: [],
+    hosts: mostPassSomeFail('not installed', ['db-prod-02'], { 'db-prod-02': 'installed' }),
+    passCount: 19, failCount: 1, totalCount: 20,
+  },
+  {
+    ruleId: 'banner_etc_issue', stigId: 'V-257795',
+    title: 'Configure Login Banner',
+    description: 'RHEL 9 must display the DoD consent banner before login.',
+    fixText: 'Configure the consent banner in /etc/issue.',
+    checkText: 'Verify login banner contains required text.',
+    severity: 'CAT_II', category: 'Access Control', disruption: 'low',
+    parameters: [{ name: 'login_banner_text', label: 'Banner Text', description: 'Text to display', type: 'string', default: 'You are accessing a U.S. Government Information System...', value: 'You are accessing a U.S. Government Information System...' }],
+    hosts: allFail('DoD banner configured', () => 'no banner'),
+    passCount: 0, failCount: 20, totalCount: 20,
+  },
+];
+
+// ─── Mock inventories ─────────────────────────────────────────────────
+
+const MOCK_INVENTORIES = [
+  { id: 1, name: 'production-web-servers', total_hosts: 24 },
+  { id: 2, name: 'staging-db-servers', total_hosts: 6 },
+  { id: 3, name: 'dev-servers', total_hosts: 8 },
+  { id: 4, name: 'all-rhel9-hosts', total_hosts: 38 },
+];
+
+// ─── Mock workflow templates ──────────────────────────────────────────
+
+const MOCK_WORKFLOW_TEMPLATES = [
+  { id: 101, name: 'compliance-scan-stig', description: 'STIG compliance scan workflow' },
+  { id: 102, name: 'compliance-scan-cis', description: 'CIS benchmark scan workflow' },
+  { id: 103, name: 'compliance-remediate', description: 'Remediation workflow' },
+];
+
+// ─── Mock remediation profiles ────────────────────────────────────────
+
+let mockRemediationProfiles: RemediationProfile[] = [];
+
+// ─── Provider class ───────────────────────────────────────────────────
+
+export class MockDataProvider {
+  private static jobCounter = 100;
+
+  static getProfiles(): ComplianceProfile[] {
+    return BUILTIN_PROFILES;
+  }
+
+  static getFindings(): MultiHostFinding[] {
+    return MOCK_FINDINGS;
+  }
+
+  static getInventories(): Array<{ id: number; name: string; total_hosts: number }> {
+    return MOCK_INVENTORIES;
+  }
+
+  static getWorkflowTemplates(
+    nameFilter?: string,
+  ): Array<{ id: number; name: string; description: string }> {
+    if (!nameFilter) return MOCK_WORKFLOW_TEMPLATES;
+    return MOCK_WORKFLOW_TEMPLATES.filter(t =>
+      t.name.startsWith(nameFilter),
+    );
+  }
+
+  static launchScan(profileId: string): LaunchScanResponse {
+    MockDataProvider.jobCounter += 1;
+    return {
+      scanId: `mock-scan-${MockDataProvider.jobCounter}`,
+      workflowJobId: MockDataProvider.jobCounter,
+      status: 'pending',
+    };
+  }
+
+  static launchRemediation(): LaunchRemediationResponse {
+    MockDataProvider.jobCounter += 1;
+    return {
+      remediationId: `mock-remediation-${MockDataProvider.jobCounter}`,
+      workflowJobId: MockDataProvider.jobCounter,
+      status: 'pending',
+    };
+  }
+
+  static getDashboardStats(): DashboardStats {
+    return {
+      hostsScanned: 12,
+      criticalFindings: 8,
+      pendingRemediation: 15,
+      activeProfiles: 3,
+      recentScans: [
+        { id: '1', profileName: 'RHEL 9 STIG V2R8', inventoryName: 'production-web-servers', passRate: 78, timestamp: '2 hours ago', status: 'completed' },
+        { id: '2', profileName: 'CIS RHEL 9 L1', inventoryName: 'staging-db-servers', passRate: 85, timestamp: '1 day ago', status: 'completed' },
+        { id: '3', profileName: 'RHEL 9 STIG V2R8', inventoryName: 'dev-servers', passRate: 62, timestamp: '3 days ago', status: 'completed' },
+      ],
+      frameworkScores: [
+        { name: 'DISA STIG V2R8', target: 'RHEL 9', rules: 366, rate: 78, lastScan: '2 hours ago' },
+        { name: 'CIS Benchmark L1', target: 'RHEL 9', rules: 189, rate: 85, lastScan: '1 day ago' },
+        { name: 'PCI-DSS v4.0', target: 'RHEL 9', rules: 142, rate: 62, lastScan: '3 days ago' },
+      ],
+    };
+  }
+
+  static getPostureHistory(_profileId?: string, _days?: number): PostureSnapshot[] {
+    const now = Date.now();
+    const day = 86_400_000;
+    return [
+      { id: '1', profileId: 'rhel9-stig', timestamp: new Date(now - 30 * day).toISOString(), totalHosts: 20, totalRules: 366, passCount: 250, failCount: 116, compliancePct: 68 },
+      { id: '2', profileId: 'rhel9-stig', timestamp: new Date(now - 20 * day).toISOString(), totalHosts: 20, totalRules: 366, passCount: 265, failCount: 101, compliancePct: 72 },
+      { id: '3', profileId: 'rhel9-stig', timestamp: new Date(now - 10 * day).toISOString(), totalHosts: 20, totalRules: 366, passCount: 274, failCount: 92, compliancePct: 75 },
+      { id: '4', profileId: 'rhel9-stig', timestamp: new Date(now - 2 * day).toISOString(), totalHosts: 20, totalRules: 366, passCount: 285, failCount: 81, compliancePct: 78 },
+    ];
+  }
+
+  static getRemediationProfiles(): RemediationProfile[] {
+    return mockRemediationProfiles;
+  }
+
+  static saveRemediationProfile(profile: RemediationProfile): RemediationProfile {
+    const saved = { ...profile, id: `mock-rp-${Date.now()}` };
+    mockRemediationProfiles = [...mockRemediationProfiles, saved];
+    return saved;
+  }
+}

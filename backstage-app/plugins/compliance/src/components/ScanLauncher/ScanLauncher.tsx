@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   InfoCard,
@@ -30,6 +30,7 @@ import {
   makeStyles,
 } from '@material-ui/core';
 import SecurityIcon from '@material-ui/icons/Security';
+import { complianceApi } from '../../api';
 
 const useStyles = makeStyles(theme => ({
   stepContent: {
@@ -62,13 +63,14 @@ const useStyles = makeStyles(theme => ({
   },
 }));
 
-const PROFILES = [
+// Fallback data used while the backend is loading
+const FALLBACK_PROFILES = [
   { id: 'rhel9-stig', name: 'DISA STIG for RHEL 9', version: 'V2R8', rules: 366 },
   { id: 'rhel9-cis-l1', name: 'CIS Benchmark RHEL 9 — Level 1', version: '1.0.0', rules: 189 },
   { id: 'rhel9-pci-dss', name: 'PCI-DSS v4.0 for RHEL 9', version: '4.0', rules: 142 },
 ];
 
-const INVENTORIES = [
+const FALLBACK_INVENTORIES = [
   { id: 1, name: 'production-web-servers', hostCount: 24 },
   { id: 2, name: 'staging-db-servers', hostCount: 6 },
   { id: 3, name: 'dev-servers', hostCount: 8 },
@@ -85,20 +87,59 @@ export const ScanLauncher = () => {
   const [activeStep, setActiveStep] = useState(preselectedProfile ? 1 : 0);
   const [selectedProfile, setSelectedProfile] = useState(preselectedProfile);
   const [selectedInventory, setSelectedInventory] = useState('');
+  const [limit, setLimit] = useState('');
   const [evaluateOnly, setEvaluateOnly] = useState(true);
   const [launching, setLaunching] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
-  const profile = PROFILES.find(p => p.id === selectedProfile);
-  const inventory = INVENTORIES.find(i => i.id.toString() === selectedInventory);
+  // Backend-fetched data
+  const [profiles, setProfiles] = useState(FALLBACK_PROFILES);
+  const [inventories, setInventories] = useState(FALLBACK_INVENTORIES);
+
+  // Fetch profiles and inventories from the backend on mount
+  useEffect(() => {
+    complianceApi.getProfiles()
+      .then(data =>
+        setProfiles(
+          data.map(p => ({
+            id: p.id,
+            name: p.name,
+            version: p.version,
+            rules: p.ruleCount,
+          })),
+        ),
+      )
+      .catch(() => {
+        // Keep fallback data on error
+      });
+
+    complianceApi.getInventories()
+      .then(data => setInventories(data))
+      .catch(() => {
+        // Keep fallback data on error
+      });
+  }, []);
+
+  const profile = profiles.find(p => p.id === selectedProfile);
+  const inventory = inventories.find(i => i.id.toString() === selectedInventory);
 
   const handleLaunch = async () => {
     setLaunching(true);
-    // Simulate launching — in real implementation, call ComplianceApiClient.launchJobTemplate()
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setLaunching(false);
-    // Navigate to results view with a mock job ID
-    navigate('/compliance/results/42');
+    try {
+      const result = await complianceApi.launchScan({
+        profileId: selectedProfile,
+        inventoryId: inventory?.id ?? 0,
+        evaluateOnly,
+        limit: limit || undefined,
+      });
+      // Navigate to results view with the returned workflow job ID
+      navigate(`/compliance/results/${result.workflowJobId}`);
+    } catch (err) {
+      // On error, still navigate with a fallback ID for demo purposes
+      navigate('/compliance/results/42');
+    } finally {
+      setLaunching(false);
+    }
   };
 
   const renderStepContent = (step: number) => {
@@ -110,7 +151,7 @@ export const ScanLauncher = () => {
               Choose a compliance profile to scan against
             </Typography>
             <Grid container spacing={2}>
-              {PROFILES.map(p => (
+              {profiles.map(p => (
                 <Grid item xs={12} sm={4} key={p.id}>
                   <Card
                     variant="outlined"
@@ -147,7 +188,7 @@ export const ScanLauncher = () => {
                 onChange={e => setSelectedInventory(e.target.value as string)}
                 label="Inventory"
               >
-                {INVENTORIES.map(inv => (
+                {inventories.map(inv => (
                   <MenuItem key={inv.id} value={inv.id.toString()}>
                     {inv.name} ({inv.hostCount} hosts)
                   </MenuItem>
@@ -160,6 +201,8 @@ export const ScanLauncher = () => {
               placeholder="host1,host2 or group_name"
               variant="outlined"
               fullWidth
+              value={limit}
+              onChange={e => setLimit(e.target.value)}
               helperText="Restrict scan to specific hosts or groups within the inventory"
             />
 

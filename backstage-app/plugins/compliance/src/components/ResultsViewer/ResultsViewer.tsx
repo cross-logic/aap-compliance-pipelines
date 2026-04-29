@@ -1,11 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   InfoCard,
   Breadcrumbs,
-  StatusOK,
-  StatusError,
-  StatusWarning,
+  Progress,
 } from '@backstage/core-components';
 import {
   Typography,
@@ -36,6 +34,7 @@ import BuildIcon from '@material-ui/icons/Build';
 import CheckCircleIcon from '@material-ui/icons/CheckCircle';
 import ErrorIcon from '@material-ui/icons/Error';
 import type { FindingSeverity } from '@aap-compliance/common';
+import { complianceApi } from '../../api';
 import { MOCK_MULTI_HOST_FINDINGS, type MultiHostFinding } from './mockFindings';
 
 const useStyles = makeStyles(theme => ({
@@ -137,7 +136,29 @@ export const ResultsViewer = () => {
 
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
 
-  const findings = MOCK_MULTI_HOST_FINDINGS;
+  // Fetch findings from the backend — falls back to mock on error
+  const [findings, setFindings] = useState<MultiHostFinding[]>(MOCK_MULTI_HOST_FINDINGS);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    complianceApi.getFindings(jobId)
+      .then(data => {
+        if (!cancelled && data.length > 0) {
+          setFindings(data as MultiHostFinding[]);
+        }
+      })
+      .catch(() => {
+        // Keep mock data on error
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [jobId]);
+
   const totalHosts = findings[0]?.totalCount || 0;
   const rulesWithFailures = findings.filter(f => f.failCount > 0).length;
   const totalRules = findings.length;
@@ -182,6 +203,17 @@ export const ResultsViewer = () => {
       default: return '';
     }
   };
+
+  if (loading) {
+    return (
+      <Box p={4}>
+        <Progress />
+        <Typography variant="body2" align="center" style={{ marginTop: 16 }}>
+          Loading scan results...
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <>

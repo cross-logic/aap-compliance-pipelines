@@ -6,6 +6,7 @@
     "role": "backend"
   },
   "dependencies": {
+    "@aap-compliance/plugin-compliance-backend": "workspace:^",
     "@backstage/backend-defaults": "^0.14.2",
     "@backstage/backend-plugin-api": "^1.9.0"
   },

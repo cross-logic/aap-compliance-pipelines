@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   InfoCard,
@@ -20,6 +20,8 @@ import PlayCircleFilledIcon from '@material-ui/icons/PlayCircleFilled';
 import SecurityIcon from '@material-ui/icons/Security';
 import HistoryIcon from '@material-ui/icons/History';
 import { ComplianceGauge } from './ComplianceGauge';
+import { complianceApi } from '../../api';
+import type { DashboardStats } from '@aap-compliance/common';
 
 const useStyles = makeStyles(theme => ({
   section: {
@@ -93,21 +95,44 @@ const useStyles = makeStyles(theme => ({
   },
 }));
 
-const MOCK_SCANS = [
-  { id: 1, profile: 'RHEL 9 STIG V2R8', hosts: 'production-web-servers', passRate: 78, timestamp: '2 hours ago' },
-  { id: 2, profile: 'CIS RHEL 9 L1', hosts: 'staging-db-servers', passRate: 85, timestamp: '1 day ago' },
-  { id: 3, profile: 'RHEL 9 STIG V2R8', hosts: 'dev-servers', passRate: 62, timestamp: '3 days ago' },
-];
-
-const FRAMEWORKS = [
-  { name: 'DISA STIG V2R8', target: 'RHEL 9', rules: 366, rate: 78, lastScan: '2 hours ago' },
-  { name: 'CIS Benchmark L1', target: 'RHEL 9', rules: 189, rate: 85, lastScan: '1 day ago' },
-  { name: 'PCI-DSS v4.0', target: 'RHEL 9', rules: 142, rate: 62, lastScan: '3 days ago' },
-];
+// Fallback stats used while the backend is loading
+const FALLBACK_STATS: DashboardStats = {
+  hostsScanned: 12,
+  criticalFindings: 8,
+  pendingRemediation: 15,
+  activeProfiles: 3,
+  recentScans: [
+    { id: '1', profileName: 'RHEL 9 STIG V2R8', inventoryName: 'production-web-servers', passRate: 78, timestamp: '2 hours ago', status: 'completed' },
+    { id: '2', profileName: 'CIS RHEL 9 L1', inventoryName: 'staging-db-servers', passRate: 85, timestamp: '1 day ago', status: 'completed' },
+    { id: '3', profileName: 'RHEL 9 STIG V2R8', inventoryName: 'dev-servers', passRate: 62, timestamp: '3 days ago', status: 'completed' },
+  ],
+  frameworkScores: [
+    { name: 'DISA STIG V2R8', target: 'RHEL 9', rules: 366, rate: 78, lastScan: '2 hours ago' },
+    { name: 'CIS Benchmark L1', target: 'RHEL 9', rules: 189, rate: 85, lastScan: '1 day ago' },
+    { name: 'PCI-DSS v4.0', target: 'RHEL 9', rules: 142, rate: 62, lastScan: '3 days ago' },
+  ],
+};
 
 export const ComplianceDashboard = () => {
   const classes = useStyles();
   const navigate = useNavigate();
+  const [stats, setStats] = useState<DashboardStats>(FALLBACK_STATS);
+
+  useEffect(() => {
+    complianceApi.getDashboardStats()
+      .then(data => setStats(data))
+      .catch(() => {
+        // Keep fallback stats on error
+      });
+  }, []);
+
+  // Compute an overall gauge from framework scores
+  const overallRate = stats.frameworkScores.length > 0
+    ? Math.round(
+        stats.frameworkScores.reduce((sum, fw) => sum + fw.rate, 0) /
+          stats.frameworkScores.length,
+      )
+    : 0;
 
   return (
     <div>
@@ -116,17 +141,13 @@ export const ComplianceDashboard = () => {
         <InfoCard title="Compliance Posture">
           <div className={classes.row} style={{ justifyContent: 'center' }}>
             <div className={classes.gaugeItem}>
-              <ComplianceGauge value={72} label="Overall" />
+              <ComplianceGauge value={overallRate} label="Overall" />
             </div>
-            <div className={classes.gaugeItem}>
-              <ComplianceGauge value={78} label="DISA STIG" />
-            </div>
-            <div className={classes.gaugeItem}>
-              <ComplianceGauge value={85} label="CIS L1" />
-            </div>
-            <div className={classes.gaugeItem}>
-              <ComplianceGauge value={62} label="PCI-DSS" />
-            </div>
+            {stats.frameworkScores.map(fw => (
+              <div className={classes.gaugeItem} key={fw.name}>
+                <ComplianceGauge value={fw.rate} label={fw.name.split(' ')[0] + ' ' + (fw.name.split(' ')[1] || '')} />
+              </div>
+            ))}
           </div>
         </InfoCard>
       </div>
@@ -137,7 +158,7 @@ export const ComplianceDashboard = () => {
           <div className={classes.statItem}>
             <InfoCard>
               <div className={classes.statCard}>
-                <Typography className={classes.statValue}>12</Typography>
+                <Typography className={classes.statValue}>{stats.hostsScanned}</Typography>
                 <Typography className={classes.statLabel}>Hosts Scanned</Typography>
               </div>
             </InfoCard>
@@ -145,7 +166,7 @@ export const ComplianceDashboard = () => {
           <div className={classes.statItem}>
             <InfoCard>
               <div className={classes.statCard}>
-                <Typography className={`${classes.statValue} ${classes.critical}`}>8</Typography>
+                <Typography className={`${classes.statValue} ${classes.critical}`}>{stats.criticalFindings}</Typography>
                 <Typography className={classes.statLabel}>Critical (CAT I)</Typography>
               </div>
             </InfoCard>
@@ -153,7 +174,7 @@ export const ComplianceDashboard = () => {
           <div className={classes.statItem}>
             <InfoCard>
               <div className={classes.statCard}>
-                <Typography className={`${classes.statValue} ${classes.warning}`}>15</Typography>
+                <Typography className={`${classes.statValue} ${classes.warning}`}>{stats.pendingRemediation}</Typography>
                 <Typography className={classes.statLabel}>Pending Remediation</Typography>
               </div>
             </InfoCard>
@@ -161,7 +182,7 @@ export const ComplianceDashboard = () => {
           <div className={classes.statItem}>
             <InfoCard>
               <div className={classes.statCard}>
-                <Typography className={`${classes.statValue} ${classes.success}`}>3</Typography>
+                <Typography className={`${classes.statValue} ${classes.success}`}>{stats.activeProfiles}</Typography>
                 <Typography className={classes.statLabel}>Active Profiles</Typography>
               </div>
             </InfoCard>
@@ -216,12 +237,12 @@ export const ComplianceDashboard = () => {
                 />
               }
             >
-              {MOCK_SCANS.map(scan => (
+              {stats.recentScans.map(scan => (
                 <div key={scan.id} className={classes.scanRow}>
                   <div>
-                    <Typography variant="subtitle2">{scan.profile}</Typography>
+                    <Typography variant="subtitle2">{scan.profileName}</Typography>
                     <Typography variant="body2" color="textSecondary">
-                      {scan.hosts} &middot; {scan.timestamp}
+                      {scan.inventoryName} &middot; {scan.timestamp}
                     </Typography>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -245,7 +266,7 @@ export const ComplianceDashboard = () => {
       <div className={classes.section}>
         <InfoCard title="Active Compliance Frameworks">
           <div className={classes.row}>
-            {FRAMEWORKS.map(fw => (
+            {stats.frameworkScores.map(fw => (
               <div className={classes.frameworkItem} key={fw.name}>
                 <Card variant="outlined" className={classes.frameworkCard}>
                   <CardContent>

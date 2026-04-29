@@ -15,14 +15,20 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@aap-compliance/plugin-compliance-backend@workspace:plugins/compliance-backend":
+"@aap-compliance/plugin-compliance-backend@workspace:^, @aap-compliance/plugin-compliance-backend@workspace:plugins/compliance-backend":
   version: 0.0.0-use.local
   resolution: "@aap-compliance/plugin-compliance-backend@workspace:plugins/compliance-backend"
   dependencies:
     "@aap-compliance/common": "workspace:^"
     "@backstage/backend-plugin-api": "npm:^1.9.0"
     "@backstage/cli": "npm:^0.34.6"
+    "@backstage/config": "npm:^1.3.1"
+    "@types/express": "npm:^4.17.6"
+    express: "npm:^4.17.1"
+    express-promise-router: "npm:^4.1.0"
+    knex: "npm:^3.1.0"
     typescript: "npm:~5.8.0"
+    undici: "npm:^7.0.0"
   languageName: unknown
   linkType: soft
 
@@ -1886,7 +1892,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@backstage/config@npm:^1.3.6, @backstage/config@npm:^1.3.7":
+"@backstage/config@npm:^1.3.1, @backstage/config@npm:^1.3.6, @backstage/config@npm:^1.3.7":
   version: 1.3.7
   resolution: "@backstage/config@npm:1.3.7"
   dependencies:
@@ -7472,6 +7478,7 @@ __metadata:
     "@spotify/prettier-config": "npm:^12.0.0"
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^22.13.4"
+    dotenv-cli: "npm:^8.0.0"
     eslint-plugin-jest: "npm:^29.0.1"
     husky: "npm:8.0.3"
     lint-staged: "npm:15.2.10"
@@ -8200,6 +8207,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "backend@workspace:packages/backend"
   dependencies:
+    "@aap-compliance/plugin-compliance-backend": "workspace:^"
     "@backstage/backend-defaults": "npm:^0.14.2"
     "@backstage/backend-plugin-api": "npm:^1.9.0"
     "@backstage/cli": "npm:^0.34.6"
@@ -10435,6 +10443,34 @@ __metadata:
     no-case: "npm:^3.0.4"
     tslib: "npm:^2.0.3"
   checksum: 10c0/5b859ea65097a7ea870e2c91b5768b72ddf7fa947223fd29e167bcdff58fe731d941c48e47a38ec8aa8e43044c8fbd15cd8fa21689a526bc34b6548197cd5b05
+  languageName: node
+  linkType: hard
+
+"dotenv-cli@npm:^8.0.0":
+  version: 8.0.0
+  resolution: "dotenv-cli@npm:8.0.0"
+  dependencies:
+    cross-spawn: "npm:^7.0.6"
+    dotenv: "npm:^16.3.0"
+    dotenv-expand: "npm:^10.0.0"
+    minimist: "npm:^1.2.6"
+  bin:
+    dotenv: cli.js
+  checksum: 10c0/000469632758b7b44aaaa80cbbbd7f0c94dc170ec02e51aa8d8280341a0108fb7407954c23054257b77235b064033efdb8745836633eb6fd1586924953cf0528
+  languageName: node
+  linkType: hard
+
+"dotenv-expand@npm:^10.0.0":
+  version: 10.0.0
+  resolution: "dotenv-expand@npm:10.0.0"
+  checksum: 10c0/298f5018e29cfdcb0b5f463ba8e8627749103fbcf6cf81c561119115754ed582deee37b49dfc7253028aaba875ab7aea5fa90e5dac88e511d009ab0e6677924e
+  languageName: node
+  linkType: hard
+
+"dotenv@npm:^16.3.0":
+  version: 16.6.1
+  resolution: "dotenv@npm:16.6.1"
+  checksum: 10c0/15ce56608326ea0d1d9414a5c8ee6dcf0fffc79d2c16422b4ac2268e7e2d76ff5a572d37ffe747c377de12005f14b3cc22361e79fc7f1061cce81f77d2c973dc
   languageName: node
   linkType: hard
 
@@ -14891,7 +14927,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"knex@npm:^3.0.0":
+"knex@npm:^3.0.0, knex@npm:^3.1.0":
   version: 3.2.9
   resolution: "knex@npm:3.2.9"
   dependencies:

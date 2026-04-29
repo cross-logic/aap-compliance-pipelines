@@ -58,6 +58,7 @@ const RAW_RUNTIME_STATE =
           ["@types/jest", "npm:30.0.0"],\
           ["@types/node", "npm:22.19.17"],\
           ["aap-compliance-pipelines", "workspace:."],\
+          ["dotenv-cli", "npm:8.0.0"],\
           ["eslint-plugin-jest", "virtual:b019ec53d9cc8af673454b2ca4bbcc92da142ac3dd3d2b8f9965140b4f98a5b7b4f69d493b10d89e5aba2b4a41a30b52c73d6f39d7b48428a2c7b8c82ec1160d#npm:29.15.2"],\
           ["husky", "npm:8.0.3"],\
           ["lint-staged", "npm:15.2.10"],\
@@ -118,7 +119,13 @@ const RAW_RUNTIME_STATE =
           ["@aap-compliance/plugin-compliance-backend", "workspace:plugins/compliance-backend"],\
           ["@backstage/backend-plugin-api", "npm:1.9.0"],\
           ["@backstage/cli", "virtual:b019ec53d9cc8af673454b2ca4bbcc92da142ac3dd3d2b8f9965140b4f98a5b7b4f69d493b10d89e5aba2b4a41a30b52c73d6f39d7b48428a2c7b8c82ec1160d#npm:0.34.6"],\
-          ["typescript", "patch:typescript@npm%3A5.8.3#optional!builtin<compat/typescript>::version=5.8.3&hash=5786d5"]\
+          ["@backstage/config", "npm:1.3.7"],\
+          ["@types/express", "npm:4.17.25"],\
+          ["express", "npm:4.22.1"],\
+          ["express-promise-router", "virtual:99d0e4abb0e4683b4c159f7435a3ec7bfbd152fc9f7b4be002a7211e6d2a9f4837c00ac7d82a2e6ac2b73d18892e2e09ffdcbda93857acee5a3396d9b56e6d41#npm:4.1.1"],\
+          ["knex", "virtual:181199be296dbdbada55876eb074910f32ea25bf93b3bf0a75c118a6caf63b5a0fa8dc09388050044b67f44aafdbc7b587de9946d4622e73e9da619405f48d9c#npm:3.2.9"],\
+          ["typescript", "patch:typescript@npm%3A5.8.3#optional!builtin<compat/typescript>::version=5.8.3&hash=5786d5"],\
+          ["undici", "npm:7.25.0"]\
         ],\
         "linkType": "SOFT"\
       }]\
@@ -10298,6 +10305,7 @@ const RAW_RUNTIME_STATE =
           ["@types/jest", "npm:30.0.0"],\
           ["@types/node", "npm:22.19.17"],\
           ["aap-compliance-pipelines", "workspace:."],\
+          ["dotenv-cli", "npm:8.0.0"],\
           ["eslint-plugin-jest", "virtual:b019ec53d9cc8af673454b2ca4bbcc92da142ac3dd3d2b8f9965140b4f98a5b7b4f69d493b10d89e5aba2b4a41a30b52c73d6f39d7b48428a2c7b8c82ec1160d#npm:29.15.2"],\
           ["husky", "npm:8.0.3"],\
           ["lint-staged", "npm:15.2.10"],\
@@ -11226,6 +11234,7 @@ const RAW_RUNTIME_STATE =
       ["workspace:packages/backend", {\
         "packageLocation": "./packages/backend/",\
         "packageDependencies": [\
+          ["@aap-compliance/plugin-compliance-backend", "workspace:plugins/compliance-backend"],\
           ["@backstage/backend-defaults", "virtual:aa59773ac87791c4813d53447077fcf8a847d6de5a301d34dc31286584b1dbb26d30d3adb5b4c41c1e8aea04371e926fda05c09c6253647c432e11d872a304ba#npm:0.14.2"],\
           ["@backstage/backend-plugin-api", "npm:1.9.0"],\
           ["@backstage/cli", "virtual:b019ec53d9cc8af673454b2ca4bbcc92da142ac3dd3d2b8f9965140b4f98a5b7b4f69d493b10d89e5aba2b4a41a30b52c73d6f39d7b48428a2c7b8c82ec1160d#npm:0.34.6"],\
@@ -13894,6 +13903,37 @@ const RAW_RUNTIME_STATE =
           ["dot-case", "npm:3.0.4"],\
           ["no-case", "npm:3.0.4"],\
           ["tslib", "npm:2.8.1"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["dotenv", [\
+      ["npm:16.6.1", {\
+        "packageLocation": "../../../../.yarn/berry/cache/dotenv-npm-16.6.1-01334288ea-10c0.zip/node_modules/dotenv/",\
+        "packageDependencies": [\
+          ["dotenv", "npm:16.6.1"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["dotenv-cli", [\
+      ["npm:8.0.0", {\
+        "packageLocation": "../../../../.yarn/berry/cache/dotenv-cli-npm-8.0.0-96370dc09b-10c0.zip/node_modules/dotenv-cli/",\
+        "packageDependencies": [\
+          ["cross-spawn", "npm:7.0.6"],\
+          ["dotenv", "npm:16.6.1"],\
+          ["dotenv-cli", "npm:8.0.0"],\
+          ["dotenv-expand", "npm:10.0.0"],\
+          ["minimist", "npm:1.2.8"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["dotenv-expand", [\
+      ["npm:10.0.0", {\
+        "packageLocation": "../../../../.yarn/berry/cache/dotenv-expand-npm-10.0.0-fa5b032ad9-10c0.zip/node_modules/dotenv-expand/",\
+        "packageDependencies": [\
+          ["dotenv-expand", "npm:10.0.0"]\
         ],\
         "linkType": "HARD"\
       }]\

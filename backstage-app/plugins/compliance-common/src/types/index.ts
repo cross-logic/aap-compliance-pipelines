@@ -13,3 +13,20 @@ export type {
   RemediationSelection,
   RemediationProfile,
 } from './profiles';
+
+export type {
+  LaunchScanRequest,
+  LaunchScanResponse,
+  LaunchRemediationRequest,
+  LaunchRemediationResponse,
+  PostureSnapshot,
+  ComplianceScan,
+  StoredFinding,
+  MultiHostFinding,
+  WorkflowJobStatus,
+  WorkflowNode,
+  JobEvent,
+  SaveRemediationProfileRequest,
+  RecentScan,
+  DashboardStats,
+} from './api';

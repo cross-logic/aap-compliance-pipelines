@@ -1,0 +1,246 @@
+/**
+ * Knex-based data access layer for compliance plugin persistence.
+ */
+import { Knex } from 'knex';
+import { randomUUID } from 'crypto';
+
+import type {
+  ComplianceScan,
+  StoredFinding,
+  PostureSnapshot,
+  RemediationProfile,
+  RemediationSelection,
+} from '@aap-compliance/common';
+
+export class ComplianceDatabase {
+  constructor(private readonly db: Knex) {}
+
+  // ─── Scans ──────────────────────────────────────────────────────────
+
+  async createScan(scan: Omit<ComplianceScan, 'id'>): Promise<ComplianceScan> {
+    const id = randomUUID();
+    const row = { id, ...scan };
+    await this.db('compliance_scans').insert({
+      id: row.id,
+      profile_id: row.profileId,
+      inventory_id: row.inventoryId,
+      scanner: row.scanner,
+      workflow_job_id: row.workflowJobId,
+      status: row.status,
+      started_at: row.startedAt,
+      completed_at: row.completedAt,
+    });
+    return { ...row, id };
+  }
+
+  async updateScanStatus(
+    scanId: string,
+    status: string,
+    completedAt?: string,
+  ): Promise<void> {
+    const update: Record<string, unknown> = { status };
+    if (completedAt) {
+      update.completed_at = completedAt;
+    }
+    await this.db('compliance_scans').where('id', scanId).update(update);
+  }
+
+  async getRecentScans(limit: number = 10): Promise<ComplianceScan[]> {
+    const rows = await this.db('compliance_scans')
+      .orderBy('started_at', 'desc')
+      .limit(limit);
+    return rows.map(this.mapScanRow);
+  }
+
+  private mapScanRow(row: Record<string, unknown>): ComplianceScan {
+    return {
+      id: row.id as string,
+      profileId: row.profile_id as string,
+      inventoryId: row.inventory_id as number,
+      scanner: row.scanner as string,
+      workflowJobId: row.workflow_job_id as number | null,
+      status: row.status as ComplianceScan['status'],
+      startedAt: String(row.started_at),
+      completedAt: row.completed_at ? String(row.completed_at) : null,
+    };
+  }
+
+  // ─── Findings ───────────────────────────────────────────────────────
+
+  async saveScanResults(
+    scan: Omit<ComplianceScan, 'id'>,
+    findings: Array<Omit<StoredFinding, 'id'>>,
+  ): Promise<{ scanId: string; findingCount: number }> {
+    const savedScan = await this.createScan(scan);
+
+    if (findings.length > 0) {
+      const rows = findings.map(f => ({
+        id: randomUUID(),
+        scan_id: savedScan.id,
+        rule_id: f.ruleId,
+        stig_id: f.stigId,
+        host: f.host,
+        status: f.status,
+        severity: f.severity,
+        actual_value: f.actualValue,
+        expected_value: f.expectedValue,
+        evidence: f.evidence,
+      }));
+
+      // Insert in batches of 100 to avoid query size limits
+      const batchSize = 100;
+      for (let i = 0; i < rows.length; i += batchSize) {
+        await this.db('compliance_findings').insert(rows.slice(i, i + batchSize));
+      }
+    }
+
+    return { scanId: savedScan.id, findingCount: findings.length };
+  }
+
+  async getLatestFindings(profileId?: string): Promise<StoredFinding[]> {
+    // Find the most recent completed scan (optionally filtered by profile)
+    let scanQuery = this.db('compliance_scans')
+      .where('status', 'completed')
+      .orderBy('completed_at', 'desc')
+      .first();
+
+    if (profileId) {
+      scanQuery = scanQuery.where('profile_id', profileId);
+    }
+
+    const scan = await scanQuery;
+    if (!scan) return [];
+
+    const rows = await this.db('compliance_findings')
+      .where('scan_id', scan.id)
+      .orderBy('severity', 'asc');
+
+    return rows.map(this.mapFindingRow);
+  }
+
+  async getFindingsByScanId(scanId: string): Promise<StoredFinding[]> {
+    const rows = await this.db('compliance_findings')
+      .where('scan_id', scanId)
+      .orderBy('severity', 'asc');
+    return rows.map(this.mapFindingRow);
+  }
+
+  private mapFindingRow(row: Record<string, unknown>): StoredFinding {
+    return {
+      id: row.id as string,
+      scanId: row.scan_id as string,
+      ruleId: row.rule_id as string,
+      stigId: row.stig_id as string,
+      host: row.host as string,
+      status: row.status as string,
+      severity: row.severity as string,
+      actualValue: row.actual_value as string,
+      expectedValue: row.expected_value as string,
+      evidence: (row.evidence as string | null) ?? null,
+    };
+  }
+
+  // ─── Posture snapshots ──────────────────────────────────────────────
+
+  async savePostureSnapshot(
+    snapshot: Omit<PostureSnapshot, 'id'>,
+  ): Promise<PostureSnapshot> {
+    const id = randomUUID();
+    await this.db('compliance_posture_snapshots').insert({
+      id,
+      profile_id: snapshot.profileId,
+      timestamp: snapshot.timestamp,
+      total_hosts: snapshot.totalHosts,
+      total_rules: snapshot.totalRules,
+      pass_count: snapshot.passCount,
+      fail_count: snapshot.failCount,
+      compliance_pct: snapshot.compliancePct,
+    });
+    return { ...snapshot, id };
+  }
+
+  async getPostureHistory(
+    profileId: string,
+    days: number = 30,
+  ): Promise<PostureSnapshot[]> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+
+    const rows = await this.db('compliance_posture_snapshots')
+      .where('profile_id', profileId)
+      .where('timestamp', '>=', cutoff.toISOString())
+      .orderBy('timestamp', 'asc');
+
+    return rows.map(this.mapPostureRow);
+  }
+
+  private mapPostureRow(row: Record<string, unknown>): PostureSnapshot {
+    return {
+      id: row.id as string,
+      profileId: row.profile_id as string,
+      timestamp: String(row.timestamp),
+      totalHosts: row.total_hosts as number,
+      totalRules: row.total_rules as number,
+      passCount: row.pass_count as number,
+      failCount: row.fail_count as number,
+      compliancePct: row.compliance_pct as number,
+    };
+  }
+
+  // ─── Remediation profiles ──────────────────────────────────────────
+
+  async saveRemediationProfile(
+    profile: {
+      name: string;
+      description: string;
+      profileId: string;
+      selections: RemediationSelection[];
+    },
+  ): Promise<{ id: string }> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    await this.db('compliance_remediation_profiles').insert({
+      id,
+      name: profile.name,
+      description: profile.description,
+      profile_id: profile.profileId,
+      selections_json: JSON.stringify(profile.selections),
+      created_at: now,
+      updated_at: now,
+    });
+    return { id };
+  }
+
+  async listRemediationProfiles(): Promise<RemediationProfile[]> {
+    const rows = await this.db('compliance_remediation_profiles')
+      .orderBy('created_at', 'desc');
+    return rows.map(this.mapRemediationProfileRow);
+  }
+
+  async getRemediationProfile(id: string): Promise<RemediationProfile | null> {
+    const row = await this.db('compliance_remediation_profiles')
+      .where('id', id)
+      .first();
+    if (!row) return null;
+    return this.mapRemediationProfileRow(row);
+  }
+
+  private mapRemediationProfileRow(row: Record<string, unknown>): RemediationProfile {
+    let selections: RemediationSelection[] = [];
+    try {
+      selections = JSON.parse(row.selections_json as string);
+    } catch {
+      // corrupted data — return empty
+    }
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      description: (row.description as string) || '',
+      complianceProfileId: row.profile_id as string,
+      targetInventory: '',
+      selections,
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    };
+  }
+}

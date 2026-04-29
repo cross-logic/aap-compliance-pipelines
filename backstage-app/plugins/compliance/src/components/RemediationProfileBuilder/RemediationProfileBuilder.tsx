@@ -34,6 +34,7 @@ import PlayArrowIcon from '@material-ui/icons/PlayArrow';
 import WarningIcon from '@material-ui/icons/Warning';
 import InfoIcon from '@material-ui/icons/Info';
 import type { FindingSeverity } from '@aap-compliance/common';
+import { complianceApi } from '../../api';
 import { MOCK_MULTI_HOST_FINDINGS, type MultiHostFinding } from '../ResultsViewer/mockFindings';
 
 const useStyles = makeStyles(theme => ({
@@ -124,6 +125,8 @@ export const RemediationProfileBuilder = () => {
   const { jobId } = useParams<{ jobId: string }>();
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [profileName, setProfileName] = useState('');
+  const [profileDescription, setProfileDescription] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const failedFindings = useMemo(
     () => MOCK_MULTI_HOST_FINDINGS.filter(f => f.failCount > 0),
@@ -503,19 +506,48 @@ export const RemediationProfileBuilder = () => {
             fullWidth
             multiline
             rows={3}
+            value={profileDescription}
+            onChange={e => setProfileDescription(e.target.value)}
             placeholder="e.g., STIG profile for production web tier — FIPS disabled due to legacy TLS, SSH timeout set to 900"
             style={{ marginTop: 16 }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setSaveDialogOpen(false)} disabled={saving}>Cancel</Button>
           <Button
             variant="contained"
             color="primary"
-            onClick={() => setSaveDialogOpen(false)}
-            disabled={!profileName}
+            disabled={!profileName || saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                const enabledSelections = failedFindings
+                  .filter(f => selections[f.ruleId]?.enabled)
+                  .map(f => ({
+                    ruleId: f.ruleId,
+                    enabled: true,
+                    parameters: selections[f.ruleId].parameters,
+                  }));
+
+                await complianceApi.saveRemediationProfile({
+                  name: profileName,
+                  description: profileDescription,
+                  complianceProfileId: 'rhel9-stig',
+                  selections: enabledSelections,
+                });
+
+                setSaveDialogOpen(false);
+                setProfileName('');
+                setProfileDescription('');
+              } catch {
+                // On error in mock mode, just close the dialog
+                setSaveDialogOpen(false);
+              } finally {
+                setSaving(false);
+              }
+            }}
           >
-            Save Profile
+            {saving ? 'Saving...' : 'Save Profile'}
           </Button>
         </DialogActions>
       </Dialog>
