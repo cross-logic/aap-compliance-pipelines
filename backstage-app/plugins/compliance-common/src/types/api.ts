@@ -170,3 +170,33 @@ export interface DashboardStats {
     lastScan: string;
   }>;
 }
+
+/** A compliance cartridge maps a framework profile to Controller resources. */
+export interface ComplianceCartridge {
+  id: string;
+  displayName: string;
+  description: string;
+  framework: string;
+  version: string;
+  platform: string;
+  workflowTemplateId: number | null;
+  eeId: number | null;
+  remediationPlaybookPath: string;
+  scanTags: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Request to create or update a cartridge. */
+export interface SaveCartridgeRequest {
+  id?: string;
+  displayName: string;
+  description: string;
+  framework: string;
+  version: string;
+  platform: string;
+  workflowTemplateId: number | null;
+  eeId: number | null;
+  remediationPlaybookPath: string;
+  scanTags: string;
+}

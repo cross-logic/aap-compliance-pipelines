@@ -6,8 +6,10 @@ authors:
   - Red Hat Ansible Automation Platform
 description: >
   DISA STIG V2R8 compliance cartridge for RHEL 9.
-  Agentless fact gathering, centralized evaluation, and selective remediation.
-  No tools installed on target hosts.
+  Agentless fact gathering, centralized evaluation, and selective remediation
+  using ComplianceAsCode (CaC) playbooks from scap-security-guide.
+  Includes an EE profile at meta/ee_profile.yml for building a compliance-ready
+  Execution Environment with ansible-builder.
 license_file: LICENSE
 tags:
   - compliance

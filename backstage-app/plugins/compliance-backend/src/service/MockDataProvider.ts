@@ -242,6 +242,14 @@ const MOCK_WORKFLOW_TEMPLATES = [
   { id: 103, name: 'compliance-remediate', description: 'Remediation workflow' },
 ];
 
+// ─── Mock execution environments ─────────────────────────────────────
+
+const MOCK_EXECUTION_ENVIRONMENTS = [
+  { id: 1, name: 'compliance-ee-rhel9', image: 'registry.example.com/compliance-ee-rhel9:latest' },
+  { id: 2, name: 'ee-minimal-rhel9', image: 'registry.redhat.io/ansible-automation-platform-26/ee-minimal-rhel9:latest' },
+  { id: 3, name: 'ee-supported-rhel9', image: 'registry.redhat.io/ansible-automation-platform-26/ee-supported-rhel9:latest' },
+];
+
 // ─── Mock remediation profiles ────────────────────────────────────────
 
 let mockRemediationProfiles: RemediationProfile[] = [];
@@ -261,6 +269,10 @@ export class MockDataProvider {
 
   static getInventories(): Array<{ id: number; name: string; total_hosts: number }> {
     return MOCK_INVENTORIES;
+  }
+
+  static getExecutionEnvironments(): Array<{ id: number; name: string; image: string }> {
+    return MOCK_EXECUTION_ENVIRONMENTS;
   }
 
   static getWorkflowTemplates(

@@ -12,12 +12,14 @@ import { ScanLauncher } from './ScanLauncher';
 import { ResultsViewer } from './ResultsViewer';
 import { RemediationProfileBuilder } from './RemediationProfileBuilder';
 import { RemediationExecution } from './RemediationExecution';
+import { CartridgeSettings } from './CartridgeSettings';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'profiles', label: 'Profiles' },
   { id: 'scan', label: 'New Scan' },
   { id: 'results', label: 'Results' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 const tabRouteMap: Record<string, string> = {
@@ -25,6 +27,7 @@ const tabRouteMap: Record<string, string> = {
   profiles: 'profiles/all',
   scan: 'scan',
   results: 'results/42',
+  settings: 'settings',
 };
 
 const ComplianceRouter = () => {
@@ -36,6 +39,7 @@ const ComplianceRouter = () => {
     if (path.startsWith('profiles')) return 1;
     if (path.startsWith('scan')) return 2;
     if (path.startsWith('results') || path.startsWith('remediation') || path.startsWith('execute')) return 3;
+    if (path.startsWith('settings')) return 4;
     return 0;
   };
 
@@ -67,6 +71,7 @@ const ComplianceRouter = () => {
           <Route path="/results/:jobId" element={<ResultsViewer />} />
           <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
           <Route path="/execute/:jobId" element={<RemediationExecution />} />
+          <Route path="/settings" element={<CartridgeSettings />} />
         </Routes>
       </Content>
     </Page>

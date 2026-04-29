@@ -63,6 +63,8 @@ const useStyles = makeStyles(theme => ({
   },
 }));
 
+import type { ComplianceCartridge } from '@aap-compliance/common';
+
 // Fallback data used while the backend is loading
 const FALLBACK_PROFILES = [
   { id: 'rhel9-stig', name: 'DISA STIG for RHEL 9', version: 'V2R8', rules: 366 },
@@ -95,19 +97,49 @@ export const ScanLauncher = () => {
   // Backend-fetched data
   const [profiles, setProfiles] = useState(FALLBACK_PROFILES);
   const [inventories, setInventories] = useState(FALLBACK_INVENTORIES);
+  const [cartridges, setCartridges] = useState<ComplianceCartridge[]>([]);
 
-  // Fetch profiles and inventories from the backend on mount
+  // Fetch profiles, inventories, and cartridges from the backend on mount
   useEffect(() => {
+    // Try to load cartridges from registry first, then merge with built-in profiles
+    complianceApi.getCartridges()
+      .then(data => {
+        setCartridges(data);
+        if (data.length > 0) {
+          // When cartridges are registered, use them as profile sources
+          const cartridgeProfiles = data.map(c => ({
+            id: c.id,
+            name: c.displayName,
+            version: c.version || '',
+            rules: 0, // rule count not tracked in cartridge
+          }));
+          setProfiles(prev => {
+            // Merge: cartridge-sourced profiles + any built-in that don't overlap
+            const cartridgeIds = new Set(cartridgeProfiles.map(p => p.id));
+            const remaining = prev.filter(p => !cartridgeIds.has(p.id));
+            return [...cartridgeProfiles, ...remaining];
+          });
+        }
+      })
+      .catch(() => {
+        // Keep fallback data on error
+      });
+
     complianceApi.getProfiles()
       .then(data =>
-        setProfiles(
-          data.map(p => ({
+        setProfiles(prev => {
+          // Only set built-in profiles if no cartridges have been loaded yet
+          const builtIn = data.map(p => ({
             id: p.id,
             name: p.name,
             version: p.version,
             rules: p.ruleCount,
-          })),
-        ),
+          }));
+          // Merge with any existing cartridge-sourced profiles
+          const existingIds = new Set(prev.map(p => p.id));
+          const newOnes = builtIn.filter(p => !existingIds.has(p.id));
+          return [...prev, ...newOnes];
+        }),
       )
       .catch(() => {
         // Keep fallback data on error
@@ -126,12 +158,21 @@ export const ScanLauncher = () => {
   const handleLaunch = async () => {
     setLaunching(true);
     try {
-      const result = await complianceApi.launchScan({
+      // Check if a cartridge is registered for the selected profile and use
+      // its workflow template ID for the scan launch request.
+      const cartridge = cartridges.find(c => c.id === selectedProfile);
+      const scanRequest: Parameters<typeof complianceApi.launchScan>[0] = {
         profileId: selectedProfile,
         inventoryId: inventory?.id ?? 0,
         evaluateOnly,
         limit: limit || undefined,
-      });
+      };
+      // If the cartridge has a mapped workflow template, pass it as a hint
+      if (cartridge?.workflowTemplateId) {
+        (scanRequest as Record<string, unknown>).workflowTemplateId =
+          cartridge.workflowTemplateId;
+      }
+      const result = await complianceApi.launchScan(scanRequest);
       // Navigate to results view with the returned workflow job ID
       navigate(`/compliance/results/${result.workflowJobId}`);
     } catch (err) {

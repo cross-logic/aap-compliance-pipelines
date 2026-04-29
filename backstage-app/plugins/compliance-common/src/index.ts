@@ -23,6 +23,8 @@ export type {
   SaveRemediationProfileRequest,
   RecentScan,
   DashboardStats,
+  ComplianceCartridge,
+  SaveCartridgeRequest,
 } from './types';
 
 export {

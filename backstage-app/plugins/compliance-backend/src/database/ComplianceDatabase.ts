@@ -10,6 +10,8 @@ import type {
   PostureSnapshot,
   RemediationProfile,
   RemediationSelection,
+  ComplianceCartridge,
+  SaveCartridgeRequest,
 } from '@aap-compliance/common';
 
 export class ComplianceDatabase {
@@ -239,6 +241,85 @@ export class ComplianceDatabase {
       complianceProfileId: row.profile_id as string,
       targetInventory: '',
       selections,
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    };
+  }
+
+  // ─── Cartridge registry ────────────────────────────────────────────
+
+  async listCartridges(): Promise<ComplianceCartridge[]> {
+    const rows = await this.db('compliance_cartridge_registry')
+      .orderBy('created_at', 'desc');
+    return rows.map(this.mapCartridgeRow);
+  }
+
+  async getCartridge(id: string): Promise<ComplianceCartridge | null> {
+    const row = await this.db('compliance_cartridge_registry')
+      .where('id', id)
+      .first();
+    if (!row) return null;
+    return this.mapCartridgeRow(row);
+  }
+
+  async saveCartridge(cartridge: SaveCartridgeRequest): Promise<ComplianceCartridge> {
+    const now = new Date().toISOString();
+    const id = cartridge.id || randomUUID();
+
+    const row = {
+      id,
+      display_name: cartridge.displayName,
+      description: cartridge.description || '',
+      framework: cartridge.framework,
+      version: cartridge.version || '',
+      platform: cartridge.platform || '',
+      workflow_template_id: cartridge.workflowTemplateId,
+      ee_id: cartridge.eeId,
+      remediation_playbook_path: cartridge.remediationPlaybookPath || '',
+      scan_tags: cartridge.scanTags || '',
+      updated_at: now,
+    };
+
+    const existing = await this.db('compliance_cartridge_registry')
+      .where('id', id)
+      .first();
+
+    if (existing) {
+      await this.db('compliance_cartridge_registry')
+        .where('id', id)
+        .update(row);
+    } else {
+      await this.db('compliance_cartridge_registry').insert({
+        ...row,
+        created_at: now,
+      });
+    }
+
+    return this.mapCartridgeRow({
+      ...row,
+      created_at: existing ? existing.created_at : now,
+    });
+  }
+
+  async deleteCartridge(id: string): Promise<boolean> {
+    const deleted = await this.db('compliance_cartridge_registry')
+      .where('id', id)
+      .delete();
+    return deleted > 0;
+  }
+
+  private mapCartridgeRow(row: Record<string, unknown>): ComplianceCartridge {
+    return {
+      id: row.id as string,
+      displayName: row.display_name as string,
+      description: (row.description as string) || '',
+      framework: row.framework as string,
+      version: (row.version as string) || '',
+      platform: (row.platform as string) || '',
+      workflowTemplateId: (row.workflow_template_id as number) ?? null,
+      eeId: (row.ee_id as number) ?? null,
+      remediationPlaybookPath: (row.remediation_playbook_path as string) || '',
+      scanTags: (row.scan_tags as string) || '',
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
     };

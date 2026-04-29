@@ -1,84 +1,23 @@
 ---
-- name: "Compliance: Remediate selected findings on targets"
-  hosts: "{{ target_hosts | default('all') }}"
-  become: true
-  gather_facts: false
-
-  vars:
-    selected_rules: []
-    rule_parameters: {}
-
-  tasks:
-    - name: Apply selected remediations
-      ansible.builtin.debug:
-        msg: >
-          Applying {{ selected_rules | length }} selected remediation rules
-          with parameters: {{ rule_parameters | to_nice_json }}
-      when: selected_rules | length > 0
-
-    # Each rule would have a corresponding remediation task or role
-    # This is the extensible remediation framework:
-
-    - name: Remediate SSH settings
-      ansible.builtin.include_role:
-        name: redhat.rhel_system_roles.sshd
-      vars:
-        sshd:
-          PermitRootLogin: "no"
-          PermitEmptyPasswords: "no"
-          ClientAliveInterval: "{{ rule_parameters.var_sshd_set_keepalive | default(600) }}"
-      when: >
-        'sshd_set_idle_timeout' in selected_rules or
-        'sshd_disable_root_login' in selected_rules or
-        'sshd_disable_empty_passwords' in selected_rules
-
-    - name: Set crypto policy
-      ansible.builtin.command:
-        cmd: "update-crypto-policies --set {{ rule_parameters.var_system_crypto_policy | default('FIPS') }}"
-      when: "'configure_crypto_policy' in selected_rules or 'enable_fips_mode' in selected_rules"
-      changed_when: true
-
-    - name: Install required packages
-      ansible.builtin.dnf:
-        name: "{{ item }}"
-        state: present
-      loop:
-        - aide
-        - rsyslog
-      when: "'package_aide_installed' in selected_rules or 'package_rsyslog_installed' in selected_rules"
-
-    - name: Remove prohibited packages
-      ansible.builtin.dnf:
-        name: telnet
-        state: absent
-      when: "'package_telnet_not_installed' in selected_rules"
-
-    - name: Enable auditd
-      ansible.builtin.systemd:
-        name: auditd
-        enabled: true
-        state: started
-      when: "'service_auditd_enabled' in selected_rules"
-
-    - name: Mask ctrl-alt-del
-      ansible.builtin.systemd:
-        name: ctrl-alt-del.target
-        masked: true
-      when: "'disable_ctrlaltdel_reboot' in selected_rules"
-
-    - name: Set sysctl parameters
-      ansible.posix.sysctl:
-        name: net.ipv4.conf.all.accept_redirects
-        value: '0'
-        sysctl_set: true
-        reload: true
-      when: "'sysctl_accept_redirects' in selected_rules"
-
-    - name: Set file permissions
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        mode: "{{ item.mode }}"
-      loop:
-        - { path: /etc/passwd, mode: '0644' }
-        - { path: /etc/shadow, mode: '0000' }
-      when: "'passwd_permissions' in selected_rules or 'shadow_permissions' in selected_rules"
+# Compliance: Apply CaC STIG remediation
+#
+# This playbook imports the ComplianceAsCode (CaC) remediation playbook
+# that ships with the scap-security-guide RPM inside the Execution
+# Environment. It replaces the previous hand-written task list.
+#
+# How selective remediation works in Controller:
+#   --tags:       comma-separated rule IDs from the Remediation Profile Builder
+#   --extra-vars: parameter overrides (e.g., var_accounts_tmout: 900)
+#   --limit:      target hosts from the remediation scope selection
+#
+# The CaC playbook is maintained by Red Hat as part of scap-security-guide.
+# DISA releases quarterly STIG updates -> Red Hat updates the RPM -> rebuild EE.
+#
+# Default variables defined in the CaC playbook can be overridden via
+# --extra-vars from the Remediation Profile Builder UI, for example:
+#   var_accounts_tmout: 600
+#   var_system_crypto_policy: "FIPS:STIG"
+#   var_sshd_set_keepalive: 600
+#
+- name: "Compliance: Apply CaC STIG remediation"
+  ansible.builtin.import_playbook: /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml

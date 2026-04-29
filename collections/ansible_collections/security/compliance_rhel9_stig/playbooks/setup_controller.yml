@@ -1,0 +1,290 @@
+---
+# Setup Controller resources for the Compliance Pipeline prototype.
+#
+# This playbook uses infra.controller_configuration roles to provision
+# all required Controller resources in a single run.
+#
+# Usage:
+#   ansible-playbook setup_controller.yml \
+#     -e controller_hostname=https://aap.example.com \
+#     -e controller_username=admin \
+#     -e controller_password=<changeme> \
+#     -e target_hosts="web-prod-01,web-prod-02" \
+#     -e machine_credential_user=ec2-user \
+#     -e machine_credential_ssh_key_data=@~/.ssh/id_rsa
+#
+# Prerequisites:
+#   - ansible.controller collection (included in AAP EE)
+#   - infra.controller_configuration collection
+#   - Network access to the Controller API
+
+- name: "Compliance Pipeline: Provision Controller resources"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # Controller connection — override via --extra-vars
+    controller_hostname: "{{ lookup('env', 'CONTROLLER_HOST') | default('https://aap.example.com', true) }}"
+    controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') | default('admin', true) }}"
+    controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') | default('changeme', true) }}"
+    controller_validate_certs: false
+
+    # Resource naming
+    compliance_org_name: compliance-prototype
+    compliance_project_name: compliance-content
+    compliance_inventory_name: compliance-rhel9-inventory
+    compliance_credential_name: compliance-machine-credential
+    compliance_ee_name: compliance-ee-rhel9
+
+    # Targets — override via --extra-vars
+    target_hosts: "{{ lookup('env', 'TARGET_HOSTS') | default('localhost', true) }}"
+
+    # Machine credential — override via --extra-vars
+    machine_credential_user: "{{ lookup('env', 'SSH_USER') | default('root', true) }}"
+    machine_credential_ssh_key_data: ""
+    machine_credential_password: ""
+
+    # EE image
+    compliance_ee_image: "registry.example.com/compliance-ee-rhel9:latest"
+
+    # Source repo
+    compliance_scm_url: "https://github.com/cross-logic/aap-compliance-pipelines.git"
+    compliance_scm_branch: main
+
+    # ── infra.controller_configuration variable definitions ──────────
+
+    controller_organizations:
+      - name: "{{ compliance_org_name }}"
+        description: "Compliance pipeline prototype organization"
+        state: present
+
+    controller_credentials:
+      - name: "{{ compliance_credential_name }}"
+        organization: "{{ compliance_org_name }}"
+        credential_type: Machine
+        inputs:
+          username: "{{ machine_credential_user }}"
+          ssh_key_data: "{{ machine_credential_ssh_key_data | default(omit) }}"
+          password: "{{ machine_credential_password | default(omit) }}"
+        state: present
+
+    controller_projects:
+      - name: "{{ compliance_project_name }}"
+        organization: "{{ compliance_org_name }}"
+        scm_type: git
+        scm_url: "{{ compliance_scm_url }}"
+        scm_branch: "{{ compliance_scm_branch }}"
+        scm_update_on_launch: true
+        description: "Compliance pipeline collection and playbooks"
+        state: present
+        wait: true
+
+    controller_inventories:
+      - name: "{{ compliance_inventory_name }}"
+        organization: "{{ compliance_org_name }}"
+        description: "RHEL 9 hosts for compliance scanning and remediation"
+        state: present
+
+    controller_hosts:
+      - name: "{{ item }}"
+        inventory: "{{ compliance_inventory_name }}"
+        state: present
+      # Hosts are added in a task loop below, not via the role
+
+    controller_execution_environments:
+      - name: "{{ compliance_ee_name }}"
+        image: "{{ compliance_ee_image }}"
+        organization: "{{ compliance_org_name }}"
+        description: "Compliance EE with scap-security-guide and openscap-scanner"
+        state: present
+
+    controller_templates:
+      - name: compliance-install-scanner
+        organization: "{{ compliance_org_name }}"
+        inventory: "{{ compliance_inventory_name }}"
+        project: "{{ compliance_project_name }}"
+        playbook: "collections/ansible_collections/security/compliance_rhel9_stig/playbooks/scanner/install_scanner.yml"
+        execution_environment: "{{ compliance_ee_name }}"
+        credential: "{{ compliance_credential_name }}"
+        description: "Install OpenSCAP scanner on target hosts"
+        ask_limit_on_launch: true
+        state: present
+
+      - name: compliance-run-scan
+        organization: "{{ compliance_org_name }}"
+        inventory: "{{ compliance_inventory_name }}"
+        project: "{{ compliance_project_name }}"
+        playbook: "collections/ansible_collections/security/compliance_rhel9_stig/playbooks/scanner/run_scan.yml"
+        execution_environment: "{{ compliance_ee_name }}"
+        credential: "{{ compliance_credential_name }}"
+        description: "Run STIG compliance scan using OpenSCAP"
+        ask_limit_on_launch: true
+        ask_variables_on_launch: true
+        state: present
+
+      - name: compliance-fetch-normalize
+        organization: "{{ compliance_org_name }}"
+        inventory: "{{ compliance_inventory_name }}"
+        project: "{{ compliance_project_name }}"
+        playbook: "collections/ansible_collections/security/compliance_rhel9_stig/playbooks/scanner/fetch_results.yml"
+        execution_environment: "{{ compliance_ee_name }}"
+        credential: "{{ compliance_credential_name }}"
+        description: "Fetch and normalize XCCDF scan results"
+        ask_limit_on_launch: true
+        state: present
+
+      - name: compliance-uninstall-scanner
+        organization: "{{ compliance_org_name }}"
+        inventory: "{{ compliance_inventory_name }}"
+        project: "{{ compliance_project_name }}"
+        playbook: "collections/ansible_collections/security/compliance_rhel9_stig/playbooks/scanner/uninstall_scanner.yml"
+        execution_environment: "{{ compliance_ee_name }}"
+        credential: "{{ compliance_credential_name }}"
+        description: "Remove OpenSCAP scanner from target hosts"
+        ask_limit_on_launch: true
+        state: present
+
+      - name: compliance-remediate
+        organization: "{{ compliance_org_name }}"
+        inventory: "{{ compliance_inventory_name }}"
+        project: "{{ compliance_project_name }}"
+        playbook: "collections/ansible_collections/security/compliance_rhel9_stig/playbooks/remediate.yml"
+        execution_environment: "{{ compliance_ee_name }}"
+        credential: "{{ compliance_credential_name }}"
+        description: "Apply CaC STIG remediation (uses scap-security-guide playbook from EE)"
+        ask_limit_on_launch: true
+        ask_variables_on_launch: true
+        ask_tags_on_launch: true
+        state: present
+
+    controller_workflows:
+      - name: compliance-scan-rhel9-stig
+        organization: "{{ compliance_org_name }}"
+        description: "Full STIG compliance scan pipeline: Install -> Scan -> Fetch/Normalize -> Uninstall -> [Remediate]"
+        ask_inventory_on_launch: true
+        ask_limit_on_launch: true
+        ask_variables_on_launch: true
+        state: present
+        simplified_workflow_nodes:
+          - identifier: install-scanner
+            unified_job_template:
+              name: compliance-install-scanner
+              type: job_template
+              organization:
+                name: "{{ compliance_org_name }}"
+            success_nodes:
+              - run-scan
+
+          - identifier: run-scan
+            unified_job_template:
+              name: compliance-run-scan
+              type: job_template
+              organization:
+                name: "{{ compliance_org_name }}"
+            success_nodes:
+              - fetch-normalize
+
+          - identifier: fetch-normalize
+            unified_job_template:
+              name: compliance-fetch-normalize
+              type: job_template
+              organization:
+                name: "{{ compliance_org_name }}"
+            success_nodes:
+              - uninstall-scanner
+            failure_nodes:
+              - uninstall-scanner
+
+          - identifier: uninstall-scanner
+            unified_job_template:
+              name: compliance-uninstall-scanner
+              type: job_template
+              organization:
+                name: "{{ compliance_org_name }}"
+            success_nodes:
+              - remediate
+
+          - identifier: remediate
+            unified_job_template:
+              name: compliance-remediate
+              type: job_template
+              organization:
+                name: "{{ compliance_org_name }}"
+            # Remediation is conditional — only runs when evaluate_only is false
+            # The extra_data makes it skip if evaluate_only is true (default)
+            all_parents_must_converge: false
+
+  collections:
+    - infra.controller_configuration
+
+  tasks:
+    # ── Create organization ────────────────────────────────────────────
+    - name: Configure organization
+      ansible.builtin.include_role:
+        name: infra.controller_configuration.organizations
+
+    # ── Create credential ──────────────────────────────────────────────
+    - name: Configure machine credential
+      ansible.builtin.include_role:
+        name: infra.controller_configuration.credentials
+      when: machine_credential_ssh_key_data != '' or machine_credential_password != ''
+
+    # ── Create project ─────────────────────────────────────────────────
+    - name: Configure project
+      ansible.builtin.include_role:
+        name: infra.controller_configuration.projects
+
+    # ── Create inventory ───────────────────────────────────────────────
+    - name: Configure inventory
+      ansible.builtin.include_role:
+        name: infra.controller_configuration.inventories
+
+    # ── Add hosts to inventory ─────────────────────────────────────────
+    - name: Add hosts to compliance inventory
+      ansible.controller.host:
+        name: "{{ item }}"
+        inventory: "{{ compliance_inventory_name }}"
+        state: present
+        controller_host: "{{ controller_hostname }}"
+        controller_username: "{{ controller_username }}"
+        controller_password: "{{ controller_password }}"
+        validate_certs: "{{ controller_validate_certs }}"
+      loop: "{{ target_hosts.split(',') }}"
+      when: target_hosts != 'localhost'
+
+    # ── Register EE ────────────────────────────────────────────────────
+    - name: Configure execution environment
+      ansible.builtin.include_role:
+        name: infra.controller_configuration.execution_environments
+
+    # ── Create job templates ───────────────────────────────────────────
+    - name: Configure job templates
+      ansible.builtin.include_role:
+        name: infra.controller_configuration.job_templates
+
+    # ── Create workflow ────────────────────────────────────────────────
+    - name: Configure workflow job template
+      ansible.builtin.include_role:
+        name: infra.controller_configuration.workflow_job_templates
+
+    - name: Setup complete
+      ansible.builtin.debug:
+        msg: |
+          Compliance pipeline setup complete!
+
+          Organization: {{ compliance_org_name }}
+          Inventory:    {{ compliance_inventory_name }}
+          Project:      {{ compliance_project_name }}
+          EE:           {{ compliance_ee_name }}
+
+          Job Templates:
+            - compliance-install-scanner
+            - compliance-run-scan
+            - compliance-fetch-normalize
+            - compliance-uninstall-scanner
+            - compliance-remediate
+
+          Workflow:
+            - compliance-scan-rhel9-stig
+              Install -> Scan -> Fetch/Normalize -> Uninstall -> [Remediate]

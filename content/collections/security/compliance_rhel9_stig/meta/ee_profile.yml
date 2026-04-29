@@ -1,0 +1,39 @@
+---
+# Execution Environment Profile: DISA STIG for RHEL 9
+# Used by the AAP EE Builder to construct a compliance-ready EE.
+#
+# The scap-security-guide RPM includes:
+#   - SCAP data streams for OpenSCAP scanning
+#   - Pre-rendered Ansible remediation playbooks (one per profile)
+#   - XCCDF/OVAL content for 300+ STIG rules
+#
+# This RPM is maintained by Red Hat as part of RHEL.
+# DISA quarterly updates -> Red Hat RPM update -> rebuild EE -> new content.
+#
+# Build with:
+#   ansible-builder build -f meta/ee_profile.yml -t compliance-ee-rhel9:latest
+
+version: 3
+
+build_arg_defaults:
+  ANSIBLE_GALAXY_CLI_COLLECTION_OPTS: '--pre'
+
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform-26/ee-minimal-rhel9:latest
+
+dependencies:
+  galaxy:
+    collections:
+      - name: security.compliance_rhel9_stig
+      - name: ansible.posix
+      - name: redhat.rhel_system_roles
+  python: []
+  system:
+    - scap-security-guide
+    - openscap-scanner
+    - openscap-utils
+
+additional_build_steps:
+  append_final:
+    - RUN echo "Compliance EE built with scap-security-guide $(rpm -q scap-security-guide)"

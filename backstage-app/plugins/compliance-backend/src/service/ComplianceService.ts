@@ -110,6 +110,17 @@ export class ComplianceService {
     return result.results;
   }
 
+  // ─── Execution environments ─────────────────────────────────────────
+
+  async getExecutionEnvironments(): Promise<Array<{ id: number; name: string; image: string }>> {
+    if (this.dataSource === 'mock') {
+      return MockDataProvider.getExecutionEnvironments();
+    }
+
+    const result = await this.controllerClient!.listExecutionEnvironments();
+    return result.results;
+  }
+
   // ─── Scan ───────────────────────────────────────────────────────────
 
   async launchScan(request: LaunchScanRequest): Promise<LaunchScanResponse> {

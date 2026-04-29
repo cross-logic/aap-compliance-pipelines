@@ -18,6 +18,8 @@ import type {
   WorkflowJobStatus,
   WorkflowNode,
   JobEvent,
+  ComplianceCartridge,
+  SaveCartridgeRequest,
 } from '@aap-compliance/common';
 
 const BACKEND_BASE = '/api/compliance';
@@ -39,6 +41,11 @@ async function request<T>(
   if (!resp.ok) {
     const errBody = await resp.text();
     throw new Error(`${resp.status} ${resp.statusText}: ${errBody}`);
+  }
+
+  // 204 No Content — return undefined (cast to T for void responses)
+  if (resp.status === 204) {
+    return undefined as T;
   }
 
   return (await resp.json()) as T;
@@ -113,4 +120,34 @@ export const complianceApi = {
       method: 'POST',
       body,
     }),
+
+  // ─── Cartridge registry ──────────────────────────────────────────
+
+  /** List registered cartridges. */
+  getCartridges: () =>
+    request<ComplianceCartridge[]>('/cartridges'),
+
+  /** Save (create or update) a cartridge. */
+  saveCartridge: (body: SaveCartridgeRequest) =>
+    request<ComplianceCartridge>('/cartridges', { method: 'POST', body }),
+
+  /** Delete a cartridge by ID. */
+  deleteCartridge: (id: string) =>
+    request<void>(`/cartridges/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  // ─── Controller resource lookups (for settings UI) ───────────────
+
+  /** List Controller workflow job templates. */
+  getControllerWorkflowTemplates: () =>
+    request<Array<{ id: number; name: string; description: string }>>(
+      '/controller/workflow-job-templates',
+    ),
+
+  /** List Controller execution environments. */
+  getControllerExecutionEnvironments: () =>
+    request<Array<{ id: number; name: string; image: string }>>(
+      '/controller/execution-environments',
+    ),
 };

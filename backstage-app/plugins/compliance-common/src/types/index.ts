@@ -29,4 +29,6 @@ export type {
   SaveRemediationProfileRequest,
   RecentScan,
   DashboardStats,
+  ComplianceCartridge,
+  SaveCartridgeRequest,
 } from './api';

@@ -14,6 +14,7 @@ import type {
   LaunchScanRequest,
   LaunchRemediationRequest,
   SaveRemediationProfileRequest,
+  SaveCartridgeRequest,
 } from '@aap-compliance/common';
 
 export interface RouterOptions {
@@ -210,6 +211,68 @@ export async function createRouter(
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       logger.error(`Failed to save remediation profile: ${msg}`);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // ─── Cartridge registry ─────────────────────────────────────────────
+
+  router.get('/cartridges', async (_req, res) => {
+    const cartridges = await database.listCartridges();
+    res.json(cartridges);
+  });
+
+  router.post('/cartridges', async (req, res) => {
+    const body = req.body as SaveCartridgeRequest;
+    if (!body.displayName || !body.framework) {
+      res.status(400).json({ error: 'displayName and framework are required' });
+      return;
+    }
+
+    try {
+      const cartridge = await database.saveCartridge(body);
+      res.status(201).json(cartridge);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to save cartridge: ${msg}`);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  router.delete('/cartridges/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      const deleted = await database.deleteCartridge(id);
+      if (!deleted) {
+        res.status(404).json({ error: 'Cartridge not found' });
+        return;
+      }
+      res.status(204).send();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to delete cartridge: ${msg}`);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // ─── Controller resource lookups (for cartridge settings UI) ───────
+
+  router.get('/controller/workflow-job-templates', async (_req, res) => {
+    try {
+      const templates = await service.getWorkflowTemplates();
+      res.json(templates);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  router.get('/controller/execution-environments', async (_req, res) => {
+    try {
+      const ees = await service.getExecutionEnvironments();
+      res.json(ees);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: msg });
     }
   });
