@@ -23,6 +23,28 @@ export interface RouterOptions {
   database: ComplianceDatabase;
 }
 
+// ─── Token extraction ─────────────────────────────────────────────────
+
+/**
+ * Extract the user's AAP OAuth2 token from the request.
+ *
+ * In the upstream Ansible Portal, the user's AAP token flows through the
+ * scaffolder via AAPTokenField. For our REST API, the frontend passes it
+ * as the `x-aap-token` header. When the auth-backend-module-rhaap-provider
+ * is integrated in production, this token is the user's Gateway OAuth2
+ * access token — AAP RBAC is then enforced per-user.
+ *
+ * Returns undefined when no token is present (the backend falls back to
+ * the service token from app-config.yaml).
+ */
+function getUserAapToken(req: express.Request): string | undefined {
+  const header = req.headers['x-aap-token'];
+  if (typeof header === 'string' && header.length > 0) {
+    return header;
+  }
+  return undefined;
+}
+
 // ─── Validation helpers ────────────────────────────────────────────────
 
 function isNonEmptyString(val: unknown): val is string {
@@ -66,16 +88,18 @@ export async function createRouter(
 
   // ─── Inventories ────────────────────────────────────────────────────
 
-  router.get('/inventories', async (_req, res) => {
-    const inventories = await service.getInventories();
+  router.get('/inventories', async (req, res) => {
+    const userToken = getUserAapToken(req);
+    const inventories = await service.getInventories(userToken);
     res.json(inventories);
   });
 
   // ─── Workflow templates ─────────────────────────────────────────────
 
   router.get('/workflow-templates', async (req, res) => {
+    const userToken = getUserAapToken(req);
     const nameFilter = req.query.name as string | undefined;
-    const templates = await service.getWorkflowTemplates(nameFilter);
+    const templates = await service.getWorkflowTemplates(nameFilter, userToken);
     res.json(templates);
   });
 
@@ -83,6 +107,7 @@ export async function createRouter(
 
   router.post('/scan', async (req, res) => {
     const body = req.body;
+    const userToken = getUserAapToken(req);
 
     // Validate required fields
     if (!isNonEmptyString(body.profileId)) {
@@ -108,7 +133,7 @@ export async function createRouter(
     logger.info(`Launching scan for profile=${scanRequest.profileId}`);
 
     try {
-      const result = await service.launchScan(scanRequest);
+      const result = await service.launchScan(scanRequest, userToken);
 
       // Persist the scan record
       await database.createScan({
@@ -151,13 +176,14 @@ export async function createRouter(
   // ─── Workflow job status (for polling) ──────────────────────────────
 
   router.get('/workflow-status/:jobId', async (req, res) => {
+    const userToken = getUserAapToken(req);
     const jobId = Number(req.params.jobId);
     if (Number.isNaN(jobId)) {
       res.status(400).json({ error: 'jobId must be a number' });
       return;
     }
     try {
-      const status = await service.getWorkflowJobStatus(jobId);
+      const status = await service.getWorkflowJobStatus(jobId, userToken);
       res.json(status);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -168,13 +194,14 @@ export async function createRouter(
   // ─── Workflow nodes ─────────────────────────────────────────────────
 
   router.get('/workflow-nodes/:jobId', async (req, res) => {
+    const userToken = getUserAapToken(req);
     const jobId = Number(req.params.jobId);
     if (Number.isNaN(jobId)) {
       res.status(400).json({ error: 'jobId must be a number' });
       return;
     }
     try {
-      const nodes = await service.getWorkflowNodes(jobId);
+      const nodes = await service.getWorkflowNodes(jobId, userToken);
       res.json(nodes);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -185,13 +212,14 @@ export async function createRouter(
   // ─── Job events ─────────────────────────────────────────────────────
 
   router.get('/job-events/:jobId', async (req, res) => {
+    const userToken = getUserAapToken(req);
     const jobId = Number(req.params.jobId);
     if (Number.isNaN(jobId)) {
       res.status(400).json({ error: 'jobId must be a number' });
       return;
     }
     try {
-      const events = await service.getJobEvents(jobId);
+      const events = await service.getJobEvents(jobId, userToken);
       res.json(events);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -203,6 +231,7 @@ export async function createRouter(
 
   router.post('/remediate', async (req, res) => {
     const body = req.body;
+    const userToken = getUserAapToken(req);
 
     // Validate required fields
     if (!isNonEmptyString(body.profileId)) {
@@ -247,7 +276,7 @@ export async function createRouter(
         `Remediation plan: ${plan.groups.length} groups, ${plan.totalRules} rules, ${plan.totalHosts} hosts`,
       );
 
-      const result = await service.launchRemediation(remediateRequest);
+      const result = await service.launchRemediation(remediateRequest, userToken);
       res.json({ ...result, plan });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -374,9 +403,10 @@ export async function createRouter(
 
   // ─── Controller resource lookups (for cartridge settings UI) ───────
 
-  router.get('/controller/workflow-job-templates', async (_req, res) => {
+  router.get('/controller/workflow-job-templates', async (req, res) => {
+    const userToken = getUserAapToken(req);
     try {
-      const templates = await service.getWorkflowTemplates();
+      const templates = await service.getWorkflowTemplates(undefined, userToken);
       res.json(templates);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -384,9 +414,10 @@ export async function createRouter(
     }
   });
 
-  router.get('/controller/execution-environments', async (_req, res) => {
+  router.get('/controller/execution-environments', async (req, res) => {
+    const userToken = getUserAapToken(req);
     try {
-      const ees = await service.getExecutionEnvironments();
+      const ees = await service.getExecutionEnvironments(userToken);
       res.json(ees);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);

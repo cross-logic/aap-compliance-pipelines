@@ -32,22 +32,40 @@ export class ControllerClient {
   private static readonly LOG_PREFIX = 'compliance-controller-client';
 
   private readonly baseUrl: string;
-  private readonly token: string;
+  private readonly serviceToken: string;
   private readonly agent: Agent;
   private readonly logger: LoggerService;
 
   constructor(options: ControllerClientOptions, logger: LoggerService) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
-    this.token = options.token;
+    this.serviceToken = options.token;
     this.logger = logger;
     this.agent = new Agent({
       connect: { rejectUnauthorized: options.checkSSL },
     });
   }
 
+  /**
+   * Resolve which token to use for a request.
+   *
+   * If a per-request user token is supplied, use it (this is the user's
+   * AAP OAuth2 token obtained via the Gateway). Otherwise, fall back to
+   * the service token from app-config.yaml (ansible.rhaap.token).
+   *
+   * This follows the upstream pattern where scaffolder actions pass the
+   * user's AAP token for every Controller API call, so that AAP RBAC
+   * applies to the logged-in user rather than a service account.
+   */
+  private resolveToken(token?: string): string {
+    return token ?? this.serviceToken;
+  }
+
   // ─── Low-level request helpers (match upstream AAPClient) ───────────
 
-  private async executeGetRequest<T>(endpoint: string): Promise<T> {
+  private async executeGetRequest<T>(
+    endpoint: string,
+    token?: string,
+  ): Promise<T> {
     const normalizedEndpoint = endpoint.replace(/^\/+/, '');
     const url = `${this.baseUrl}/${normalizedEndpoint}`;
     this.logger.info(
@@ -61,7 +79,7 @@ export class ControllerClient {
         dispatcher: this.agent,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
+          Authorization: `Bearer ${this.resolveToken(token)}`,
         },
       });
     } catch (error) {
@@ -88,6 +106,7 @@ export class ControllerClient {
   private async executePostRequest<T>(
     endpoint: string,
     data?: unknown,
+    token?: string,
   ): Promise<T> {
     const normalizedEndpoint = endpoint.replace(/^\/+/, '');
     const url = `${this.baseUrl}/${normalizedEndpoint}`;
@@ -102,7 +121,7 @@ export class ControllerClient {
         dispatcher: this.agent,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
+          Authorization: `Bearer ${this.resolveToken(token)}`,
         },
         body: data !== undefined ? JSON.stringify(data) : undefined,
       });
@@ -138,18 +157,21 @@ export class ControllerClient {
 
   async listWorkflowJobTemplates(
     nameFilter?: string,
+    token?: string,
   ): Promise<PaginatedResponse<{ id: number; name: string; description: string }>> {
     const query = nameFilter
       ? `?name__startswith=${encodeURIComponent(nameFilter)}`
       : '';
     return this.executeGetRequest(
       `api/controller/v2/workflow_job_templates/${query}`,
+      token,
     );
   }
 
   async launchWorkflow(
     workflowId: number,
     extraVars?: Record<string, unknown>,
+    token?: string,
   ): Promise<{ id: number; workflow_job: number; status: string }> {
     const body: Record<string, unknown> = {};
     if (extraVars) {
@@ -158,64 +180,72 @@ export class ControllerClient {
     return this.executePostRequest(
       `api/controller/v2/workflow_job_templates/${workflowId}/launch/`,
       body,
+      token,
     );
   }
 
   // ─── Workflow Jobs ──────────────────────────────────────────────────
 
-  async getWorkflowJobStatus(jobId: number): Promise<WorkflowJobStatus> {
-    return this.executeGetRequest(`api/controller/v2/workflow_jobs/${jobId}/`);
+  async getWorkflowJobStatus(jobId: number, token?: string): Promise<WorkflowJobStatus> {
+    return this.executeGetRequest(`api/controller/v2/workflow_jobs/${jobId}/`, token);
   }
 
   async getWorkflowNodes(
     jobId: number,
+    token?: string,
   ): Promise<PaginatedResponse<WorkflowNode>> {
     return this.executeGetRequest(
       `api/controller/v2/workflow_jobs/${jobId}/workflow_nodes/?page_size=200`,
+      token,
     );
   }
 
   // ─── Jobs ───────────────────────────────────────────────────────────
 
-  async getJobStatus(jobId: number): Promise<{
+  async getJobStatus(jobId: number, token?: string): Promise<{
     id: number;
     status: string;
     finished: string | null;
     failed: boolean;
     elapsed: number;
   }> {
-    return this.executeGetRequest(`api/controller/v2/jobs/${jobId}/`);
+    return this.executeGetRequest(`api/controller/v2/jobs/${jobId}/`, token);
   }
 
   async getJobEvents(
     jobId: number,
+    token?: string,
   ): Promise<PaginatedResponse<JobEvent>> {
     return this.executeGetRequest(
       `api/controller/v2/jobs/${jobId}/job_events/?page_size=200`,
+      token,
     );
   }
 
-  async getJobStdout(jobId: number): Promise<{ content: string }> {
+  async getJobStdout(jobId: number, token?: string): Promise<{ content: string }> {
     return this.executeGetRequest(
       `api/controller/v2/jobs/${jobId}/stdout/?format=json`,
+      token,
     );
   }
 
   // ─── Inventories & Execution Environments ───────────────────────────
 
-  async listInventories(): Promise<
+  async listInventories(token?: string): Promise<
     PaginatedResponse<{ id: number; name: string; total_hosts: number }>
   > {
     return this.executeGetRequest(
       'api/controller/v2/inventories/?order_by=name&page_size=200',
+      token,
     );
   }
 
-  async listExecutionEnvironments(): Promise<
+  async listExecutionEnvironments(token?: string): Promise<
     PaginatedResponse<{ id: number; name: string; image: string }>
   > {
     return this.executeGetRequest(
       'api/controller/v2/execution_environments/?order_by=name&page_size=200',
+      token,
     );
   }
 
@@ -229,12 +259,13 @@ export class ControllerClient {
     workflowJobId: number,
     intervalMs: number = 3000,
     maxWaitMs: number = 600_000,
+    token?: string,
   ): Promise<WorkflowJobStatus> {
     const terminalStatuses = ['successful', 'failed', 'error', 'canceled'];
     const start = Date.now();
 
     while (Date.now() - start < maxWaitMs) {
-      const status = await this.getWorkflowJobStatus(workflowJobId);
+      const status = await this.getWorkflowJobStatus(workflowJobId, token);
       if (terminalStatuses.includes(status.status.toLowerCase())) {
         return status;
       }

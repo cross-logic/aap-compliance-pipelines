@@ -60,14 +60,27 @@ export const complianceBackendPlugin = createBackendPlugin({
 
         httpRouter.use(router);
 
-        // TODO(RBAC): Replace with authenticated policy once RBAC integration
-        // is implemented. This is intentional for the prototype phase — all
-        // routes are unauthenticated to allow demo/testing without an OAuth
-        // provider configured. Production deployment requires:
-        //   1. OAuth2 + PKCE auth via AAP Gateway (auth-backend-module-rhaap-provider)
-        //   2. Backstage permissions framework integration for per-user RBAC
-        //   3. User identity resolution from AAP OAuth session
-        // See: architect-review-final.md B1, handbook Section 3 & 4.
+        // AUTH POLICY: Unauthenticated access for the prototype phase.
+        //
+        // In production RHDH, this would be removed — the Backstage framework's
+        // httpAuth service handles authentication automatically when the
+        // auth-backend-module-rhaap-provider is installed. The upstream Ansible
+        // Portal plugins do NOT add explicit auth middleware; they rely on:
+        //
+        //   1. httpRouter's built-in Backstage JWT validation
+        //   2. The RBAC backend plugin (@backstage-community/plugin-rbac-backend)
+        //      evaluating permissions for plugins listed in pluginsWithPermission
+        //   3. Frontend fetchApi auto-attaching identity tokens
+        //
+        // To enable auth in production:
+        //   - Install auth-backend-module-rhaap-provider for AAP Gateway OAuth2
+        //   - Remove this addAuthPolicy call (let httpRouter enforce auth)
+        //   - Add 'compliance' to permission.rbac.pluginsWithPermission in app-config
+        //   - Frontend already passes x-aap-token header (see ComplianceBackendClient)
+        //
+        // The per-request AAP token infrastructure is already wired through
+        // getUserAapToken() in router.ts and the token parameter on all
+        // ControllerClient/ComplianceService methods.
         httpRouter.addAuthPolicy({
           path: '/',
           allow: 'unauthenticated',

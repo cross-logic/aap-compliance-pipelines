@@ -83,7 +83,7 @@ export class ComplianceService {
 
   // ─── Inventories ────────────────────────────────────────────────────
 
-  async getInventories(): Promise<Array<{ id: number; name: string; hostCount: number }>> {
+  async getInventories(token?: string): Promise<Array<{ id: number; name: string; hostCount: number }>> {
     if (this.dataSource === 'mock') {
       return MockDataProvider.getInventories().map(inv => ({
         id: inv.id,
@@ -92,7 +92,7 @@ export class ComplianceService {
       }));
     }
 
-    const result = await this.controllerClient!.listInventories();
+    const result = await this.controllerClient!.listInventories(token);
     return result.results.map(inv => ({
       id: inv.id,
       name: inv.name,
@@ -104,35 +104,36 @@ export class ComplianceService {
 
   async getWorkflowTemplates(
     nameFilter?: string,
+    token?: string,
   ): Promise<Array<{ id: number; name: string; description: string }>> {
     if (this.dataSource === 'mock') {
       return MockDataProvider.getWorkflowTemplates(nameFilter);
     }
 
-    const result = await this.controllerClient!.listWorkflowJobTemplates(nameFilter);
+    const result = await this.controllerClient!.listWorkflowJobTemplates(nameFilter, token);
     return result.results;
   }
 
   // ─── Execution environments ─────────────────────────────────────────
 
-  async getExecutionEnvironments(): Promise<Array<{ id: number; name: string; image: string }>> {
+  async getExecutionEnvironments(token?: string): Promise<Array<{ id: number; name: string; image: string }>> {
     if (this.dataSource === 'mock') {
       return MockDataProvider.getExecutionEnvironments();
     }
 
-    const result = await this.controllerClient!.listExecutionEnvironments();
+    const result = await this.controllerClient!.listExecutionEnvironments(token);
     return result.results;
   }
 
   // ─── Scan ───────────────────────────────────────────────────────────
 
-  async launchScan(request: LaunchScanRequest): Promise<LaunchScanResponse> {
+  async launchScan(request: LaunchScanRequest, token?: string): Promise<LaunchScanResponse> {
     if (this.dataSource === 'mock') {
       return MockDataProvider.launchScan(request.profileId);
     }
 
     // In live mode: find the matching workflow job template, then launch it
-    const templates = await this.controllerClient!.listWorkflowJobTemplates('compliance');
+    const templates = await this.controllerClient!.listWorkflowJobTemplates('compliance', token);
     const template = templates.results.find(t =>
       t.name.toLowerCase().includes(request.profileId.replace(/-/g, '_')),
     ) ?? templates.results[0];
@@ -149,7 +150,7 @@ export class ComplianceService {
       extraVars.limit_hosts = request.limit;
     }
 
-    const launch = await this.controllerClient!.launchWorkflow(template.id, extraVars);
+    const launch = await this.controllerClient!.launchWorkflow(template.id, extraVars, token);
 
     return {
       scanId: `scan-${launch.workflow_job ?? launch.id}`,
@@ -162,12 +163,13 @@ export class ComplianceService {
 
   async launchRemediation(
     request: LaunchRemediationRequest,
+    token?: string,
   ): Promise<LaunchRemediationResponse> {
     if (this.dataSource === 'mock') {
       return MockDataProvider.launchRemediation();
     }
 
-    const templates = await this.controllerClient!.listWorkflowJobTemplates('compliance');
+    const templates = await this.controllerClient!.listWorkflowJobTemplates('compliance', token);
     const template = templates.results.find(t =>
       t.name.toLowerCase().includes('remediat'),
     ) ?? templates.results[0];
@@ -184,7 +186,7 @@ export class ComplianceService {
       extraVars.limit_hosts = request.limit;
     }
 
-    const launch = await this.controllerClient!.launchWorkflow(template.id, extraVars);
+    const launch = await this.controllerClient!.launchWorkflow(template.id, extraVars, token);
 
     return {
       remediationId: `remediation-${launch.workflow_job ?? launch.id}`,
@@ -208,7 +210,7 @@ export class ComplianceService {
 
   // ─── Workflow status (for polling) ──────────────────────────────────
 
-  async getWorkflowJobStatus(jobId: number): Promise<WorkflowJobStatus> {
+  async getWorkflowJobStatus(jobId: number, token?: string): Promise<WorkflowJobStatus> {
     if (this.dataSource === 'mock') {
       // Simulate a job that progresses to completion
       return {
@@ -221,26 +223,27 @@ export class ComplianceService {
       };
     }
 
-    return this.controllerClient!.getWorkflowJobStatus(jobId);
+    return this.controllerClient!.getWorkflowJobStatus(jobId, token);
   }
 
   async getWorkflowNodes(
     jobId: number,
+    token?: string,
   ): Promise<WorkflowNode[]> {
     if (this.dataSource === 'mock') {
       return [];
     }
 
-    const result = await this.controllerClient!.getWorkflowNodes(jobId);
+    const result = await this.controllerClient!.getWorkflowNodes(jobId, token);
     return result.results;
   }
 
-  async getJobEvents(jobId: number): Promise<JobEvent[]> {
+  async getJobEvents(jobId: number, token?: string): Promise<JobEvent[]> {
     if (this.dataSource === 'mock') {
       return [];
     }
 
-    const result = await this.controllerClient!.getJobEvents(jobId);
+    const result = await this.controllerClient!.getJobEvents(jobId, token);
     return result.results;
   }
 

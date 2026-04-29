@@ -31,6 +31,8 @@ import {
 } from '@material-ui/core';
 import SecurityIcon from '@material-ui/icons/Security';
 import { useApi } from '@backstage/core-plugin-api';
+import { usePermission } from '@backstage/plugin-permission-react';
+import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/alpha';
 import { complianceApiRef } from '../../api';
 
 const useStyles = makeStyles(theme => ({
@@ -86,6 +88,14 @@ export const ScanLauncher = () => {
   const classes = useStyles();
   const navigate = useNavigate();
   const api = useApi(complianceApiRef);
+
+  // Permission check: reuse catalogEntityCreatePermission following
+  // the upstream Ansible Portal pattern (Home.tsx, TemplateActions.tsx).
+  // When RBAC is not configured, this defaults to allowed.
+  const { allowed: canLaunchScan } = usePermission({
+    permission: catalogEntityCreatePermission,
+  });
+
   const [searchParams] = useSearchParams();
   const preselectedProfile = searchParams.get('profile') ?? '';
   const [activeStep, setActiveStep] = useState(preselectedProfile ? 1 : 0);
@@ -364,7 +374,8 @@ export const ScanLauncher = () => {
                 size="large"
                 className={classes.launchButton}
                 onClick={handleLaunch}
-                disabled={!profile || !inventory}
+                disabled={!profile || !inventory || !canLaunchScan}
+                title={!canLaunchScan ? 'You do not have permission to launch scans' : undefined}
               >
                 Launch Scan
               </Button>

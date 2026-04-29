@@ -6,6 +6,8 @@ import {
   Progress,
 } from '@backstage/core-components';
 import { useApi } from '@backstage/core-plugin-api';
+import { usePermission } from '@backstage/plugin-permission-react';
+import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/alpha';
 import {
   Typography,
   Button,
@@ -102,6 +104,14 @@ export const CartridgeSettings = () => {
   const classes = useStyles();
   const navigate = useNavigate();
   const api = useApi(complianceApiRef);
+
+  // Admin permission gate: reuse catalogEntityCreatePermission following
+  // the upstream Ansible Portal pattern. The entire settings page is
+  // restricted to users with admin/create permissions. When RBAC is not
+  // configured, this defaults to allowed.
+  const { allowed: isAdmin, loading: permissionLoading } = usePermission({
+    permission: catalogEntityCreatePermission,
+  });
 
   const [cartridges, setCartridges] = useState<ComplianceCartridge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -202,8 +212,32 @@ export const CartridgeSettings = () => {
     return executionEnvironments.find(e => e.id === id)?.name ?? `ID ${id}`;
   };
 
-  if (loading) {
+  if (permissionLoading || loading) {
     return <Progress />;
+  }
+
+  if (!isAdmin) {
+    return (
+      <>
+        <Breadcrumbs>
+          <Typography
+            color="primary"
+            style={{ cursor: 'pointer' }}
+            onClick={() => navigate('/compliance')}
+          >
+            Compliance
+          </Typography>
+          <Typography>Settings</Typography>
+        </Breadcrumbs>
+        <Box mt={3} />
+        <InfoCard title="Access Denied">
+          <Typography variant="body1">
+            You do not have permission to manage compliance cartridges.
+            Contact your administrator if you need access.
+          </Typography>
+        </InfoCard>
+      </>
+    );
   }
 
   return (

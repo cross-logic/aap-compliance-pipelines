@@ -31,15 +31,24 @@ const BACKEND_BASE = '/api/compliance';
 
 async function request<T>(
   path: string,
-  options?: { method?: string; body?: unknown },
+  options?: { method?: string; body?: unknown; aapToken?: string },
 ): Promise<T> {
   const url = `${BACKEND_BASE}${path}`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+
+  // When an AAP token is available, pass it to the backend so that
+  // Controller API calls are made as the logged-in user (AAP RBAC).
+  // The backend reads this from the x-aap-token header.
+  if (options?.aapToken) {
+    headers['x-aap-token'] = options.aapToken;
+  }
+
   const resp = await fetch(url, {
     method: options?.method ?? 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
+    headers,
     body: options?.body ? JSON.stringify(options.body) : undefined,
   });
 
@@ -64,8 +73,36 @@ async function request<T>(
  * Uses direct fetch() for the prototype. In a production RHDH
  * deployment, this would use Backstage's fetchApiRef to attach
  * identity tokens and handle proxy routing automatically.
+ *
+ * AAP token flow:
+ * When the auth-backend-module-rhaap-provider is integrated, the
+ * user's AAP OAuth2 token would be obtained via rhAapAuthApiRef
+ * and passed to every mutating request (scan, remediate, etc.).
+ * For now, getAapToken() returns undefined and the backend falls
+ * back to the service token from app-config.yaml.
  */
 export class ComplianceBackendClient implements ComplianceApi {
+  /**
+   * Obtain the user's AAP OAuth2 access token.
+   *
+   * When the auth-backend-module-rhaap-provider is integrated, this
+   * would call rhAapAuthApiRef.getAccessToken() — exactly as the
+   * upstream self-service plugin does in Home.tsx and AAPTokenField.
+   *
+   * Returns undefined until the auth module is wired up, which
+   * causes the backend to fall back to the service token.
+   */
+  private async getAapToken(): Promise<string | undefined> {
+    try {
+      // TODO: When auth module is integrated, replace with:
+      //   const rhAapAuthApi = ... // injected via constructor
+      //   return await rhAapAuthApi.getAccessToken();
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   getHealth() {
     return request<{ status: string; dataSource: string }>('/health');
   }
@@ -85,8 +122,9 @@ export class ComplianceBackendClient implements ComplianceApi {
     );
   }
 
-  launchScan(body: LaunchScanRequest) {
-    return request<LaunchScanResponse>('/scan', { method: 'POST', body });
+  async launchScan(body: LaunchScanRequest) {
+    const aapToken = await this.getAapToken();
+    return request<LaunchScanResponse>('/scan', { method: 'POST', body, aapToken });
   }
 
   getFindings(scanId?: string) {
@@ -106,8 +144,9 @@ export class ComplianceBackendClient implements ComplianceApi {
     return request<JobEvent[]>(`/job-events/${jobId}`);
   }
 
-  launchRemediation(body: LaunchRemediationRequest) {
-    return request<LaunchRemediationResponse>('/remediate', { method: 'POST', body });
+  async launchRemediation(body: LaunchRemediationRequest) {
+    const aapToken = await this.getAapToken();
+    return request<LaunchRemediationResponse>('/remediate', { method: 'POST', body, aapToken });
   }
 
   getDashboardStats() {
@@ -137,13 +176,16 @@ export class ComplianceBackendClient implements ComplianceApi {
     return request<ComplianceCartridge[]>('/cartridges');
   }
 
-  saveCartridge(body: SaveCartridgeRequest) {
-    return request<ComplianceCartridge>('/cartridges', { method: 'POST', body });
+  async saveCartridge(body: SaveCartridgeRequest) {
+    const aapToken = await this.getAapToken();
+    return request<ComplianceCartridge>('/cartridges', { method: 'POST', body, aapToken });
   }
 
-  deleteCartridge(id: string) {
+  async deleteCartridge(id: string) {
+    const aapToken = await this.getAapToken();
     return request<void>(`/cartridges/${encodeURIComponent(id)}`, {
       method: 'DELETE',
+      aapToken,
     });
   }
 

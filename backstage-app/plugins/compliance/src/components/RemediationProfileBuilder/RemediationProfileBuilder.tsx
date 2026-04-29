@@ -6,6 +6,8 @@ import {
   Progress,
 } from '@backstage/core-components';
 import { useApi } from '@backstage/core-plugin-api';
+import { usePermission } from '@backstage/plugin-permission-react';
+import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/alpha';
 import {
   Typography,
   Button,
@@ -125,6 +127,14 @@ export const RemediationProfileBuilder = () => {
   const navigate = useNavigate();
   const api = useApi(complianceApiRef);
   const { jobId } = useParams<{ jobId: string }>();
+
+  // Permission check: reuse catalogEntityCreatePermission following
+  // the upstream Ansible Portal pattern. Controls the Apply Remediation
+  // button — reading/viewing findings is always allowed.
+  const { allowed: canRemediate } = usePermission({
+    permission: catalogEntityCreatePermission,
+  });
+
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profileDescription, setProfileDescription] = useState('');
@@ -516,7 +526,8 @@ export const RemediationProfileBuilder = () => {
           size="large"
           startIcon={<PlayArrowIcon />}
           onClick={() => navigate(`/compliance/execute/${jobId}`)}
-          disabled={enabledCount === 0}
+          disabled={enabledCount === 0 || !canRemediate}
+          title={!canRemediate ? 'You do not have permission to apply remediations' : undefined}
         >
           Apply Remediation ({enabledCount} rules, {totalAffectedHosts} hosts)
         </Button>
