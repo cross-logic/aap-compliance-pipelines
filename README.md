@@ -7,62 +7,175 @@ A Backstage-based compliance management prototype for Ansible Automation Platfor
 - Node.js 20 or 22
 - Corepack enabled (`corepack enable`)
 - Yarn 4.x (installed via Corepack)
-- Access to an AAP 2.6+ Controller instance
+- For live mode: access to an AAP 2.6+ Controller instance
 
-## Initial Setup
+## Quick Start
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/cross-logic/aap-compliance-pipelines.git
 cd aap-compliance-pipelines/backstage-app
 
 # Install dependencies and set up hooks
 ./install-deps
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your AAP connection details
-
-# Start the dev server
+# Start the dev server (mock mode — no AAP needed)
 yarn start
 ```
 
 The frontend will be available at `http://localhost:3000` and the backend at `http://localhost:7007`.
 
-## Configuration
+By default the plugin runs in **mock mode** with sample compliance data — no AAP connection required. This is ideal for demos and UI development.
 
-All secrets and environment-specific values are configured via `.env`. See `.env.example` for the full list.
+## Data Modes: Mock vs Live
+
+The plugin supports two data modes controlled by `compliance.dataSource` in `app-config.yaml`:
+
+### Mock Mode (default)
+
+Mock mode uses built-in sample data. No AAP instance needed.
+
+```yaml
+# app-config.yaml
+compliance:
+  dataSource: mock
+```
+
+This is the default. The plugin shows:
+- 20 hosts across 3 groups (web-prod, db-prod, app-prod)
+- 12 STIG rules with realistic pass/fail distributions
+- Interactive remediation profile builder with host-level detail
+- All UI features fully functional with sample data
+
+**Use mock mode for:** demos, UI development, UX reviews, sharing with stakeholders.
+
+### Live Mode (connected to AAP)
+
+Live mode connects to a real AAP Controller instance and runs actual compliance scans.
+
+#### Step 1: Create your `.env` file
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your AAP connection details:
+
+```bash
+# Required — AAP Controller connection
+AAP_HOST=https://your-aap-controller.example.com
+AAP_API_TOKEN=your-api-token-here
+
+# Required for OAuth login (if using AAP authentication)
+AAP_AUTH_CLIENT_ID=your-oauth-client-id
+AAP_AUTH_CLIENT_SECRET=your-oauth-client-secret
+
+# Optional — auto-generated if empty
+BACKEND_SECRET=
+AUTH_SIGNING_KEY=
+
+# Optional — GitHub integration for catalog
+GITHUB_INTEGRATION_TOKEN=
+```
+
+> **How to get an AAP API token:** Log into your AAP Controller → Administration → Applications → Create a Personal Access Token. Give it `write` scope.
+
+> **How to get OAuth credentials:** Log into your AAP Controller → Administration → Applications → Create a new OAuth2 Application. Set the redirect URI to `http://localhost:3000/api/auth/rhaap/handler/frame`. Note the client ID and secret.
+
+#### Step 2: Switch to live mode
+
+Edit `app-config.yaml` and change the data source:
+
+```yaml
+compliance:
+  dataSource: live    # Change from 'mock' to 'live'
+```
+
+#### Step 3: Handle self-signed certificates (if needed)
+
+If your AAP instance uses self-signed certificates, ensure this is set in `app-config.yaml`:
+
+```yaml
+ansible:
+  rhaap:
+    baseUrl: ${AAP_HOST}
+    checkSSL: false     # Set to true in production with valid certs
+```
+
+#### Step 4: Restart the server
+
+```bash
+# Kill any running instance
+lsof -ti:3000 | xargs kill -9
+
+# Start with live connection
+yarn start
+```
+
+The plugin will now:
+- Launch real compliance scan workflows on your AAP Controller
+- Display findings from actual OpenSCAP scans
+- Execute remediation playbooks against real targets
+- Store results in the Backstage PostgreSQL database
+
+### Switching Back to Mock Mode
+
+To return to mock mode (e.g., for a demo), simply change `app-config.yaml`:
+
+```yaml
+compliance:
+  dataSource: mock    # Change back to 'mock'
+```
+
+Restart the server. No `.env` changes needed — mock mode ignores AAP credentials.
+
+## Configuration Reference
+
+### Environment Variables (`.env`)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `AAP_HOST` | Yes | AAP Controller base URL (e.g., `https://aap.example.com`) |
-| `AAP_AUTH_CLIENT_ID` | Yes | OAuth2 client ID for AAP authentication |
-| `AAP_AUTH_CLIENT_SECRET` | Yes | OAuth2 client secret |
-| `AAP_API_TOKEN` | Yes | AAP API token for backend calls |
+| `AAP_HOST` | For live mode | AAP Controller base URL (e.g., `https://aap.example.com`) |
+| `AAP_AUTH_CLIENT_ID` | For live mode | OAuth2 client ID for AAP authentication |
+| `AAP_AUTH_CLIENT_SECRET` | For live mode | OAuth2 client secret |
+| `AAP_API_TOKEN` | For live mode | AAP API token for backend API calls |
 | `BACKEND_SECRET` | No | Backend auth secret (auto-generated if empty) |
 | `AUTH_SIGNING_KEY` | No | JWT signing key (auto-generated if empty) |
 | `GITHUB_INTEGRATION_TOKEN` | No | GitHub PAT for catalog integration |
+
+### App Config (`app-config.yaml`)
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `compliance.dataSource` | `mock` | Data source: `mock` for sample data, `live` for real AAP |
+| `ansible.rhaap.baseUrl` | `${AAP_HOST}` | AAP Controller URL (from .env) |
+| `ansible.rhaap.checkSSL` | `false` | Verify SSL certificates (set `true` in production) |
 
 ## Repository Structure
 
 ```
 aap-compliance-pipelines/
-  backstage-app/                Backstage application
+  backstage-app/                 Backstage application
     packages/
-      app/                      Frontend shell (React)
-      backend/                  Backend server (Node.js)
+      app/                       Frontend shell (React)
+      backend/                   Backend server (Node.js)
     plugins/
-      compliance/               Frontend plugin -- dashboard, scan, results, remediation
-      compliance-backend/       Backend plugin -- scaffolder actions
-      compliance-common/        Shared types and API client
-    api/                        OpenAPI specification (draft)
-    docs/                       Plugin and feature documentation
-    examples/                   Sample catalog entities and templates
-    .husky/                     Git hooks (pre-commit)
-  collections/                  Ansible collections for compliance content
-  content/                      Compliance content (SDP-0005/0009 pattern)
-  docs/                         Design docs and research
-  scripts/                      Lab seed/clean playbooks
+      compliance/                Frontend plugin — dashboard, scan, results, remediation
+      compliance-backend/        Backend plugin — API routes, database, Controller client
+      compliance-common/         Shared types and API client
+    api/                         OpenAPI specification (draft)
+    docs/                        Plugin and feature documentation
+    examples/                    Sample catalog entities and templates
+    .husky/                      Git hooks (pre-commit)
+  collections/                   Ansible collection (security.compliance_rhel9_stig)
+    ansible_collections/security/compliance_rhel9_stig/
+      plugins/modules/           Custom modules (gather, evaluate, normalize)
+      playbooks/                 Pipeline orchestration playbooks
+      playbooks/scanner/         OpenSCAP scanner lifecycle (install, scan, fetch, uninstall)
+      rules/                     STIG rules as YAML data
+      tests/                     Unit tests (85) + integration tests (3 targets)
+  content/                       Legacy content (superseded by collections/)
+  review/                        UI screenshots and review materials
 ```
 
 ## Development
@@ -85,6 +198,18 @@ yarn test:all
 yarn workspace @aap-compliance/plugin-compliance test
 ```
 
+### Ansible Collection Tests
+
+```bash
+cd collections/ansible_collections/security/compliance_rhel9_stig
+
+# Run unit tests (requires pytest)
+python -m pytest tests/unit/ -v
+
+# Run ansible-test sanity (requires ansible-test)
+ansible-test sanity --python default
+```
+
 ### Building
 
 ```bash
@@ -94,14 +219,8 @@ yarn build
 # Build all packages including optional ones
 yarn build:all
 
-# Build only the backend
-yarn build:backend
-
 # Type-check only
 yarn tsc
-
-# Full type-check (no skips)
-yarn tsc:full
 ```
 
 ### Linting and Formatting
@@ -124,24 +243,62 @@ yarn prettier:check
 
 Husky runs `lint-staged` on every commit, which applies ESLint and Prettier to staged `.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`, and `.cjs` files.
 
+## AAP Lab Setup (for contributors)
+
+If you have access to an AAP lab environment and want to set up the compliance workflow:
+
+### 1. Create compliance resources in Controller
+
+The collection includes playbooks to seed AAP with compliance resources:
+
+- Organization: `compliance-prototype`
+- Inventory with target RHEL 9 hosts
+- Machine credential for SSH access
+- Project pointing to this repo
+- Job templates: gather-facts, evaluate, remediate
+- Workflow: Gather → Evaluate → Remediate
+
+### 2. Required Controller resources
+
+| Resource | Purpose |
+|----------|---------|
+| Organization | Isolates compliance resources |
+| Inventory | Target hosts for scanning |
+| Machine Credential | SSH access to targets |
+| Project (git) | Points to this repo for playbooks |
+| Job Templates (3) | Gather facts, evaluate rules, remediate findings |
+| Workflow Template | Chains the 3 JTs into a pipeline |
+
+### 3. Verified on lab
+
+The pipeline has been validated end-to-end on AAP 2.6:
+- `compliance_gather`: collected 703 packages, 235 services, SSH config, SELinux status from a RHEL 9 host via SSH (agentless)
+- `compliance_evaluate`: evaluated 20 STIG rules — 8 pass, 12 fail
+- Full workflow: Gather → Evaluate → Remediate completed successfully
+
 ## Troubleshooting
+
+### Plugin shows mock data even after switching to live mode
+
+Make sure you:
+1. Created `.env` with valid `AAP_HOST` and `AAP_API_TOKEN`
+2. Changed `compliance.dataSource` to `live` in `app-config.yaml`
+3. Killed the old server (`lsof -ti:3000 | xargs kill -9`) and restarted with `yarn start`
+
+### AAP connection errors in live mode
+
+- Verify `AAP_HOST` is reachable: `curl -sk https://your-aap-host/api/v2/ping/`
+- Check the API token is valid: `curl -sk -H "Authorization: Bearer YOUR_TOKEN" https://your-aap-host/api/v2/me/`
+- If using self-signed certs, ensure `checkSSL: false` in app-config.yaml
 
 ### `yarn start` fails with module errors
 
-Make sure you are using Node.js 20 or 22. Run `node --version` to check.
-
-### AAP connection errors
-
-Verify your `.env` values. The `AAP_HOST` must be reachable from your machine. If using a self-signed certificate, ensure `checkSSL: false` is set in `app-config.yaml`.
+Make sure you are using Node.js 20 or 22 (`node --version`). Run `./install-deps` to reinstall.
 
 ### `corepack` not found
 
-Corepack ships with Node.js 16.10+. Run `corepack enable` to activate it. If using `nvm`, you may need to run this after switching Node versions.
-
-### Tests fail with experimental VM modules warning
-
-This is expected -- the `--experimental-vm-modules` flag is set automatically via the `test` script. If you see warnings (not errors), they are safe to ignore.
+Corepack ships with Node.js 16.10+. Run `corepack enable` to activate it.
 
 ### Pre-commit hook not running
 
-Run `yarn prepare` to reinstall Husky hooks, or run `./install-deps` to set up the full development environment.
+Run `yarn prepare` to reinstall Husky hooks, or run `./install-deps`.
