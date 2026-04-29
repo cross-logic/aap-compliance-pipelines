@@ -1,0 +1,425 @@
+openapi: 3.0.3
+info:
+  title: AAP Compliance Backend API
+  description: |
+    Backend API for the AAP Compliance Pipelines Backstage plugin.
+    Provides endpoints for compliance scanning, findings retrieval,
+    remediation management, and posture reporting.
+
+    **Status: DRAFT** -- This specification is a placeholder and will be
+    refined as the backend implementation progresses.
+  version: 0.1.0-draft
+  contact:
+    name: AAP Compliance Team
+  license:
+    name: Apache-2.0
+
+servers:
+  - url: http://localhost:7007/api/compliance
+    description: Local development
+
+tags:
+  - name: profiles
+    description: Compliance profile management
+  - name: findings
+    description: Scan findings and results
+  - name: scan
+    description: Scan execution
+  - name: remediation
+    description: Remediation management
+  - name: posture
+    description: Compliance posture reporting
+
+paths:
+  /compliance/profiles:
+    get:
+      operationId: listProfiles
+      summary: List available compliance profiles
+      description: Returns all compliance profiles available for scanning (DISA STIG, CIS, PCI-DSS, etc.).
+      tags:
+        - profiles
+      parameters:
+        - name: framework
+          in: query
+          description: Filter by compliance framework
+          schema:
+            type: string
+            enum:
+              - DISA_STIG
+              - CIS
+              - PCI_DSS
+              - HIPAA
+              - NIST_800_53
+        - name: os
+          in: query
+          description: Filter by target operating system
+          schema:
+            type: string
+            example: RHEL 9
+      responses:
+        '200':
+          description: List of compliance profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComplianceProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /compliance/findings:
+    get:
+      operationId: getFindings
+      summary: Get scan findings
+      description: Returns findings from a completed compliance scan, optionally filtered by severity or status.
+      tags:
+        - findings
+      parameters:
+        - name: jobId
+          in: query
+          required: true
+          description: AAP job ID of the scan
+          schema:
+            type: string
+        - name: severity
+          in: query
+          description: Filter by severity
+          schema:
+            type: string
+            enum:
+              - CAT_I
+              - CAT_II
+              - CAT_III
+        - name: status
+          in: query
+          description: Filter by finding status
+          schema:
+            type: string
+            enum:
+              - pass
+              - fail
+              - error
+              - notapplicable
+              - notchecked
+        - name: q
+          in: query
+          description: Search by title or STIG ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Scan findings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    $ref: '#/components/schemas/ScanSummary'
+                  findings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Finding'
+        '404':
+          description: Job not found
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /compliance/scan:
+    post:
+      operationId: launchScan
+      summary: Launch a compliance scan
+      description: Launches a compliance scan against the specified inventory using the selected profile. Dispatches an AAP job template.
+      tags:
+        - scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanRequest'
+      responses:
+        '202':
+          description: Scan launched successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    description: AAP job ID for tracking
+                  status:
+                    type: string
+                    enum:
+                      - pending
+                      - running
+        '400':
+          description: Invalid request
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /compliance/remediate:
+    post:
+      operationId: applyRemediation
+      summary: Apply remediation
+      description: Applies remediation for selected rules with the specified scope and parameters. Dispatches an AAP job template with extra variables.
+      tags:
+        - remediation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemediationRequest'
+      responses:
+        '202':
+          description: Remediation launched
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - pending
+                      - running
+        '400':
+          description: Invalid request
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /compliance/posture:
+    get:
+      operationId: getPosture
+      summary: Get compliance posture summary
+      description: Returns an aggregate compliance posture across all scanned frameworks and hosts.
+      tags:
+        - posture
+      parameters:
+        - name: framework
+          in: query
+          description: Filter posture by framework
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Compliance posture summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostureSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  schemas:
+    ComplianceProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          example: rhel9-stig
+        name:
+          type: string
+          example: DISA STIG for RHEL 9
+        framework:
+          type: string
+          enum:
+            - DISA_STIG
+            - CIS
+            - PCI_DSS
+            - HIPAA
+            - NIST_800_53
+        version:
+          type: string
+          example: V2R8
+        description:
+          type: string
+        applicableOs:
+          type: array
+          items:
+            type: string
+          example:
+            - RHEL 9
+        ruleCount:
+          type: integer
+          example: 366
+        lastUpdated:
+          type: string
+          format: date
+        source:
+          type: string
+          example: ComplianceAsCode/content
+
+    Finding:
+      type: object
+      properties:
+        ruleId:
+          type: string
+          example: sshd_set_idle_timeout
+        stigId:
+          type: string
+          example: V-257844
+        title:
+          type: string
+        description:
+          type: string
+        fixText:
+          type: string
+        checkText:
+          type: string
+        severity:
+          type: string
+          enum:
+            - CAT_I
+            - CAT_II
+            - CAT_III
+        category:
+          type: string
+        disruption:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+        hosts:
+          type: array
+          items:
+            $ref: '#/components/schemas/HostFinding'
+        passCount:
+          type: integer
+        failCount:
+          type: integer
+        totalCount:
+          type: integer
+
+    HostFinding:
+      type: object
+      properties:
+        host:
+          type: string
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - error
+        actualValue:
+          type: string
+        expectedValue:
+          type: string
+
+    ScanSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        pass:
+          type: integer
+        fail:
+          type: integer
+        error:
+          type: integer
+        notapplicable:
+          type: integer
+        notchecked:
+          type: integer
+
+    ScanRequest:
+      type: object
+      required:
+        - profileId
+        - inventory
+      properties:
+        profileId:
+          type: string
+          description: ID of the compliance profile to scan against
+          example: rhel9-stig
+        inventory:
+          type: string
+          description: AAP inventory name or ID
+          example: production-web-servers
+        limit:
+          type: string
+          description: Host limit pattern (optional)
+        evaluateOnly:
+          type: boolean
+          description: If true, scan only without remediation
+          default: true
+
+    RemediationRequest:
+      type: object
+      required:
+        - jobId
+        - selections
+      properties:
+        jobId:
+          type: string
+          description: Job ID of the scan whose findings to remediate
+        selections:
+          type: array
+          items:
+            type: object
+            required:
+              - ruleId
+              - enabled
+            properties:
+              ruleId:
+                type: string
+              enabled:
+                type: boolean
+              scope:
+                type: string
+                enum:
+                  - failed_only
+                  - standardize_all
+                default: failed_only
+              parameters:
+                type: object
+                additionalProperties: true
+
+    PostureSummary:
+      type: object
+      properties:
+        overallComplianceRate:
+          type: number
+          format: float
+          example: 72.0
+        hostsScanned:
+          type: integer
+          example: 12
+        criticalFindings:
+          type: integer
+          example: 8
+        pendingRemediation:
+          type: integer
+          example: 15
+        activeProfiles:
+          type: integer
+          example: 3
+        frameworks:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              target:
+                type: string
+              ruleCount:
+                type: integer
+              complianceRate:
+                type: number
+                format: float
+              lastScan:
+                type: string
+                format: date-time
+
+  responses:
+    Unauthorized:
+      description: Authentication required or token invalid

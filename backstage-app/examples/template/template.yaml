@@ -1,0 +1,92 @@
+---
+# Sample Backstage software template for creating a new compliance-scanned service.
+# Register this template in your Backstage catalog to enable the scaffolder.
+
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: compliance-enabled-service
+  title: Compliance-Enabled Service
+  description: Create a new service with compliance scanning pre-configured for RHEL STIG.
+  tags:
+    - compliance
+    - rhel
+    - stig
+spec:
+  owner: platform-team
+  type: service
+
+  parameters:
+    - title: Service Details
+      required:
+        - name
+        - owner
+      properties:
+        name:
+          title: Service Name
+          type: string
+          description: Name of the new service
+          ui:autofocus: true
+        owner:
+          title: Owner
+          type: string
+          description: Team that owns this service
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind: Group
+        description:
+          title: Description
+          type: string
+          description: Short description of the service
+
+    - title: Compliance Configuration
+      required:
+        - complianceProfile
+        - inventory
+      properties:
+        complianceProfile:
+          title: Compliance Profile
+          type: string
+          description: Select the compliance profile to scan against
+          enum:
+            - rhel9-stig
+            - rhel9-cis-l1
+            - rhel9-pci-dss
+          enumNames:
+            - DISA STIG for RHEL 9 (V2R8)
+            - CIS Benchmark RHEL 9 Level 1
+            - PCI-DSS v4.0 for RHEL 9
+        inventory:
+          title: AAP Inventory
+          type: string
+          description: AAP inventory containing target hosts
+        scanSchedule:
+          title: Scan Schedule
+          type: string
+          description: Cron expression for scheduled scans (optional)
+          default: "0 2 * * 0"
+
+  steps:
+    - id: register
+      name: Register Component
+      action: catalog:register
+      input:
+        catalogInfoUrl: https://github.com/${{ parameters.owner }}/${{ parameters.name }}/blob/main/catalog-info.yaml
+
+    - id: launch-scan
+      name: Launch Initial Compliance Scan
+      action: compliance:launch-scan
+      input:
+        profileId: ${{ parameters.complianceProfile }}
+        inventory: ${{ parameters.inventory }}
+        evaluateOnly: true
+
+  output:
+    links:
+      - title: Open in Catalog
+        icon: catalog
+        entityRef: ${{ steps['register'].output.entityRef }}
+      - title: View Scan Results
+        icon: dashboard
+        url: /compliance/results/${{ steps['launch-scan'].output.jobId }}

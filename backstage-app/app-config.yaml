@@ -36,9 +36,22 @@ backend:
   database:
     client: better-sqlite3
     connection: ':memory:'
+  auth:
+    keys:
+      - secret: ${BACKEND_SECRET}
 
-# AAP Connection — default for local dev
+# AAP Connection — configure via .env (see .env.example)
 ansible:
   rhaap:
-    baseUrl: https://aap-aap-operator.apps.192.168.128.128.nip.io
+    baseUrl: ${AAP_HOST}
     checkSSL: false
+    token: ${AAP_API_TOKEN}
+
+auth:
+  signingKey: ${AUTH_SIGNING_KEY}
+
+# GitHub integration (optional)
+integrations:
+  github:
+    - host: github.com
+      token: ${GITHUB_INTEGRATION_TOKEN}

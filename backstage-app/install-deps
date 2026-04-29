@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "==> Enabling Corepack..."
+corepack enable
+
+echo "==> Installing Yarn 4.x..."
+corepack prepare yarn@stable --activate
+
+echo "==> Installing dependencies..."
+yarn install
+
+echo "==> Setting up Husky git hooks..."
+yarn husky install
+
+echo "==> Done! Run 'yarn start' to start the dev server."

@@ -1,0 +1,72 @@
+---
+# Sample Backstage catalog entities for compliance components.
+# Import this file into your Backstage catalog to register these entities.
+
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: compliance-scanner
+  title: Compliance Scanner
+  description: Scan RHEL infrastructure against DISA STIG, CIS, and PCI-DSS profiles using OpenSCAP via AAP Controller.
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+  tags:
+    - compliance
+    - openscap
+    - stig
+  links:
+    - url: https://www.open-scap.org/
+      title: OpenSCAP
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: experimental
+  owner: platform-team
+  system: aap-compliance
+  providesApis:
+    - compliance-api
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: remediation-engine
+  title: Remediation Engine
+  description: Apply selective remediation using Ansible roles generated from compliance scan findings.
+  tags:
+    - compliance
+    - remediation
+    - ansible
+spec:
+  type: service
+  lifecycle: experimental
+  owner: platform-team
+  system: aap-compliance
+  dependsOn:
+    - component:compliance-scanner
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: aap-compliance
+  title: AAP Compliance System
+  description: End-to-end compliance scanning and remediation for RHEL infrastructure managed by AAP.
+spec:
+  owner: platform-team
+  domain: infrastructure
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: compliance-api
+  title: Compliance API
+  description: Backend API for compliance scanning, findings retrieval, and remediation management.
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: platform-team
+  system: aap-compliance
+  definition:
+    $text: ../api/openapi.yaml
