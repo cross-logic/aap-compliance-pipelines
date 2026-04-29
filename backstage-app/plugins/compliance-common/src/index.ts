@@ -25,6 +25,8 @@ export type {
   DashboardStats,
   ComplianceCartridge,
   SaveCartridgeRequest,
+  RemediationPlanGroup,
+  RemediationPlan,
 } from './types';
 
 export {

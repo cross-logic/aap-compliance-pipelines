@@ -5,6 +5,7 @@ import {
   Breadcrumbs,
   Progress,
 } from '@backstage/core-components';
+import { useApi } from '@backstage/core-plugin-api';
 import {
   Typography,
   Button,
@@ -33,9 +34,10 @@ import ExpandLessIcon from '@material-ui/icons/ExpandLess';
 import BuildIcon from '@material-ui/icons/Build';
 import CheckCircleIcon from '@material-ui/icons/CheckCircle';
 import ErrorIcon from '@material-ui/icons/Error';
-import type { FindingSeverity } from '@aap-compliance/common';
-import { complianceApi } from '../../api';
-import { MOCK_MULTI_HOST_FINDINGS, type MultiHostFinding } from './mockFindings';
+import AssessmentIcon from '@material-ui/icons/Assessment';
+import type { FindingSeverity, MultiHostFinding } from '@aap-compliance/common';
+import { complianceApiRef } from '../../api';
+import { ExportButton } from './ExportButton';
 
 const useStyles = makeStyles(theme => ({
   severityChip: {
@@ -110,6 +112,10 @@ const useStyles = makeStyles(theme => ({
     backgroundColor: theme.palette.background.default,
     borderTop: `1px solid ${theme.palette.divider}`,
   },
+  emptyState: {
+    textAlign: 'center',
+    padding: theme.spacing(8, 4),
+  },
 }));
 
 const severityLabel: Record<FindingSeverity, string> = {
@@ -127,6 +133,7 @@ const severityOrder: Record<FindingSeverity, number> = {
 export const ResultsViewer = () => {
   const classes = useStyles();
   const navigate = useNavigate();
+  const api = useApi(complianceApiRef);
   const { jobId } = useParams<{ jobId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -136,36 +143,41 @@ export const ResultsViewer = () => {
 
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
 
-  // Fetch findings from the backend — falls back to mock on error
-  const [findings, setFindings] = useState<MultiHostFinding[]>(MOCK_MULTI_HOST_FINDINGS);
+  // Fetch findings from the backend -- no frontend mock fallback (S2)
+  const [findings, setFindings] = useState<MultiHostFinding[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    complianceApi.getFindings(jobId)
+    api.getFindings(jobId)
       .then(data => {
-        if (!cancelled && data.length > 0) {
-          setFindings(data as MultiHostFinding[]);
+        if (!cancelled) {
+          setFindings(data);
         }
       })
-      .catch(() => {
-        // Keep mock data on error
+      .catch(err => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
 
     return () => { cancelled = true; };
-  }, [jobId]);
+  }, [api, jobId]);
 
   const totalHosts = findings[0]?.totalCount || 0;
   const rulesWithFailures = findings.filter(f => f.failCount > 0).length;
   const totalRules = findings.length;
-  const overallPassRate = Math.round(
-    (findings.reduce((sum, f) => sum + f.passCount, 0) /
-      findings.reduce((sum, f) => sum + f.totalCount, 0)) * 100,
-  );
+  const totalChecks = findings.reduce((sum, f) => sum + f.totalCount, 0);
+  const overallPassRate = totalChecks > 0
+    ? Math.round(
+        (findings.reduce((sum, f) => sum + f.passCount, 0) / totalChecks) * 100,
+      )
+    : 0;
 
   const filtered = useMemo(() =>
     findings
@@ -215,6 +227,67 @@ export const ResultsViewer = () => {
     );
   }
 
+  // P3-3: Empty state when no findings are available
+  if (findings.length === 0 && !error) {
+    return (
+      <>
+        <Breadcrumbs>
+          <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance')}>
+            Compliance
+          </Typography>
+          <Typography>Scan Results</Typography>
+        </Breadcrumbs>
+
+        <Box mt={2} />
+
+        <InfoCard title="Scan Results">
+          <div className={classes.emptyState}>
+            <AssessmentIcon style={{ fontSize: 64, color: '#6A6E73', marginBottom: 16 }} />
+            <Typography variant="h6" color="textSecondary" gutterBottom>
+              No scan results yet
+            </Typography>
+            <Typography variant="body2" color="textSecondary" paragraph>
+              Launch a compliance scan to see findings and per-host results here.
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => navigate('/compliance/scan')}
+            >
+              Launch a Scan
+            </Button>
+          </div>
+        </InfoCard>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <Breadcrumbs>
+          <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance')}>
+            Compliance
+          </Typography>
+          <Typography>Scan Results</Typography>
+        </Breadcrumbs>
+
+        <Box mt={2} />
+
+        <InfoCard title="Error Loading Results">
+          <Box p={3} textAlign="center">
+            <Typography variant="body1" color="error" gutterBottom>
+              Failed to load scan results: {error}
+            </Typography>
+            <Button variant="outlined" onClick={() => navigate('/compliance')}>
+              Back to Dashboard
+            </Button>
+          </Box>
+        </InfoCard>
+      </>
+    );
+  }
+
   return (
     <>
       <Breadcrumbs>
@@ -258,8 +331,9 @@ export const ResultsViewer = () => {
         </InfoCard>
       </div>
 
-      {/* Remediate Button */}
-      <Box display="flex" justifyContent="flex-end" mb={2}>
+      {/* Action Buttons: Remediate + Export (P3-2) */}
+      <Box display="flex" justifyContent="flex-end" mb={2} style={{ gap: 8 }}>
+        <ExportButton findings={filtered} profileName={jobId} />
         <Button
           variant="contained"
           color="primary"

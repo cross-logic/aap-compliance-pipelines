@@ -6,6 +6,7 @@ import {
   StatusError,
   StatusWarning,
 } from '@backstage/core-components';
+import { useApi } from '@backstage/core-plugin-api';
 import {
   Card,
   CardContent,
@@ -19,8 +20,9 @@ import {
 import PlayCircleFilledIcon from '@material-ui/icons/PlayCircleFilled';
 import SecurityIcon from '@material-ui/icons/Security';
 import HistoryIcon from '@material-ui/icons/History';
+import SettingsIcon from '@material-ui/icons/Settings';
 import { ComplianceGauge } from './ComplianceGauge';
-import { complianceApi } from '../../api';
+import { complianceApiRef } from '../../api';
 import type { DashboardStats } from '@aap-compliance/common';
 
 const useStyles = makeStyles(theme => ({
@@ -93,38 +95,132 @@ const useStyles = makeStyles(theme => ({
   frameworkCard: {
     height: '100%',
   },
+  welcomeCard: {
+    textAlign: 'center',
+    padding: theme.spacing(6, 4),
+  },
+  welcomeStep: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: theme.spacing(2),
+    padding: theme.spacing(1.5, 0),
+    textAlign: 'left',
+  },
+  stepNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: '50%',
+    backgroundColor: theme.palette.primary.main,
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 700,
+    flexShrink: 0,
+  },
 }));
-
-// Fallback stats used while the backend is loading
-const FALLBACK_STATS: DashboardStats = {
-  hostsScanned: 12,
-  criticalFindings: 8,
-  pendingRemediation: 15,
-  activeProfiles: 3,
-  recentScans: [
-    { id: '1', profileName: 'RHEL 9 STIG V2R8', inventoryName: 'production-web-servers', passRate: 78, timestamp: '2 hours ago', status: 'completed' },
-    { id: '2', profileName: 'CIS RHEL 9 L1', inventoryName: 'staging-db-servers', passRate: 85, timestamp: '1 day ago', status: 'completed' },
-    { id: '3', profileName: 'RHEL 9 STIG V2R8', inventoryName: 'dev-servers', passRate: 62, timestamp: '3 days ago', status: 'completed' },
-  ],
-  frameworkScores: [
-    { name: 'DISA STIG V2R8', target: 'RHEL 9', rules: 366, rate: 78, lastScan: '2 hours ago' },
-    { name: 'CIS Benchmark L1', target: 'RHEL 9', rules: 189, rate: 85, lastScan: '1 day ago' },
-    { name: 'PCI-DSS v4.0', target: 'RHEL 9', rules: 142, rate: 62, lastScan: '3 days ago' },
-  ],
-};
 
 export const ComplianceDashboard = () => {
   const classes = useStyles();
   const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardStats>(FALLBACK_STATS);
+  const api = useApi(complianceApiRef);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    complianceApi.getDashboardStats()
+    api.getDashboardStats()
       .then(data => setStats(data))
       .catch(() => {
-        // Keep fallback stats on error
-      });
-  }, []);
+        // Keep null stats on error -- will show welcome state
+      })
+      .finally(() => setLoading(false));
+  }, [api]);
+
+  // Determine if this is an "empty" state (no scan history)
+  const isEmpty = !stats || (stats.recentScans.length === 0 && stats.hostsScanned === 0);
+
+  if (loading) {
+    return (
+      <Box p={4}>
+        <LinearProgress />
+        <Typography variant="body2" align="center" style={{ marginTop: 16 }}>
+          Loading dashboard...
+        </Typography>
+      </Box>
+    );
+  }
+
+  // P3-3: Welcome / empty state when no scan history exists
+  if (isEmpty) {
+    return (
+      <div>
+        <div className={classes.section}>
+          <InfoCard title="Welcome to AAP Compliance">
+            <div className={classes.welcomeCard}>
+              <SecurityIcon style={{ fontSize: 64, color: '#0066CC', marginBottom: 16 }} />
+              <Typography variant="h5" gutterBottom>
+                Get Started with Compliance Scanning
+              </Typography>
+              <Typography variant="body1" color="textSecondary" paragraph>
+                Scan your infrastructure against industry compliance frameworks like DISA STIG,
+                CIS Benchmarks, and PCI-DSS. Review findings and build remediation profiles to
+                bring your systems into compliance.
+              </Typography>
+
+              <Box maxWidth={480} mx="auto" mt={4}>
+                <div className={classes.welcomeStep}>
+                  <div className={classes.stepNumber}>1</div>
+                  <div>
+                    <Typography variant="subtitle1">Register a Cartridge</Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      Map a compliance framework to a Controller workflow template in Settings.
+                    </Typography>
+                  </div>
+                </div>
+                <div className={classes.welcomeStep}>
+                  <div className={classes.stepNumber}>2</div>
+                  <div>
+                    <Typography variant="subtitle1">Launch Your First Scan</Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      Select a profile, choose an inventory, and run a compliance scan.
+                    </Typography>
+                  </div>
+                </div>
+                <div className={classes.welcomeStep}>
+                  <div className={classes.stepNumber}>3</div>
+                  <div>
+                    <Typography variant="subtitle1">Review Findings</Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      Analyze per-host results, build remediation profiles, and apply fixes.
+                    </Typography>
+                  </div>
+                </div>
+              </Box>
+
+              <Box mt={4} display="flex" justifyContent="center" style={{ gap: 16 }}>
+                <Card variant="outlined">
+                  <CardActionArea onClick={() => navigate('settings')}>
+                    <div className={classes.quickAction}>
+                      <SettingsIcon className={classes.actionIcon} />
+                      <Typography variant="subtitle2">Configure Settings</Typography>
+                    </div>
+                  </CardActionArea>
+                </Card>
+                <Card variant="outlined">
+                  <CardActionArea onClick={() => navigate('scan')}>
+                    <div className={classes.quickAction}>
+                      <PlayCircleFilledIcon className={classes.actionIcon} />
+                      <Typography variant="subtitle2">New Scan</Typography>
+                    </div>
+                  </CardActionArea>
+                </Card>
+              </Box>
+            </div>
+          </InfoCard>
+        </div>
+      </div>
+    );
+  }
 
   // Compute an overall gauge from framework scores
   const overallRate = stats.frameworkScores.length > 0

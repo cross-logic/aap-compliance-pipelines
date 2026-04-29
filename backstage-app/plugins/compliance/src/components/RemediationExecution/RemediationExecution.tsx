@@ -29,7 +29,8 @@ import {
 import CheckCircleIcon from '@material-ui/icons/CheckCircle';
 import RefreshIcon from '@material-ui/icons/Refresh';
 import CompareArrowsIcon from '@material-ui/icons/CompareArrows';
-import { complianceApi } from '../../api';
+import { useApi } from '@backstage/core-plugin-api';
+import { complianceApiRef } from '../../api';
 
 const useStyles = makeStyles(theme => ({
   progressSection: {
@@ -83,6 +84,7 @@ const INITIAL_TASKS = [
 export const RemediationExecution = () => {
   const classes = useStyles();
   const navigate = useNavigate();
+  const api = useApi(complianceApiRef);
   const { jobId } = useParams<{ jobId: string }>();
   const [phase, setPhase] = useState<ExecutionPhase>('preparing');
   const [progress, setProgress] = useState(0);
@@ -92,7 +94,7 @@ export const RemediationExecution = () => {
   // Try to launch the remediation via the backend
   const launchRemediation = useCallback(async () => {
     try {
-      const result = await complianceApi.launchRemediation({
+      const result = await api.launchRemediation({
         profileId: 'rhel9-stig',
         inventoryId: 1,
         selections: [],

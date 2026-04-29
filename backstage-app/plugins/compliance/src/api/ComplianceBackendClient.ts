@@ -1,7 +1,10 @@
 /**
  * Frontend API client that talks to the compliance backend REST API.
  *
- * All data flows through the backend — the frontend never decides
+ * Implements the ComplianceApi interface so it can be registered as a
+ * Backstage API factory and consumed via useApi(complianceApiRef).
+ *
+ * All data flows through the backend -- the frontend never decides
  * mock vs live. The backend's ComplianceService handles the toggle.
  */
 import type {
@@ -21,6 +24,8 @@ import type {
   ComplianceCartridge,
   SaveCartridgeRequest,
 } from '@aap-compliance/common';
+
+import type { ComplianceApi } from './complianceApiRef';
 
 const BACKEND_BASE = '/api/compliance';
 
@@ -43,7 +48,7 @@ async function request<T>(
     throw new Error(`${resp.status} ${resp.statusText}: ${errBody}`);
   }
 
-  // 204 No Content — return undefined (cast to T for void responses)
+  // 204 No Content -- return undefined (cast to T for void responses)
   if (resp.status === 204) {
     return undefined as T;
   }
@@ -51,103 +56,106 @@ async function request<T>(
   return (await resp.json()) as T;
 }
 
-// ─── Public API ─────────────────────────────────────────────────────
+// ─── ComplianceBackendClient ─────────────────────────────────────────
 
-export const complianceApi = {
-  /** Check backend health and current data source mode. */
-  getHealth: () => request<{ status: string; dataSource: string }>('/health'),
+/**
+ * Default implementation of ComplianceApi.
+ *
+ * Uses direct fetch() for the prototype. In a production RHDH
+ * deployment, this would use Backstage's fetchApiRef to attach
+ * identity tokens and handle proxy routing automatically.
+ */
+export class ComplianceBackendClient implements ComplianceApi {
+  getHealth() {
+    return request<{ status: string; dataSource: string }>('/health');
+  }
 
-  /** List compliance profiles (STIG, CIS, PCI-DSS, etc.). */
-  getProfiles: () => request<ComplianceProfile[]>('/profiles'),
+  getProfiles() {
+    return request<ComplianceProfile[]>('/profiles');
+  }
 
-  /** List Controller inventories. */
-  getInventories: () =>
-    request<Array<{ id: number; name: string; hostCount: number }>>('/inventories'),
+  getInventories() {
+    return request<Array<{ id: number; name: string; hostCount: number }>>('/inventories');
+  }
 
-  /** List compliance workflow templates. */
-  getWorkflowTemplates: (nameFilter?: string) => {
+  getWorkflowTemplates(nameFilter?: string) {
     const q = nameFilter ? `?name=${encodeURIComponent(nameFilter)}` : '';
     return request<Array<{ id: number; name: string; description: string }>>(
       `/workflow-templates${q}`,
     );
-  },
+  }
 
-  /** Launch a compliance scan. */
-  launchScan: (body: LaunchScanRequest) =>
-    request<LaunchScanResponse>('/scan', { method: 'POST', body }),
+  launchScan(body: LaunchScanRequest) {
+    return request<LaunchScanResponse>('/scan', { method: 'POST', body });
+  }
 
-  /** Get scan findings. */
-  getFindings: (scanId?: string) => {
+  getFindings(scanId?: string) {
     const q = scanId ? `?scanId=${encodeURIComponent(scanId)}` : '';
     return request<MultiHostFinding[]>(`/findings${q}`);
-  },
+  }
 
-  /** Poll workflow job status. */
-  getWorkflowStatus: (jobId: number) =>
-    request<WorkflowJobStatus>(`/workflow-status/${jobId}`),
+  getWorkflowStatus(jobId: number) {
+    return request<WorkflowJobStatus>(`/workflow-status/${jobId}`);
+  }
 
-  /** Get workflow nodes for a workflow job. */
-  getWorkflowNodes: (jobId: number) =>
-    request<WorkflowNode[]>(`/workflow-nodes/${jobId}`),
+  getWorkflowNodes(jobId: number) {
+    return request<WorkflowNode[]>(`/workflow-nodes/${jobId}`);
+  }
 
-  /** Get job events for a specific job. */
-  getJobEvents: (jobId: number) =>
-    request<JobEvent[]>(`/job-events/${jobId}`),
+  getJobEvents(jobId: number) {
+    return request<JobEvent[]>(`/job-events/${jobId}`);
+  }
 
-  /** Launch remediation. */
-  launchRemediation: (body: LaunchRemediationRequest) =>
-    request<LaunchRemediationResponse>('/remediate', { method: 'POST', body }),
+  launchRemediation(body: LaunchRemediationRequest) {
+    return request<LaunchRemediationResponse>('/remediate', { method: 'POST', body });
+  }
 
-  /** Get dashboard stats. */
-  getDashboardStats: () => request<DashboardStats>('/dashboard'),
+  getDashboardStats() {
+    return request<DashboardStats>('/dashboard');
+  }
 
-  /** Get posture history for trend charts. */
-  getPostureHistory: (profileId?: string, days?: number) => {
+  getPostureHistory(profileId?: string, days?: number) {
     const params = new URLSearchParams();
     if (profileId) params.set('profileId', profileId);
     if (days) params.set('days', String(days));
     const q = params.toString() ? `?${params}` : '';
     return request<PostureSnapshot[]>(`/posture${q}`);
-  },
+  }
 
-  /** List saved remediation profiles. */
-  getRemediationProfiles: () =>
-    request<RemediationProfile[]>('/remediation-profiles'),
+  getRemediationProfiles() {
+    return request<RemediationProfile[]>('/remediation-profiles');
+  }
 
-  /** Save a remediation profile. */
-  saveRemediationProfile: (body: SaveRemediationProfileRequest) =>
-    request<RemediationProfile>('/remediation-profiles', {
+  saveRemediationProfile(body: SaveRemediationProfileRequest) {
+    return request<RemediationProfile>('/remediation-profiles', {
       method: 'POST',
       body,
-    }),
+    });
+  }
 
-  // ─── Cartridge registry ──────────────────────────────────────────
+  getCartridges() {
+    return request<ComplianceCartridge[]>('/cartridges');
+  }
 
-  /** List registered cartridges. */
-  getCartridges: () =>
-    request<ComplianceCartridge[]>('/cartridges'),
+  saveCartridge(body: SaveCartridgeRequest) {
+    return request<ComplianceCartridge>('/cartridges', { method: 'POST', body });
+  }
 
-  /** Save (create or update) a cartridge. */
-  saveCartridge: (body: SaveCartridgeRequest) =>
-    request<ComplianceCartridge>('/cartridges', { method: 'POST', body }),
-
-  /** Delete a cartridge by ID. */
-  deleteCartridge: (id: string) =>
-    request<void>(`/cartridges/${encodeURIComponent(id)}`, {
+  deleteCartridge(id: string) {
+    return request<void>(`/cartridges/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-    }),
+    });
+  }
 
-  // ─── Controller resource lookups (for settings UI) ───────────────
-
-  /** List Controller workflow job templates. */
-  getControllerWorkflowTemplates: () =>
-    request<Array<{ id: number; name: string; description: string }>>(
+  getControllerWorkflowTemplates() {
+    return request<Array<{ id: number; name: string; description: string }>>(
       '/controller/workflow-job-templates',
-    ),
+    );
+  }
 
-  /** List Controller execution environments. */
-  getControllerExecutionEnvironments: () =>
-    request<Array<{ id: number; name: string; image: string }>>(
+  getControllerExecutionEnvironments() {
+    return request<Array<{ id: number; name: string; image: string }>>(
       '/controller/execution-environments',
-    ),
-};
+    );
+  }
+}

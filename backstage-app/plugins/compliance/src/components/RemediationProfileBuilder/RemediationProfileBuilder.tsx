@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   InfoCard,
   Breadcrumbs,
+  Progress,
 } from '@backstage/core-components';
+import { useApi } from '@backstage/core-plugin-api';
 import {
   Typography,
   Button,
@@ -33,9 +35,8 @@ import SaveIcon from '@material-ui/icons/Save';
 import PlayArrowIcon from '@material-ui/icons/PlayArrow';
 import WarningIcon from '@material-ui/icons/Warning';
 import InfoIcon from '@material-ui/icons/Info';
-import type { FindingSeverity } from '@aap-compliance/common';
-import { complianceApi } from '../../api';
-import { MOCK_MULTI_HOST_FINDINGS, type MultiHostFinding } from '../ResultsViewer/mockFindings';
+import type { FindingSeverity, MultiHostFinding } from '@aap-compliance/common';
+import { complianceApiRef } from '../../api';
 
 const useStyles = makeStyles(theme => ({
   findingCard: {
@@ -122,31 +123,59 @@ const severityLabel: Record<FindingSeverity, string> = {
 export const RemediationProfileBuilder = () => {
   const classes = useStyles();
   const navigate = useNavigate();
+  const api = useApi(complianceApiRef);
   const { jobId } = useParams<{ jobId: string }>();
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profileDescription, setProfileDescription] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Fetch findings from the backend (S2: no frontend mock data)
+  const [allFindings, setAllFindings] = useState<MultiHostFinding[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getFindings(jobId)
+      .then(data => {
+        if (!cancelled) setAllFindings(data);
+      })
+      .catch(() => {
+        // Keep empty on error
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [api, jobId]);
+
   const failedFindings = useMemo(
-    () => MOCK_MULTI_HOST_FINDINGS.filter(f => f.failCount > 0),
-    [],
+    () => allFindings.filter(f => f.failCount > 0),
+    [allFindings],
   );
 
-  const [selections, setSelections] = useState<Record<string, RuleSelection>>(() => {
-    const initial: Record<string, RuleSelection> = {};
-    failedFindings.forEach(f => {
-      initial[f.ruleId] = {
-        enabled: f.disruption !== 'high',
-        expanded: false,
-        scope: 'failed_only',
-        parameters: Object.fromEntries(
-          f.parameters.map(p => [p.name, p.default]),
-        ),
-      };
+  const [selections, setSelections] = useState<Record<string, RuleSelection>>({});
+
+  // Initialize selections when findings load
+  useEffect(() => {
+    if (failedFindings.length === 0) return;
+    setSelections(prev => {
+      // Only initialize if empty (avoid resetting user changes)
+      if (Object.keys(prev).length > 0) return prev;
+      const initial: Record<string, RuleSelection> = {};
+      failedFindings.forEach(f => {
+        initial[f.ruleId] = {
+          enabled: f.disruption !== 'high',
+          expanded: false,
+          scope: 'failed_only',
+          parameters: Object.fromEntries(
+            f.parameters.map(p => [p.name, p.default]),
+          ),
+        };
+      });
+      return initial;
     });
-    return initial;
-  });
+  }, [failedFindings]);
 
   const toggleFinding = (ruleId: string) => {
     setSelections(prev => ({
@@ -408,6 +437,17 @@ export const RemediationProfileBuilder = () => {
     );
   };
 
+  if (loading) {
+    return (
+      <Box p={4}>
+        <Progress />
+        <Typography variant="body2" align="center" style={{ marginTop: 16 }}>
+          Loading findings for remediation...
+        </Typography>
+      </Box>
+    );
+  }
+
   return (
     <>
       <Breadcrumbs>
@@ -529,7 +569,7 @@ export const RemediationProfileBuilder = () => {
                     parameters: selections[f.ruleId].parameters,
                   }));
 
-                await complianceApi.saveRemediationProfile({
+                await api.saveRemediationProfile({
                   name: profileName,
                   description: profileDescription,
                   complianceProfileId: 'rhel9-stig',

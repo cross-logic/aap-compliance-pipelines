@@ -187,6 +187,22 @@ export interface ComplianceCartridge {
   updatedAt: string;
 }
 
+/** A group of rules targeting the same host set in a remediation plan. */
+export interface RemediationPlanGroup {
+  tags: string[];
+  limit: string;
+  extraVars: Record<string, unknown>;
+  hostCount: number;
+  ruleCount: number;
+}
+
+/** A compiled remediation plan — rules grouped by target host set for efficient execution. */
+export interface RemediationPlan {
+  groups: RemediationPlanGroup[];
+  totalRules: number;
+  totalHosts: number;
+}
+
 /** Request to create or update a cartridge. */
 export interface SaveCartridgeRequest {
   id?: string;

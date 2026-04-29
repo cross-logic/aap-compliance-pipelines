@@ -4,11 +4,8 @@ info:
   description: |
     Backend API for the AAP Compliance Pipelines Backstage plugin.
     Provides endpoints for compliance scanning, findings retrieval,
-    remediation management, and posture reporting.
-
-    **Status: DRAFT** -- This specification is a placeholder and will be
-    refined as the backend implementation progresses.
-  version: 0.1.0-draft
+    remediation management, cartridge registry, and posture reporting.
+  version: 0.2.0
   contact:
     name: AAP Compliance Team
   license:
@@ -19,6 +16,8 @@ servers:
     description: Local development
 
 tags:
+  - name: health
+    description: Health check
   - name: profiles
     description: Compliance profile management
   - name: findings
@@ -29,9 +28,43 @@ tags:
     description: Remediation management
   - name: posture
     description: Compliance posture reporting
+  - name: dashboard
+    description: Dashboard statistics
+  - name: workflow
+    description: Controller workflow status tracking
+  - name: cartridges
+    description: Cartridge registry
+  - name: controller
+    description: Controller resource lookups
+  - name: remediation-profiles
+    description: Saved remediation profiles
 
 paths:
-  /compliance/profiles:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: Returns the service health status and current data source mode (mock/live).
+      tags:
+        - health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  dataSource:
+                    type: string
+                    enum:
+                      - mock
+                      - live
+
+  /profiles:
     get:
       operationId: listProfiles
       summary: List available compliance profiles
@@ -65,72 +98,66 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ComplianceProfile'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
 
-  /compliance/findings:
+  /inventories:
     get:
-      operationId: getFindings
-      summary: Get scan findings
-      description: Returns findings from a completed compliance scan, optionally filtered by severity or status.
+      operationId: listInventories
+      summary: List Controller inventories
+      description: Returns inventories from the AAP Controller, mapped to a simplified format.
       tags:
-        - findings
+        - controller
+      responses:
+        '200':
+          description: List of inventories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    hostCount:
+                      type: integer
+
+  /workflow-templates:
+    get:
+      operationId: listWorkflowTemplates
+      summary: List compliance workflow templates
+      description: Returns workflow job templates from the Controller, optionally filtered by name.
+      tags:
+        - controller
       parameters:
-        - name: jobId
+        - name: name
           in: query
-          required: true
-          description: AAP job ID of the scan
-          schema:
-            type: string
-        - name: severity
-          in: query
-          description: Filter by severity
-          schema:
-            type: string
-            enum:
-              - CAT_I
-              - CAT_II
-              - CAT_III
-        - name: status
-          in: query
-          description: Filter by finding status
-          schema:
-            type: string
-            enum:
-              - pass
-              - fail
-              - error
-              - notapplicable
-              - notchecked
-        - name: q
-          in: query
-          description: Search by title or STIG ID
+          description: Filter templates by name prefix
           schema:
             type: string
       responses:
         '200':
-          description: Scan findings
+          description: List of workflow templates
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  summary:
-                    $ref: '#/components/schemas/ScanSummary'
-                  findings:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Finding'
-        '404':
-          description: Job not found
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    description:
+                      type: string
 
-  /compliance/scan:
+  /scan:
     post:
       operationId: launchScan
       summary: Launch a compliance scan
-      description: Launches a compliance scan against the specified inventory using the selected profile. Dispatches an AAP job template.
+      description: Launches a compliance scan against the specified inventory using the selected profile. Dispatches an AAP workflow job template.
       tags:
         - scan
       requestBody:
@@ -140,31 +167,132 @@ paths:
             schema:
               $ref: '#/components/schemas/ScanRequest'
       responses:
-        '202':
+        '200':
           description: Scan launched successfully
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  jobId:
-                    type: string
-                    description: AAP job ID for tracking
-                  status:
-                    type: string
-                    enum:
-                      - pending
-                      - running
+                $ref: '#/components/schemas/ScanResponse'
         '400':
-          description: Invalid request
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Invalid request (validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Failed to launch scan
 
-  /compliance/remediate:
+  /findings:
+    get:
+      operationId: getFindings
+      summary: Get scan findings
+      description: Returns findings from a completed compliance scan. If scanId is provided and DB records exist, returns stored findings. Otherwise falls back to the service (mock data in demo mode).
+      tags:
+        - findings
+      parameters:
+        - name: scanId
+          in: query
+          description: Scan ID to retrieve findings for
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Scan findings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MultiHostFinding'
+
+  /workflow-status/{jobId}:
+    get:
+      operationId: getWorkflowStatus
+      summary: Get workflow job status
+      description: Returns the current status of a Controller workflow job, used for polling during scan/remediation execution.
+      tags:
+        - workflow
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: Controller workflow job ID
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Workflow job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowJobStatus'
+        '400':
+          description: Invalid jobId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /workflow-nodes/{jobId}:
+    get:
+      operationId: getWorkflowNodes
+      summary: Get workflow nodes
+      description: Returns the nodes (steps) of a Controller workflow job.
+      tags:
+        - workflow
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: Controller workflow job ID
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Workflow nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkflowNode'
+        '400':
+          description: Invalid jobId
+
+  /job-events/{jobId}:
+    get:
+      operationId: getJobEvents
+      summary: Get job events
+      description: Returns events from a Controller job, used for parsing scan output.
+      tags:
+        - workflow
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: Controller job ID
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Job events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JobEvent'
+        '400':
+          description: Invalid jobId
+
+  /remediate:
     post:
       operationId: applyRemediation
       summary: Apply remediation
-      description: Applies remediation for selected rules with the specified scope and parameters. Dispatches an AAP job template with extra variables.
+      description: |
+        Applies remediation for selected rules. Builds an optimized remediation plan
+        that groups rules by target host set, then launches one workflow per group.
+        Returns the remediation result along with the computed plan.
       tags:
         - remediation
       requestBody:
@@ -174,50 +302,219 @@ paths:
             schema:
               $ref: '#/components/schemas/RemediationRequest'
       responses:
-        '202':
-          description: Remediation launched
+        '200':
+          description: Remediation launched with plan
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  jobId:
-                    type: string
-                  status:
-                    type: string
-                    enum:
-                      - pending
-                      - running
+                allOf:
+                  - $ref: '#/components/schemas/RemediationResponse'
+                  - type: object
+                    properties:
+                      plan:
+                        $ref: '#/components/schemas/RemediationPlan'
         '400':
           description: Invalid request
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
-  /compliance/posture:
+  /dashboard:
+    get:
+      operationId: getDashboardStats
+      summary: Get dashboard statistics
+      description: Returns aggregate compliance statistics for the dashboard view.
+      tags:
+        - dashboard
+      responses:
+        '200':
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStats'
+
+  /posture:
     get:
       operationId: getPosture
-      summary: Get compliance posture summary
-      description: Returns an aggregate compliance posture across all scanned frameworks and hosts.
+      summary: Get compliance posture history
+      description: Returns historical compliance posture snapshots for trend charts.
       tags:
         - posture
       parameters:
-        - name: framework
+        - name: profileId
           in: query
-          description: Filter posture by framework
+          description: Filter by compliance profile ID
           schema:
             type: string
+        - name: days
+          in: query
+          description: Number of days of history (default 30)
+          schema:
+            type: integer
+            default: 30
       responses:
         '200':
-          description: Compliance posture summary
+          description: Posture history
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PostureSummary'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+                type: array
+                items:
+                  $ref: '#/components/schemas/PostureSnapshot'
+
+  /remediation-profiles:
+    get:
+      operationId: listRemediationProfiles
+      summary: List saved remediation profiles
+      description: Returns all saved remediation profiles.
+      tags:
+        - remediation-profiles
+      responses:
+        '200':
+          description: List of remediation profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RemediationProfile'
+    post:
+      operationId: createRemediationProfile
+      summary: Save a remediation profile
+      description: Creates a new remediation profile with the specified selections and parameters.
+      tags:
+        - remediation-profiles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveRemediationProfileRequest'
+      responses:
+        '201':
+          description: Profile created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemediationProfile'
+        '400':
+          description: Invalid request
+
+  /cartridges:
+    get:
+      operationId: listCartridges
+      summary: List registered cartridges
+      description: Returns all registered compliance cartridges.
+      tags:
+        - cartridges
+      responses:
+        '200':
+          description: List of cartridges
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComplianceCartridge'
+    post:
+      operationId: createCartridge
+      summary: Register a cartridge
+      description: Creates or updates a compliance cartridge that maps a framework to Controller resources.
+      tags:
+        - cartridges
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveCartridgeRequest'
+      responses:
+        '201':
+          description: Cartridge created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceCartridge'
+        '400':
+          description: Invalid request
+
+  /cartridges/{id}:
+    delete:
+      operationId: deleteCartridge
+      summary: Delete a cartridge
+      description: Deletes a registered compliance cartridge by ID.
+      tags:
+        - cartridges
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Cartridge deleted
+        '404':
+          description: Cartridge not found
+
+  /controller/workflow-job-templates:
+    get:
+      operationId: listControllerWorkflowJobTemplates
+      summary: List Controller workflow job templates
+      description: Returns workflow job templates from the Controller for the cartridge settings UI.
+      tags:
+        - controller
+      responses:
+        '200':
+          description: List of workflow job templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    description:
+                      type: string
+
+  /controller/execution-environments:
+    get:
+      operationId: listControllerExecutionEnvironments
+      summary: List Controller execution environments
+      description: Returns execution environments from the Controller for the cartridge settings UI.
+      tags:
+        - controller
+      responses:
+        '200':
+          description: List of execution environments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    image:
+                      type: string
 
 components:
   schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+
     ComplianceProfile:
       type: object
       properties:
@@ -256,7 +553,7 @@ components:
           type: string
           example: ComplianceAsCode/content
 
-    Finding:
+    MultiHostFinding:
       type: object
       properties:
         ruleId:
@@ -287,6 +584,41 @@ components:
             - low
             - medium
             - high
+        parameters:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              label:
+                type: string
+              description:
+                type: string
+              type:
+                type: string
+                enum: [string, number, boolean, select]
+              default:
+                oneOf:
+                  - type: string
+                  - type: number
+                  - type: boolean
+              value:
+                oneOf:
+                  - type: string
+                  - type: number
+                  - type: boolean
+              options:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    label:
+                      type: string
+                    value:
+                      oneOf:
+                        - type: string
+                        - type: number
         hosts:
           type: array
           items:
@@ -314,95 +646,186 @@ components:
         expectedValue:
           type: string
 
-    ScanSummary:
+    WorkflowJobStatus:
       type: object
       properties:
-        total:
+        id:
           type: integer
-        pass:
+        status:
+          type: string
+        finished:
+          type: string
+          nullable: true
+          format: date-time
+        failed:
+          type: boolean
+        elapsed:
+          type: number
+        name:
+          type: string
+
+    WorkflowNode:
+      type: object
+      properties:
+        id:
           type: integer
-        fail:
+        summary_fields:
+          type: object
+          properties:
+            job:
+              type: object
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+                status:
+                  type: string
+                type:
+                  type: string
+        identifier:
+          type: string
+
+    JobEvent:
+      type: object
+      properties:
+        id:
           type: integer
-        error:
-          type: integer
-        notapplicable:
-          type: integer
-        notchecked:
-          type: integer
+        event:
+          type: string
+        event_data:
+          type: object
+          additionalProperties: true
+        stdout:
+          type: string
+        host_name:
+          type: string
 
     ScanRequest:
       type: object
       required:
         - profileId
-        - inventory
+        - inventoryId
       properties:
         profileId:
           type: string
           description: ID of the compliance profile to scan against
           example: rhel9-stig
-        inventory:
-          type: string
-          description: AAP inventory name or ID
-          example: production-web-servers
-        limit:
-          type: string
-          description: Host limit pattern (optional)
+        inventoryId:
+          type: integer
+          description: AAP inventory ID
+          example: 1
         evaluateOnly:
           type: boolean
           description: If true, scan only without remediation
           default: true
+        limit:
+          type: string
+          description: Host limit pattern (optional)
+        workflowTemplateId:
+          type: integer
+          description: Override workflow template ID (optional)
+
+    ScanResponse:
+      type: object
+      properties:
+        scanId:
+          type: string
+        workflowJobId:
+          type: integer
+        status:
+          type: string
 
     RemediationRequest:
       type: object
       required:
-        - jobId
+        - profileId
+        - inventoryId
         - selections
       properties:
-        jobId:
+        profileId:
           type: string
-          description: Job ID of the scan whose findings to remediate
+          description: ID of the compliance profile
+        inventoryId:
+          type: integer
+          description: AAP inventory ID
         selections:
           type: array
           items:
-            type: object
-            required:
-              - ruleId
-              - enabled
-            properties:
-              ruleId:
-                type: string
-              enabled:
-                type: boolean
-              scope:
-                type: string
-                enum:
-                  - failed_only
-                  - standardize_all
-                default: failed_only
-              parameters:
-                type: object
-                additionalProperties: true
+            $ref: '#/components/schemas/RemediationSelection'
+        limit:
+          type: string
+          description: Host limit pattern (optional)
 
-    PostureSummary:
+    RemediationResponse:
       type: object
       properties:
-        overallComplianceRate:
-          type: number
-          format: float
-          example: 72.0
+        remediationId:
+          type: string
+        workflowJobId:
+          type: integer
+        status:
+          type: string
+
+    RemediationSelection:
+      type: object
+      required:
+        - ruleId
+        - enabled
+      properties:
+        ruleId:
+          type: string
+        enabled:
+          type: boolean
+        parameters:
+          type: object
+          additionalProperties: true
+
+    RemediationPlan:
+      type: object
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemediationPlanGroup'
+        totalRules:
+          type: integer
+        totalHosts:
+          type: integer
+
+    RemediationPlanGroup:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            type: string
+        limit:
+          type: string
+        extraVars:
+          type: object
+          additionalProperties: true
+        hostCount:
+          type: integer
+        ruleCount:
+          type: integer
+
+    DashboardStats:
+      type: object
+      properties:
         hostsScanned:
           type: integer
-          example: 12
         criticalFindings:
           type: integer
-          example: 8
         pendingRemediation:
           type: integer
-          example: 15
         activeProfiles:
           type: integer
-          example: 3
-        frameworks:
+        recentScans:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentScan'
+        frameworkScores:
           type: array
           items:
             type: object
@@ -411,15 +834,148 @@ components:
                 type: string
               target:
                 type: string
-              ruleCount:
+              rules:
                 type: integer
-              complianceRate:
+              rate:
                 type: number
-                format: float
               lastScan:
                 type: string
-                format: date-time
 
-  responses:
-    Unauthorized:
-      description: Authentication required or token invalid
+    RecentScan:
+      type: object
+      properties:
+        id:
+          type: string
+        profileName:
+          type: string
+        inventoryName:
+          type: string
+        passRate:
+          type: number
+        timestamp:
+          type: string
+        status:
+          type: string
+
+    PostureSnapshot:
+      type: object
+      properties:
+        id:
+          type: string
+        profileId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        totalHosts:
+          type: integer
+        totalRules:
+          type: integer
+        passCount:
+          type: integer
+        failCount:
+          type: integer
+        compliancePct:
+          type: number
+
+    RemediationProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        complianceProfileId:
+          type: string
+        targetInventory:
+          type: string
+        selections:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemediationSelection'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SaveRemediationProfileRequest:
+      type: object
+      required:
+        - name
+        - selections
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        complianceProfileId:
+          type: string
+        selections:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemediationSelection'
+
+    ComplianceCartridge:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        framework:
+          type: string
+        version:
+          type: string
+        platform:
+          type: string
+        workflowTemplateId:
+          type: integer
+          nullable: true
+        eeId:
+          type: integer
+          nullable: true
+        remediationPlaybookPath:
+          type: string
+        scanTags:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SaveCartridgeRequest:
+      type: object
+      required:
+        - displayName
+        - framework
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        framework:
+          type: string
+        version:
+          type: string
+        platform:
+          type: string
+        workflowTemplateId:
+          type: integer
+          nullable: true
+        eeId:
+          type: integer
+          nullable: true
+        remediationPlaybookPath:
+          type: string
+        scanTags:
+          type: string

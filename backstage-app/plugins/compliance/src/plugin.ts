@@ -1,15 +1,25 @@
 import {
   createPlugin,
   createRoutableExtension,
+  createApiFactory,
 } from '@backstage/core-plugin-api';
 
 import { rootRouteRef } from './routes';
+import { complianceApiRef } from './api/complianceApiRef';
+import { ComplianceBackendClient } from './api/ComplianceBackendClient';
 
 export const compliancePlugin = createPlugin({
   id: 'compliance',
   routes: {
     root: rootRouteRef,
   },
+  apis: [
+    createApiFactory({
+      api: complianceApiRef,
+      deps: {},
+      factory: () => new ComplianceBackendClient(),
+    }),
+  ],
 });
 
 export const CompliancePage = compliancePlugin.provide(

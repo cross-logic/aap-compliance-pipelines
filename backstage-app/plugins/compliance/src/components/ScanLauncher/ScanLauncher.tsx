@@ -30,7 +30,8 @@ import {
   makeStyles,
 } from '@material-ui/core';
 import SecurityIcon from '@material-ui/icons/Security';
-import { complianceApi } from '../../api';
+import { useApi } from '@backstage/core-plugin-api';
+import { complianceApiRef } from '../../api';
 
 const useStyles = makeStyles(theme => ({
   stepContent: {
@@ -84,6 +85,7 @@ const steps = ['Select Profile', 'Select Targets', 'Review & Launch'];
 export const ScanLauncher = () => {
   const classes = useStyles();
   const navigate = useNavigate();
+  const api = useApi(complianceApiRef);
   const [searchParams] = useSearchParams();
   const preselectedProfile = searchParams.get('profile') ?? '';
   const [activeStep, setActiveStep] = useState(preselectedProfile ? 1 : 0);
@@ -102,7 +104,7 @@ export const ScanLauncher = () => {
   // Fetch profiles, inventories, and cartridges from the backend on mount
   useEffect(() => {
     // Try to load cartridges from registry first, then merge with built-in profiles
-    complianceApi.getCartridges()
+    api.getCartridges()
       .then(data => {
         setCartridges(data);
         if (data.length > 0) {
@@ -125,7 +127,7 @@ export const ScanLauncher = () => {
         // Keep fallback data on error
       });
 
-    complianceApi.getProfiles()
+    api.getProfiles()
       .then(data =>
         setProfiles(prev => {
           // Only set built-in profiles if no cartridges have been loaded yet
@@ -145,12 +147,12 @@ export const ScanLauncher = () => {
         // Keep fallback data on error
       });
 
-    complianceApi.getInventories()
+    api.getInventories()
       .then(data => setInventories(data))
       .catch(() => {
         // Keep fallback data on error
       });
-  }, []);
+  }, [api]);
 
   const profile = profiles.find(p => p.id === selectedProfile);
   const inventory = inventories.find(i => i.id.toString() === selectedInventory);
@@ -161,7 +163,7 @@ export const ScanLauncher = () => {
       // Check if a cartridge is registered for the selected profile and use
       // its workflow template ID for the scan launch request.
       const cartridge = cartridges.find(c => c.id === selectedProfile);
-      const scanRequest: Parameters<typeof complianceApi.launchScan>[0] = {
+      const scanRequest: Parameters<typeof api.launchScan>[0] = {
         profileId: selectedProfile,
         inventoryId: inventory?.id ?? 0,
         evaluateOnly,
@@ -172,7 +174,7 @@ export const ScanLauncher = () => {
         (scanRequest as Record<string, unknown>).workflowTemplateId =
           cartridge.workflowTemplateId;
       }
-      const result = await complianceApi.launchScan(scanRequest);
+      const result = await api.launchScan(scanRequest);
       // Navigate to results view with the returned workflow job ID
       navigate(`/compliance/results/${result.workflowJobId}`);
     } catch (err) {

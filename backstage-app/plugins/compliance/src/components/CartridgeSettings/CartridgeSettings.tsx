@@ -5,6 +5,7 @@ import {
   Breadcrumbs,
   Progress,
 } from '@backstage/core-components';
+import { useApi } from '@backstage/core-plugin-api';
 import {
   Typography,
   Button,
@@ -31,7 +32,8 @@ import {
 } from '@material-ui/core';
 import AddIcon from '@material-ui/icons/Add';
 import DeleteIcon from '@material-ui/icons/Delete';
-import { complianceApi } from '../../api';
+import SettingsIcon from '@material-ui/icons/Settings';
+import { complianceApiRef } from '../../api';
 
 import type {
   ComplianceCartridge,
@@ -99,6 +101,7 @@ const EMPTY_FORM: SaveCartridgeRequest = {
 export const CartridgeSettings = () => {
   const classes = useStyles();
   const navigate = useNavigate();
+  const api = useApi(complianceApiRef);
 
   const [cartridges, setCartridges] = useState<ComplianceCartridge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,27 +117,27 @@ export const CartridgeSettings = () => {
 
   const loadCartridges = useCallback(async () => {
     try {
-      const data = await complianceApi.getCartridges();
+      const data = await api.getCartridges();
       setCartridges(data);
     } catch {
       // keep empty on error
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [api]);
 
   const loadControllerResources = useCallback(async () => {
     try {
       const [wfts, ees] = await Promise.all([
-        complianceApi.getControllerWorkflowTemplates(),
-        complianceApi.getControllerExecutionEnvironments(),
+        api.getControllerWorkflowTemplates(),
+        api.getControllerExecutionEnvironments(),
       ]);
       setWorkflowTemplates(wfts);
       setExecutionEnvironments(ees);
     } catch {
       // fallback: empty dropdowns
     }
-  }, []);
+  }, [api]);
 
   useEffect(() => {
     loadCartridges();
@@ -154,7 +157,7 @@ export const CartridgeSettings = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await complianceApi.saveCartridge(form);
+      await api.saveCartridge(form);
       handleCloseDialog();
       await loadCartridges();
     } catch {
@@ -167,7 +170,7 @@ export const CartridgeSettings = () => {
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     try {
-      await complianceApi.deleteCartridge(deleteTarget.id);
+      await api.deleteCartridge(deleteTarget.id);
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
       await loadCartridges();
@@ -235,12 +238,22 @@ export const CartridgeSettings = () => {
 
         {cartridges.length === 0 ? (
           <div className={classes.emptyState}>
+            <SettingsIcon style={{ fontSize: 64, color: '#6A6E73', marginBottom: 16 }} />
             <Typography variant="h6" color="textSecondary" gutterBottom>
-              No cartridges registered
+              No compliance cartridges configured
             </Typography>
-            <Typography variant="body2" color="textSecondary">
-              Add a cartridge to map a compliance framework to a Controller workflow template.
+            <Typography variant="body2" color="textSecondary" paragraph>
+              A cartridge maps a compliance framework (e.g., DISA STIG, CIS) to an
+              AAP Controller workflow template and execution environment. Add one to get started.
             </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={handleOpenDialog}
+            >
+              Add Your First Cartridge
+            </Button>
           </div>
         ) : (
           <TableContainer component={Paper} variant="outlined">

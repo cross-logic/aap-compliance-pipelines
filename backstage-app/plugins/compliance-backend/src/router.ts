@@ -23,6 +23,24 @@ export interface RouterOptions {
   database: ComplianceDatabase;
 }
 
+// ─── Validation helpers ────────────────────────────────────────────────
+
+function isNonEmptyString(val: unknown): val is string {
+  return typeof val === 'string' && val.trim().length > 0;
+}
+
+function isPositiveInteger(val: unknown): val is number {
+  return typeof val === 'number' && Number.isInteger(val) && val > 0;
+}
+
+function isBoolean(val: unknown): val is boolean {
+  return typeof val === 'boolean';
+}
+
+function isArray(val: unknown): val is unknown[] {
+  return Array.isArray(val);
+}
+
 export async function createRouter(
   options: RouterOptions,
 ): Promise<express.Router> {
@@ -64,16 +82,38 @@ export async function createRouter(
   // ─── Scan ───────────────────────────────────────────────────────────
 
   router.post('/scan', async (req, res) => {
-    const body = req.body as LaunchScanRequest;
-    logger.info(`Launching scan for profile=${body.profileId}`);
+    const body = req.body;
+
+    // Validate required fields
+    if (!isNonEmptyString(body.profileId)) {
+      res.status(400).json({ error: 'profileId is required and must be a non-empty string' });
+      return;
+    }
+    if (!isPositiveInteger(body.inventoryId)) {
+      res.status(400).json({ error: 'inventoryId is required and must be a positive integer' });
+      return;
+    }
+    if (body.workflowTemplateId !== undefined && body.workflowTemplateId !== null && !isPositiveInteger(body.workflowTemplateId)) {
+      res.status(400).json({ error: 'workflowTemplateId must be a positive integer when provided' });
+      return;
+    }
+
+    const scanRequest: LaunchScanRequest = {
+      profileId: body.profileId,
+      inventoryId: body.inventoryId,
+      evaluateOnly: body.evaluateOnly ?? true,
+      limit: body.limit,
+    };
+
+    logger.info(`Launching scan for profile=${scanRequest.profileId}`);
 
     try {
-      const result = await service.launchScan(body);
+      const result = await service.launchScan(scanRequest);
 
       // Persist the scan record
       await database.createScan({
-        profileId: body.profileId,
-        inventoryId: body.inventoryId,
+        profileId: scanRequest.profileId,
+        inventoryId: scanRequest.inventoryId,
         scanner: 'oscap',
         workflowJobId: result.workflowJobId,
         status: 'pending',
@@ -162,12 +202,53 @@ export async function createRouter(
   // ─── Remediation ────────────────────────────────────────────────────
 
   router.post('/remediate', async (req, res) => {
-    const body = req.body as LaunchRemediationRequest;
-    logger.info(`Launching remediation for profile=${body.profileId}`);
+    const body = req.body;
+
+    // Validate required fields
+    if (!isNonEmptyString(body.profileId)) {
+      res.status(400).json({ error: 'profileId is required and must be a non-empty string' });
+      return;
+    }
+    if (!isPositiveInteger(body.inventoryId)) {
+      res.status(400).json({ error: 'inventoryId is required and must be a positive integer' });
+      return;
+    }
+    if (!isArray(body.selections)) {
+      res.status(400).json({ error: 'selections is required and must be an array' });
+      return;
+    }
+
+    // Validate each selection
+    for (let i = 0; i < body.selections.length; i++) {
+      const sel = body.selections[i];
+      if (!isNonEmptyString(sel?.ruleId)) {
+        res.status(400).json({ error: `selections[${i}].ruleId is required and must be a non-empty string` });
+        return;
+      }
+      if (!isBoolean(sel?.enabled)) {
+        res.status(400).json({ error: `selections[${i}].enabled is required and must be a boolean` });
+        return;
+      }
+    }
+
+    const remediateRequest: LaunchRemediationRequest = {
+      profileId: body.profileId,
+      inventoryId: body.inventoryId,
+      selections: body.selections,
+      limit: body.limit,
+    };
+
+    logger.info(`Launching remediation for profile=${remediateRequest.profileId}`);
 
     try {
-      const result = await service.launchRemediation(body);
-      res.json(result);
+      // Build an optimized remediation plan from the selections
+      const plan = service.buildRemediationPlan(remediateRequest.selections);
+      logger.info(
+        `Remediation plan: ${plan.groups.length} groups, ${plan.totalRules} rules, ${plan.totalHosts} hosts`,
+      );
+
+      const result = await service.launchRemediation(remediateRequest);
+      res.json({ ...result, plan });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       logger.error(`Failed to launch remediation: ${msg}`);
@@ -199,14 +280,27 @@ export async function createRouter(
   });
 
   router.post('/remediation-profiles', async (req, res) => {
-    const body = req.body as SaveRemediationProfileRequest;
-    if (!body.name) {
-      res.status(400).json({ error: 'name is required' });
+    const body = req.body;
+
+    // Validate required fields
+    if (!isNonEmptyString(body.name)) {
+      res.status(400).json({ error: 'name is required and must be a non-empty string' });
+      return;
+    }
+    if (!isArray(body.selections)) {
+      res.status(400).json({ error: 'selections is required and must be an array' });
       return;
     }
 
+    const saveRequest: SaveRemediationProfileRequest = {
+      name: body.name,
+      description: body.description ?? '',
+      complianceProfileId: body.complianceProfileId ?? '',
+      selections: body.selections,
+    };
+
     try {
-      const profile = await service.saveRemediationProfile(body);
+      const profile = await service.saveRemediationProfile(saveRequest);
       res.status(201).json(profile);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -223,14 +317,37 @@ export async function createRouter(
   });
 
   router.post('/cartridges', async (req, res) => {
-    const body = req.body as SaveCartridgeRequest;
-    if (!body.displayName || !body.framework) {
-      res.status(400).json({ error: 'displayName and framework are required' });
+    const body = req.body;
+
+    // Validate required fields
+    if (!isNonEmptyString(body.displayName)) {
+      res.status(400).json({ error: 'displayName is required and must be a non-empty string' });
+      return;
+    }
+    if (!isNonEmptyString(body.framework)) {
+      res.status(400).json({ error: 'framework is required and must be a non-empty string' });
+      return;
+    }
+    if (body.workflowTemplateId !== undefined && body.workflowTemplateId !== null && !isPositiveInteger(body.workflowTemplateId)) {
+      res.status(400).json({ error: 'workflowTemplateId must be a positive integer when provided' });
       return;
     }
 
+    const saveRequest: SaveCartridgeRequest = {
+      id: body.id,
+      displayName: body.displayName,
+      description: body.description ?? '',
+      framework: body.framework,
+      version: body.version ?? '',
+      platform: body.platform ?? '',
+      workflowTemplateId: body.workflowTemplateId ?? null,
+      eeId: body.eeId ?? null,
+      remediationPlaybookPath: body.remediationPlaybookPath ?? '',
+      scanTags: body.scanTags ?? '',
+    };
+
     try {
-      const cartridge = await database.saveCartridge(body);
+      const cartridge = await database.saveCartridge(saveRequest);
       res.status(201).json(cartridge);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);

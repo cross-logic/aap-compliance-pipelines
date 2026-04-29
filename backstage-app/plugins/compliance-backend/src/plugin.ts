@@ -59,6 +59,15 @@ export const complianceBackendPlugin = createBackendPlugin({
         });
 
         httpRouter.use(router);
+
+        // TODO(RBAC): Replace with authenticated policy once RBAC integration
+        // is implemented. This is intentional for the prototype phase — all
+        // routes are unauthenticated to allow demo/testing without an OAuth
+        // provider configured. Production deployment requires:
+        //   1. OAuth2 + PKCE auth via AAP Gateway (auth-backend-module-rhaap-provider)
+        //   2. Backstage permissions framework integration for per-user RBAC
+        //   3. User identity resolution from AAP OAuth session
+        // See: architect-review-final.md B1, handbook Section 3 & 4.
         httpRouter.addAuthPolicy({
           path: '/',
           allow: 'unauthenticated',
