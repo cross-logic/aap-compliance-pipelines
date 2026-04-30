@@ -53,6 +53,9 @@ ansible:
 
 auth:
   signingKey: ${AUTH_SIGNING_KEY}
+  providers:
+    guest:
+      dangerouslyAllowOutsideDevelopment: true
 
 # GitHub integration (optional)
 integrations:

@@ -68,17 +68,25 @@ type ExecutionPhase = 'preparing' | 'running' | 'verifying' | 'complete' | 'fail
 
 const PHASES = ['Preparing', 'Remediating', 'Verifying', 'Complete'];
 
-const INITIAL_TASKS = [
-  { name: 'Set SSH Client Alive Interval', stigId: 'V-257844', status: 'pending' as const },
-  { name: 'Disable SSH Root Login', stigId: 'V-257846', status: 'pending' as const },
-  { name: 'Set Account Session Timeout', stigId: 'V-257893', status: 'pending' as const },
-  { name: 'Audit DAC Permission Changes — chmod', stigId: 'V-257910', status: 'pending' as const },
-  { name: 'Configure System Cryptography Policy', stigId: 'V-257778', status: 'pending' as const },
-  { name: 'Install AIDE', stigId: 'V-257780', status: 'pending' as const },
-  { name: 'Set GRUB2 Boot Loader Password', stigId: 'V-257785', status: 'pending' as const },
-  { name: 'Disable Ctrl-Alt-Del Reboot', stigId: 'V-257790', status: 'pending' as const },
-  { name: 'Mount /tmp with noexec', stigId: 'V-257793', status: 'pending' as const },
-  { name: 'Configure Login Banner', stigId: 'V-257795', status: 'pending' as const },
+type TaskStatus = 'pending' | 'running' | 'completed';
+
+interface RemediationTask {
+  name: string;
+  stigId: string;
+  status: TaskStatus;
+}
+
+const INITIAL_TASKS: RemediationTask[] = [
+  { name: 'Set SSH Client Alive Interval', stigId: 'V-257844', status: 'pending' },
+  { name: 'Disable SSH Root Login', stigId: 'V-257846', status: 'pending' },
+  { name: 'Set Account Session Timeout', stigId: 'V-257893', status: 'pending' },
+  { name: 'Audit DAC Permission Changes — chmod', stigId: 'V-257910', status: 'pending' },
+  { name: 'Configure System Cryptography Policy', stigId: 'V-257778', status: 'pending' },
+  { name: 'Install AIDE', stigId: 'V-257780', status: 'pending' },
+  { name: 'Set GRUB2 Boot Loader Password', stigId: 'V-257785', status: 'pending' },
+  { name: 'Disable Ctrl-Alt-Del Reboot', stigId: 'V-257790', status: 'pending' },
+  { name: 'Mount /tmp with noexec', stigId: 'V-257793', status: 'pending' },
+  { name: 'Configure Login Banner', stigId: 'V-257795', status: 'pending' },
 ];
 
 export const RemediationExecution = () => {

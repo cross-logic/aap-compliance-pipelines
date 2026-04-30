@@ -13,5 +13,8 @@
   "devDependencies": {
     "@backstage/cli": "^0.34.6",
     "typescript": "~5.8.0"
+  },
+  "scripts": {
+    "build": "backstage-cli package build"
   }
 }

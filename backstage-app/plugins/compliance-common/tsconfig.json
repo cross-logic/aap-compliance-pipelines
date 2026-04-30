@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "declarationDir": "../../dist-types/plugins/compliance-common/src"
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
