@@ -106,62 +106,31 @@ export const ScanLauncher = () => {
   const [launching, setLaunching] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
-  // Backend-fetched data
-  const [profiles, setProfiles] = useState(FALLBACK_PROFILES);
-  const [inventories, setInventories] = useState(FALLBACK_INVENTORIES);
+  // Backend-fetched data — start empty, no hardcoded fallback
+  const [profiles, setProfiles] = useState<typeof FALLBACK_PROFILES>([]);
+  const [inventories, setInventories] = useState<typeof FALLBACK_INVENTORIES>([]);
   const [cartridges, setCartridges] = useState<ComplianceCartridge[]>([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
-  // Fetch profiles, inventories, and cartridges from the backend on mount
   useEffect(() => {
-    // Try to load cartridges from registry first, then merge with built-in profiles
-    api.getCartridges()
-      .then(data => {
-        setCartridges(data);
-        if (data.length > 0) {
-          // When cartridges are registered, use them as profile sources
-          const cartridgeProfiles = data.map(c => ({
-            id: c.id,
-            name: c.displayName,
-            version: c.version || '',
-            rules: 0,
-          }));
-          setProfiles(prev => {
-            // Merge: cartridge-sourced profiles + any built-in that don't overlap
-            const cartridgeIds = new Set(cartridgeProfiles.map(p => p.id));
-            const remaining = prev.filter(p => !cartridgeIds.has(p.id));
-            return [...cartridgeProfiles, ...remaining];
-          });
-        }
-      })
-      .catch(() => {
-        // Keep fallback data on error
-      });
-
-    api.getProfiles()
-      .then(data =>
-        setProfiles(prev => {
-          // Only set built-in profiles if no cartridges have been loaded yet
-          const builtIn = data.map(p => ({
-            id: p.id,
-            name: p.name,
-            version: p.version,
-            rules: p.ruleCount,
-          }));
-          // Merge with any existing cartridge-sourced profiles
-          const existingIds = new Set(prev.map(p => p.id));
-          const newOnes = builtIn.filter(p => !existingIds.has(p.id));
-          return [...prev, ...newOnes];
-        }),
-      )
-      .catch(() => {
-        // Keep fallback data on error
-      });
-
-    api.getInventories()
-      .then(data => setInventories(data))
-      .catch(() => {
-        // Keep fallback data on error
-      });
+    Promise.all([
+      api.getCartridges().catch(() => [] as ComplianceCartridge[]),
+      api.getInventories().catch(() => [] as Array<{ id: number; name: string; hostCount: number }>),
+    ]).then(([cartridgeData, inventoryData]) => {
+      setCartridges(cartridgeData);
+      if (cartridgeData.length > 0) {
+        setProfiles(cartridgeData.map(c => ({
+          id: c.id,
+          name: c.displayName,
+          version: c.version || '',
+          rules: 0,
+        })));
+      }
+      if (inventoryData.length > 0) {
+        setInventories(inventoryData);
+      }
+      setDataLoaded(true);
+    });
   }, [api]);
 
   const profile = profiles.find(p => p.id === selectedProfile);

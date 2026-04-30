@@ -174,11 +174,9 @@ export const ProfileBrowser = () => {
   const api = useApi(complianceApiRef);
   const { profileId } = useParams<{ profileId?: string }>();
 
-  const [profiles, setProfiles] = useState<DisplayProfile[]>(BUILTIN_PROFILES);
+  const [profiles, setProfiles] = useState<DisplayProfile[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch cartridges from the compliance profile registry on mount.
-  // Registry profiles take precedence; built-in profiles fill in as fallback.
   useEffect(() => {
     let cancelled = false;
 
@@ -187,22 +185,17 @@ export const ProfileBrowser = () => {
         if (cancelled) return;
 
         if (cartridges.length > 0) {
-          // Map cartridges to display format, using framework-appropriate icons
           const registryProfiles = cartridges.map(c => ({
             ...cartridgeToDisplayProfile(c),
             icon: frameworkIcon(c.framework),
           }));
-
-          // Merge: registry profiles first, then built-in profiles whose IDs
-          // don't collide with any registry entry (fallback for non-overlapping)
-          const registryIds = new Set(registryProfiles.map(p => p.id));
-          const remaining = BUILTIN_PROFILES.filter(p => !registryIds.has(p.id));
-          setProfiles([...registryProfiles, ...remaining]);
+          setProfiles(registryProfiles);
+        } else {
+          setProfiles([]);
         }
-        // If no cartridges registered, keep BUILTIN_PROFILES (initial state)
       })
       .catch(() => {
-        // On error, keep the built-in fallback profiles
+        setProfiles([]);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -378,6 +371,25 @@ export const ProfileBrowser = () => {
 
         <Box mt={3} />
 
+        {profiles.length === 0 ? (
+          <Box textAlign="center" py={6}>
+            <SecurityIcon style={{ fontSize: 64, color: '#6A6E73', marginBottom: 16 }} />
+            <Typography variant="h6" color="textSecondary" gutterBottom>
+              No compliance profiles registered
+            </Typography>
+            <Typography variant="body2" color="textSecondary" paragraph>
+              Add a compliance profile in Settings to map a standard (e.g., DISA STIG)
+              to a workflow job template and execution environment.
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => navigate('/compliance/settings')}
+            >
+              Go to Settings
+            </Button>
+          </Box>
+        ) : (
         <Grid container spacing={3}>
           {profiles.map(profile => (
             <Grid item xs={12} sm={6} md={4} key={profile.id}>
@@ -445,6 +457,7 @@ export const ProfileBrowser = () => {
             </Grid>
           ))}
         </Grid>
+        )}
     </>
   );
 };

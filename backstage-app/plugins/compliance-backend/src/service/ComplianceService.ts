@@ -119,8 +119,10 @@ export class ComplianceService {
   // ─── Profiles ───────────────────────────────────────────────────────
 
   async getProfiles(): Promise<ComplianceProfile[]> {
-    // Profiles are always static metadata in both modes
-    return MockDataProvider.getProfiles();
+    if (this.dataSource === 'mock') {
+      return MockDataProvider.getProfiles();
+    }
+    return [];
   }
 
   // ─── Inventories ────────────────────────────────────────────────────
@@ -732,8 +734,17 @@ export class ComplianceService {
   // ─── Dashboard ──────────────────────────────────────────────────────
 
   async getDashboardStats(): Promise<DashboardStats> {
-    // Always mock for now — in production this reads from the database
-    return MockDataProvider.getDashboardStats();
+    if (this.dataSource === 'mock') {
+      return MockDataProvider.getDashboardStats();
+    }
+    return {
+      hostsScanned: 0,
+      criticalFindings: 0,
+      pendingRemediation: 0,
+      activeProfiles: 0,
+      recentScans: [],
+      frameworkScores: [],
+    };
   }
 
   // ─── Posture history ────────────────────────────────────────────────
@@ -742,13 +753,19 @@ export class ComplianceService {
     profileId?: string,
     days?: number,
   ): Promise<PostureSnapshot[]> {
-    return MockDataProvider.getPostureHistory(profileId, days);
+    if (this.dataSource === 'mock') {
+      return MockDataProvider.getPostureHistory(profileId, days);
+    }
+    return [];
   }
 
   // ─── Remediations (saved rule selections) ──────────────────────────
 
   async getRemediationProfiles(): Promise<RemediationProfile[]> {
-    return MockDataProvider.getRemediationProfiles();
+    if (this.dataSource === 'mock') {
+      return MockDataProvider.getRemediationProfiles();
+    }
+    return [];
   }
 
   async saveRemediationProfile(
