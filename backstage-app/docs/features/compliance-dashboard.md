@@ -19,7 +19,7 @@ Four stat cards showing:
 - **Hosts Scanned** -- total hosts across all inventories
 - **Critical (CAT I)** -- count of CAT I severity findings (red)
 - **Pending Remediation** -- rules awaiting remediation (yellow)
-- **Active Profiles** -- saved remediation profiles (green)
+- **Active Profiles** -- registered compliance profiles (green)
 
 ### 3. Quick Actions and Recent Scans
 
@@ -27,7 +27,7 @@ Side-by-side layout:
 - **Quick Actions** -- clickable cards to launch a new scan or browse profiles
 - **Recent Scans** -- list of recent scan results with profile name, target, pass rate, and age
 
-### 4. Active Compliance Frameworks
+### 4. Active Compliance Profiles
 
 Cards for each active framework showing target OS, rule count, compliance percentage bar, and last scan time.
 

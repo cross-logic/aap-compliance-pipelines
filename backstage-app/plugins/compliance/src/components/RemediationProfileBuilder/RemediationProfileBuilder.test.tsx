@@ -12,7 +12,7 @@ jest.mock('react-router-dom', () => ({
 describe('RemediationProfileBuilder', () => {
   it('renders without crashing', async () => {
     const { getByText } = await renderInTestApp(<RemediationProfileBuilder />);
-    expect(getByText('Remediation Profile')).toBeInTheDocument();
+    expect(getByText('Remediation')).toBeInTheDocument();
   });
 
   it('displays the summary bar with rule counts', async () => {
@@ -42,27 +42,25 @@ describe('RemediationProfileBuilder', () => {
     expect(getByText(/Apply Remediation/)).toBeInTheDocument();
   });
 
-  it('displays the save as profile button', async () => {
+  it('displays the save remediation button', async () => {
     const { getByText } = await renderInTestApp(<RemediationProfileBuilder />);
-    expect(getByText('Save as Profile')).toBeInTheDocument();
+    expect(getByText('Save Remediation')).toBeInTheDocument();
   });
 
-  it('opens save dialog when Save as Profile is clicked', async () => {
+  it('opens save dialog when Save Remediation is clicked', async () => {
     const { getByText } = await renderInTestApp(<RemediationProfileBuilder />);
-    const saveButton = getByText('Save as Profile');
+    const saveButton = getByText('Save Remediation');
     fireEvent.click(saveButton);
-    expect(getByText('Save Remediation Profile')).toBeInTheDocument();
-    expect(getByText(/Save your selections/)).toBeInTheDocument();
+    expect(getByText('Save Remediation')).toBeInTheDocument();
+    expect(getByText(/Save your rule selections/)).toBeInTheDocument();
   });
 
   it('toggles all rules when Select All is clicked', async () => {
     const { getByText } = await renderInTestApp(<RemediationProfileBuilder />);
     const clearAllButton = getByText('Clear All');
     fireEvent.click(clearAllButton);
-    // After clearing, the skipped count should equal total rules with failures
     const selectAllButton = getByText('Select All');
     fireEvent.click(selectAllButton);
-    // After selecting all, skipped should be 0
     expect(getByText(/0/)).toBeInTheDocument();
   });
 });

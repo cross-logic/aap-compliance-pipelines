@@ -28,9 +28,9 @@ describe('ComplianceDashboard', () => {
     expect(getByText('RHEL 9 STIG V2R8')).toBeInTheDocument();
   });
 
-  it('displays active compliance frameworks', async () => {
+  it('displays active compliance profiles', async () => {
     const { getByText } = await renderInTestApp(<ComplianceDashboard />);
-    expect(getByText('Active Compliance Frameworks')).toBeInTheDocument();
+    expect(getByText('Active Compliance Profiles')).toBeInTheDocument();
     expect(getByText('DISA STIG V2R8')).toBeInTheDocument();
     expect(getByText('CIS Benchmark L1')).toBeInTheDocument();
     expect(getByText('PCI-DSS v4.0')).toBeInTheDocument();

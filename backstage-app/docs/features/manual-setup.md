@@ -1,13 +1,13 @@
-# Manual Controller Setup for Compliance Pipeline
+# Manual Automation Controller Setup for Compliance Pipeline
 
-Step-by-step instructions for manually configuring the AAP Controller resources
-required by the compliance pipeline. Use this guide if you cannot run the
-automated `setup_controller.yml` playbook.
+Step-by-step instructions for manually configuring the automation controller
+resources required by the compliance pipeline. Use this guide if you cannot run
+the automated `setup_controller.yml` playbook.
 
 ## Prerequisites
 
 - Red Hat Ansible Automation Platform 2.6 with admin access
-- A container registry accessible from automation controller (for the compliance EE)
+- A container registry accessible from the automation controller (for the compliance EE)
 - SSH access to target RHEL 9 hosts
 - The compliance pipeline repository cloned or available as a Git URL
 
@@ -52,7 +52,7 @@ automated `setup_controller.yml` playbook.
 9. Save
 10. Wait for the project sync to complete (green checkmark)
 
-## Step 5: Register Execution Environment
+## Step 5: Register the execution environment
 
 1. Navigate to **Administration > Execution Environments**
 2. Click **Add**
@@ -132,7 +132,7 @@ Create each of the following job templates:
 ## Step 7: Create Workflow Job Template
 
 1. Navigate to **Resources > Templates**
-2. Click **Add > Add workflow template**
+2. Click **Add > Add workflow job template**
 3. Name: `compliance-scan-rhel9-stig`
 4. Organization: `compliance-prototype`
 5. Check **Prompt on launch** for Inventory, Limit, and Variables
@@ -195,7 +195,7 @@ which platform resources to invoke.
 ### Field Reference
 
 **Remediation Playbook Path** — This is the filesystem path inside the
-Execution Environment where the CaC remediation playbook is located.
+execution environment where the CaC remediation playbook is located.
 The `scap-security-guide` RPM installs pre-rendered Ansible playbooks at
 `/usr/share/scap-security-guide/ansible/`. Each profile has its own playbook:
 
@@ -219,7 +219,7 @@ rule ID (e.g., `sshd_set_idle_timeout`, `DISA-STIG-RHEL-09-255040`).
 1. Go to the **New Scan** tab
 2. You should see the registered profile in the profile list
 3. Select it, choose an inventory, and launch a scan
-4. The scan should use the mapped workflow template from the profile
+4. The scan should use the mapped workflow job template from the profile
 
 ## Automated Setup
 

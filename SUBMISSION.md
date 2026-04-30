@@ -135,7 +135,7 @@ Two PRs are needed:
    cd ansible-backstage-plugins
    gh pr create --repo ansible/ansible-backstage-plugins \
      --title "feat: compliance pipelines plugin" \
-     --body "Adds compliance scanning, findings review, and remediation profile builder plugins"
+     --body "Adds compliance scanning, findings review, and remediation builder plugins"
    ```
 
 2. **Downstream PR** (specs + docs): PR to `ansible/ansible-rhdh-plugins` from the feature branch

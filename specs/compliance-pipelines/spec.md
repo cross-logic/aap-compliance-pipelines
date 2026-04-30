@@ -57,39 +57,39 @@ Security officers and compliance auditors need to review scan findings at both t
 2. **Given** the findings list, **When** the officer views a specific finding, **Then** they see the rule ID, title, description, severity category, pass/fail counts per host (e.g., "18/20 pass, 2/20 fail"), and the expected baseline value
 3. **Given** a finding with mixed host results, **When** the officer expands the host detail view, **Then** they see each host listed with its compliance status (pass/fail/error/not-applicable) and the actual observed value on that host (e.g., "host-2: TMOUT=300, expected: 600")
 4. **Given** the findings view, **When** the officer filters by severity category or compliance status (pass/fail), **Then** the findings list updates to show only matching results and the summary counts reflect the filtered set
-5. **Given** a finding that failed on a small subset of hosts, **When** the officer views the host detail, **Then** the portal displays a homogeneity advisory suggesting the outlier hosts may belong to a different inventory or require a separate remediation profile
+5. **Given** a finding that failed on a small subset of hosts, **When** the officer views the host detail, **Then** the portal displays a homogeneity advisory suggesting the outlier hosts may belong to a different inventory or require a separate remediation
 
 ---
 
-### User Story 4 - Admin Builds a Remediation Profile with Selective Rule Toggles (Priority: P1)
+### User Story 4 - Admin Builds a Remediation with Selective Rule Toggles (Priority: P1)
 
-After reviewing scan findings, platform administrators need to build a remediation profile that specifies exactly which failing rules to remediate, which hosts to target, and what parameter values to apply. Not all failing rules should be remediated — some may have business justifications for non-compliance, and some parameter values may need to differ from the benchmark default. The remediation profile captures these institutional decisions.
+After reviewing scan findings, platform administrators need to build a remediation that specifies exactly which failing rules to remediate, which hosts to target, and what parameter values to apply. Not all failing rules should be remediated — some may have business justifications for non-compliance, and some parameter values may need to differ from the benchmark default. The remediation captures these institutional decisions.
 
 **Why this priority**: This is the core differentiator of the compliance pipeline. Competitors (Puppet SCE, Chef Compliance) offer all-or-nothing remediation. The ability to selectively toggle individual rules, override parameter values, and choose between "remediate failed only" versus "standardize all hosts" is the key UX innovation that justifies building this as a portal feature rather than using raw Ansible playbooks.
 
-**Independent Test**: From scan findings, toggle individual rules on/off for remediation, override a parameter value on one rule, select "remediate failed hosts only" for another, and verify the resulting remediation profile accurately reflects these selections when previewed.
+**Independent Test**: From scan findings, toggle individual rules on/off for remediation, override a parameter value on one rule, select "remediate failed hosts only" for another, and verify the resulting remediation accurately reflects these selections when previewed.
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed scan with findings, **When** the admin clicks "Build Remediation Profile", **Then** they see a profile builder showing all failing rules with toggles to include/exclude each rule from remediation, defaulting to all rules included
-2. **Given** the profile builder, **When** the admin toggles a rule off, **Then** that rule is excluded from the remediation plan and visually marked as skipped with an optional text field for the justification
+1. **Given** a completed scan with findings, **When** the admin clicks "Build Remediation", **Then** they see the remediation builder showing all failing rules with toggles to include/exclude each rule from remediation, defaulting to all rules included
+2. **Given** the remediation builder, **When** the admin toggles a rule off, **Then** that rule is excluded from the remediation plan and visually marked as skipped with an optional text field for the justification
 3. **Given** a rule included in remediation, **When** the admin clicks the rule detail, **Then** they see options for: remediation scope ("Failed hosts only" or "All hosts — standardize"), parameter value override (pre-filled with the benchmark default, editable), and a preview of which hosts will be affected
-4. **Given** a profile with mixed selections (some rules on, some off, some with parameter overrides), **When** the admin clicks "Preview Plan", **Then** they see a summary showing the total number of rules to remediate, total hosts affected, and a matrix of rule-by-host actions that will be taken
-5. **Given** a completed remediation profile, **When** the admin reviews the execution plan, **Then** the plan uses dynamic host grouping (hosts grouped by remediation need) rather than individual per-host-per-rule jobs, demonstrating scalable execution architecture
+4. **Given** a remediation with mixed selections (some rules on, some off, some with parameter overrides), **When** the admin clicks "Preview Plan", **Then** they see a summary showing the total number of rules to remediate, total hosts affected, and a matrix of rule-by-host actions that will be taken
+5. **Given** a completed remediation, **When** the admin reviews the execution plan, **Then** the plan uses dynamic host grouping (hosts grouped by remediation need) rather than individual per-host-per-rule jobs, demonstrating scalable execution architecture
 
 ---
 
 ### User Story 5 - Admin Executes Remediation Against Selected Hosts (Priority: P2)
 
-After building and reviewing a remediation profile, the administrator needs to execute the remediation against the targeted hosts. Execution must use the AAP workflow engine with appropriate job parameters derived from the profile, including `--limit` for host targeting, `--tags` for selective rule application, and `--extra-vars` for parameter overrides.
+After building and reviewing a remediation, the administrator needs to execute the remediation against the targeted hosts. Execution must use the AAP workflow engine with appropriate job parameters derived from the remediation, including `--limit` for host targeting, `--tags` for selective rule application, and `--extra-vars` for parameter overrides.
 
-**Why this priority**: Execution is essential for completing the compliance loop, but it is logically dependent on the profile builder (P1). The remediation execution workflow already exists in AAP — the portal's job is to translate profile decisions into the correct workflow invocation parameters.
+**Why this priority**: Execution is essential for completing the compliance loop, but it is logically dependent on the remediation builder (P1). The remediation execution workflow already exists in AAP — the portal's job is to translate remediation decisions into the correct workflow invocation parameters.
 
-**Independent Test**: Build a remediation profile with selective rules and parameter overrides, execute it, verify the correct AAP workflow job is launched with the appropriate limit, tags, and extra variables, and confirm a verification re-scan is triggered after remediation completes.
+**Independent Test**: Build a remediation with selective rules and parameter overrides, execute it, verify the correct AAP workflow job is launched with the appropriate limit, tags, and extra variables, and confirm a verification re-scan is triggered after remediation completes.
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed remediation profile, **When** the admin clicks "Execute Remediation", **Then** the portal displays a confirmation dialog showing the number of rules, number of hosts, estimated execution time, and a warning that this will modify target host configurations
+1. **Given** a completed remediation, **When** the admin clicks "Execute Remediation", **Then** the portal displays a confirmation dialog showing the number of rules, number of hosts, estimated execution time, and a warning that this will modify target host configurations
 2. **Given** the admin confirms execution, **When** the portal launches the remediation, **Then** it invokes the mapped AAP workflow remediate node via the Gateway API with `--limit` set to the target hosts, `--tags` matching the selected rules, and `--extra-vars` containing any parameter overrides
 3. **Given** remediation is in progress, **When** the admin views the compliance dashboard, **Then** they see real-time progress of the remediation job with per-host status updates
 4. **Given** remediation completes successfully, **When** the workflow finishes, **Then** the portal automatically triggers a verification re-scan against the remediated hosts using the same compliance profile, and the new scan results are compared against the pre-remediation baseline
@@ -97,20 +97,20 @@ After building and reviewing a remediation profile, the administrator needs to e
 
 ---
 
-### User Story 6 - Admin Saves and Reuses Remediation Profiles (Priority: P2)
+### User Story 6 - Admin Saves and Reuses Remediations (Priority: P2)
 
-Remediation profiles encode institutional knowledge — which rules to enforce, which to skip, and what parameter values to use. Administrators need to save these profiles as named, reusable artifacts so that remediation decisions made during one scan cycle carry forward to future scans without repeating the triage process.
+Remediations encode institutional knowledge — which rules to enforce, which to skip, and what parameter values to use. Administrators need to save remediations as named, reusable artifacts so that remediation decisions made during one scan cycle carry forward to future scans without repeating the triage process.
 
-**Why this priority**: Profile reuse is critical for operational efficiency in environments with regular compliance scan cycles (monthly, quarterly). Without persistence, administrators waste time re-making the same decisions every cycle and risk inconsistent remediation across scan periods.
+**Why this priority**: Remediation reuse is critical for operational efficiency in environments with regular compliance scan cycles (monthly, quarterly). Without persistence, administrators waste time re-making the same decisions every cycle and risk inconsistent remediation across scan periods.
 
-**Independent Test**: Build a remediation profile, save it with a name and description, run a new scan, apply the saved profile to the new findings, and verify the same rule selections and parameter overrides are applied without manual re-entry.
+**Independent Test**: Build a remediation, save it with a name and description, run a new scan, apply the saved remediation to the new findings, and verify the same rule selections and parameter overrides are applied without manual re-entry.
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed remediation profile, **When** the admin clicks "Save Profile", **Then** they are prompted for a profile name, description, and optional tags, and the profile is persisted to the compliance database
-2. **Given** saved profiles exist, **When** the admin navigates to Compliance > Profiles, **Then** they see a list of saved profiles with name, compliance standard, creation date, last used date, and number of rules configured
-3. **Given** a new scan has completed with findings, **When** the admin clicks "Apply Profile" and selects a saved profile, **Then** the profile builder pre-populates with the saved selections (rule toggles, parameter overrides, scope settings) and highlights any new findings not covered by the saved profile
-4. **Given** a saved profile applied to new findings, **When** new rules appear that were not in the original profile, **Then** those new rules are flagged as "Unreviewed" and default to included, requiring explicit admin decision
+1. **Given** a completed remediation, **When** the admin clicks "Save Remediation", **Then** they are prompted for a name, description, and optional tags, and the remediation is persisted to the compliance database
+2. **Given** saved remediations exist, **When** the admin navigates to Compliance > Remediations, **Then** they see a list of saved remediations with name, compliance standard, creation date, last used date, and number of rules configured
+3. **Given** a new scan has completed with findings, **When** the admin clicks "Apply Remediation" and selects a saved remediation, **Then** the remediation builder pre-populates with the saved selections (rule toggles, parameter overrides, scope settings) and highlights any new findings not covered by the saved remediation
+4. **Given** a saved remediation applied to new findings, **When** new rules appear that were not in the original remediation, **Then** those new rules are flagged as "Unreviewed" and default to included, requiring explicit admin decision
 
 ---
 
@@ -126,7 +126,7 @@ Security officers and compliance auditors need to export scan findings and remed
 
 1. **Given** a completed scan with findings, **When** the admin clicks "Export Findings", **Then** they see format options (CSV, JSON) and scope options (all findings, filtered findings, selected findings only)
 2. **Given** CSV export selected, **When** the admin clicks "Download", **Then** a CSV file is generated containing columns for: scan ID, scan date, rule ID, rule title, severity (CAT I/II/III), host, compliance status, actual value, expected value, and remediation status
-3. **Given** JSON export selected, **When** the admin clicks "Download", **Then** a JSON file is generated with a structured schema including scan metadata, finding details, host-level results, and remediation profile associations
+3. **Given** JSON export selected, **When** the admin clicks "Download", **Then** a JSON file is generated with a structured schema including scan metadata, finding details, host-level results, and remediation associations
 4. **Given** an export in either format, **When** the exported data is reviewed, **Then** it contains no secrets, tokens, or internal infrastructure details beyond hostname and compliance status
 
 ---
@@ -144,7 +144,7 @@ Automation architects need infrastructure changes (new host provisioned, configu
 1. **Given** a registered compliance profile and a configured EDA rulebook, **When** an infrastructure change event is received by EDA (e.g., new host added to inventory, configuration drift webhook), **Then** EDA triggers the compliance scan workflow via the AAP Gateway API using the mapped compliance profile
 2. **Given** an event-driven scan is triggered, **When** the scan completes, **Then** the findings are stored in the same compliance database and appear in the same dashboard as manually launched scans, with the trigger source marked as "event-driven" rather than "manual"
 3. **Given** continuous event-driven scanning is active, **When** multiple events arrive within a configurable cooldown window (e.g., 5 minutes), **Then** they are batched into a single scan rather than triggering redundant concurrent scans
-4. **Given** event-driven scanning, **When** a scan finds CAT I (critical) failures, **Then** the portal can optionally trigger an automatic remediation using a saved remediation profile if the compliance profile is configured for auto-remediation mode
+4. **Given** event-driven scanning, **When** a scan finds CAT I (critical) failures, **Then** the portal can optionally trigger an automatic remediation using a saved remediation if the compliance profile is configured for auto-remediation mode
 
 ---
 
@@ -154,8 +154,8 @@ Automation architects need infrastructure changes (new host provisioned, configu
 - **Scan against empty inventory**: What happens when a scan is launched against an inventory with zero reachable hosts? The AAP workflow completes with zero findings, the portal displays "No hosts reachable" with the inventory name, and the scan is recorded in history with a "no results" status
 - **Partial host failures**: What happens when a scan succeeds on 18 of 20 hosts but 2 hosts are unreachable? Findings are stored for the 18 successful hosts, the 2 unreachable hosts are listed with "unreachable" status, and the scan is marked "completed with warnings"
 - **Concurrent scans same hosts**: What happens when two scans target overlapping hosts simultaneously? Both scans proceed independently (AAP handles job isolation), but the portal shows a warning on the second scan launch and stores findings from both scans with distinct scan IDs and timestamps
-- **Profile applied to different standard**: What happens when a saved STIG profile is applied to CIS scan findings? The portal warns that the profile was built for a different compliance standard, shows unmatched rules as "Not applicable", and allows the admin to proceed with only the matching rules
-- **Remediation with no failing hosts**: What happens when an admin tries to execute a remediation profile but all hosts now pass? The portal shows "No remediation needed — all targeted hosts are compliant" and logs the no-op execution for audit purposes
+- **Profile applied to different standard**: What happens when a saved STIG remediation is applied to CIS scan findings? The portal warns that the remediation was built for a different compliance standard, shows unmatched rules as "Not applicable", and allows the admin to proceed with only the matching rules
+- **Remediation with no failing hosts**: What happens when an admin tries to execute a remediation but all hosts now pass? The portal shows "No remediation needed — all targeted hosts are compliant" and logs the no-op execution for audit purposes
 - **Export of large result sets**: What happens when exporting findings from a scan of 10,000+ hosts? Export is processed asynchronously with a download link provided when complete, with a maximum export size of 100MB
 - **EDA event flood**: What happens when EDA receives hundreds of events per minute? The cooldown window batches events, a maximum concurrent scan limit prevents resource exhaustion, and events exceeding the limit are queued with FIFO ordering
 
@@ -184,9 +184,9 @@ Automation architects need infrastructure changes (new host provisioned, configu
 - **FR-011**: System MUST support filtering findings by severity, compliance status, and rule ID
 - **FR-012**: System MUST display homogeneity advisories when a small subset of hosts fails a rule that passes on the majority
 
-#### Remediation Profile Builder
+#### Remediation Builder
 
-- **FR-013**: System MUST provide a profile builder that allows administrators to toggle individual rules on/off for remediation
+- **FR-013**: System MUST provide a remediation builder that allows administrators to toggle individual rules on/off for remediation
 - **FR-014**: System MUST support per-rule remediation scope selection: "Failed hosts only" or "All hosts (standardize)"
 - **FR-015**: System MUST support per-rule parameter value overrides, pre-populated with the benchmark default value
 - **FR-016**: System MUST generate an execution plan preview showing the matrix of rules, hosts, and parameter values before remediation
@@ -194,14 +194,14 @@ Automation architects need infrastructure changes (new host provisioned, configu
 
 #### Remediation Execution
 
-- **FR-018**: System MUST execute remediation by invoking the AAP workflow remediate node with `--limit`, `--tags`, and `--extra-vars` derived from the remediation profile
+- **FR-018**: System MUST execute remediation by invoking the AAP workflow remediate node with `--limit`, `--tags`, and `--extra-vars` derived from the remediation
 - **FR-019**: System MUST trigger a verification re-scan after remediation completes and display before/after comparison
 - **FR-020**: System MUST display real-time remediation progress with per-host status updates
 
 #### Profile Management
 
-- **FR-021**: System MUST allow administrators to save remediation profiles as named, reusable artifacts with description and tags
-- **FR-022**: System MUST allow administrators to apply a saved profile to new scan findings, pre-populating selections and highlighting unreviewed new rules
+- **FR-021**: System MUST allow administrators to save remediations as named, reusable artifacts with description and tags
+- **FR-022**: System MUST allow administrators to apply a saved remediation to new scan findings, pre-populating selections and highlighting unreviewed new rules
 - **FR-023**: System MUST track profile usage history (last used, scan associations)
 
 #### Export
@@ -227,7 +227,7 @@ Automation architects need infrastructure changes (new host provisioned, configu
 - **Compliance Profile** (internally: `ComplianceCartridge`): A registered mapping between a compliance standard, an Execution Environment, and an AAP workflow template. Attributes: display name, compliance standard identifier (e.g., `rhel9-stig-v2r8`), EE reference (id, name), workflow template reference (id, name), status (active, ee-unavailable, workflow-unavailable), created/updated timestamps
 - **Compliance Scan**: A single execution of a compliance assessment against target hosts. Attributes: scan ID, compliance profile reference, target inventory/host pattern, trigger source (manual, event-driven), AAP workflow job ID, status (pending, running, completed, failed, completed-with-warnings), start/end timestamps
 - **Compliance Finding**: A single rule evaluation result for a specific host. Attributes: scan reference, rule ID, rule title, description, severity (CAT I/II/III), host, compliance status (pass, fail, error, not-applicable), actual value, expected value, check type
-- **Remediation Profile**: A saved set of remediation decisions. Attributes: profile name, description, tags, compliance standard, rule selections (per-rule: included/excluded, scope, parameter override, justification), creation date, last used date, associated scan IDs
+- **Remediation**: A saved set of remediation decisions. Attributes: name, description, tags, compliance standard, rule selections (per-rule: included/excluded, scope, parameter override, justification), creation date, last used date, associated scan IDs
 - **Posture Record**: A point-in-time compliance summary for dashboard and trend reporting. Attributes: scan reference, total rules, passed, failed, not-applicable, error, host count, compliance percentage, timestamp
 
 ## Success Criteria _(mandatory)_
@@ -236,9 +236,9 @@ Automation architects need infrastructure changes (new host provisioned, configu
 
 - **SC-001**: Platform administrators can add a compliance profile (EE + workflow mapping) and launch a scan from the portal in under 5 minutes without AAP Controller UI access
 - **SC-002**: Scan findings display per-host, per-rule detail including actual observed values — not just aggregate pass/fail percentages
-- **SC-003**: Remediation profile builder supports selective rule toggling, parameter overrides, and scope selection (failed-only vs standardize-all) for individual rules
+- **SC-003**: Remediation builder supports selective rule toggling, parameter overrides, and scope selection (failed-only vs standardize-all) for individual rules
 - **SC-004**: Remediation execution uses dynamic host grouping, generating no more than N jobs for N distinct remediation configurations regardless of host count (scales to 20,000+ hosts without creating per-host jobs)
-- **SC-005**: Saved remediation profiles can be applied to new scan results, pre-populating prior decisions and flagging new unreviewed rules
+- **SC-005**: Saved remediations can be applied to new scan results, pre-populating prior decisions and flagging new unreviewed rules
 - **SC-006**: Scan findings are exportable in CSV and JSON formats with per-host detail suitable for auditor evidence packages
 - **SC-007**: Verification re-scan runs automatically after remediation and provides before/after compliance posture comparison
 - **SC-008**: Event-driven scans triggered via EDA produce findings indistinguishable from manual scans in the portal dashboard
@@ -253,7 +253,7 @@ Automation architects need infrastructure changes (new host provisioned, configu
 - Compliance profiles use the collection + EE packaging model (internally: cartridge model): an Ansible collection (e.g., `security.compliance_rhel9_stig`) ships an EE profile definition, and the EE Builder constructs the EE from it
 - AAP workflow templates for compliance pipelines (gather, evaluate, remediate nodes) are pre-created in the Controller before compliance profile registration
 - The AAP Gateway is the sole API entry point — direct Controller API access is not used (aligns with AAP 2.7+ architecture)
-- Backstage PostgreSQL is available for compliance data persistence (findings, profiles, posture history, compliance profile registry)
+- Backstage PostgreSQL is available for compliance data persistence (findings, remediations, posture history, compliance profile registry)
 - Per-user AAP tokens are available via the `x-aap-token` header pattern established by the Portal authentication flow
 - OpenSCAP is the Tier 1 scanner for RHEL STIG/CIS benchmarks; the architecture supports pluggable Tier 2 (BYOS: Qualys, Tenable) and Tier 3 (hybrid) scanners via additional compliance profile types
 - EDA integration (User Story 8) depends on EDA Server being deployed and configured with appropriate rulebooks — this is a stretch goal

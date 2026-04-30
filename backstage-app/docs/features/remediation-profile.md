@@ -1,14 +1,14 @@
-# Remediation Profile Builder
+# Remediation Builder
 
-The Remediation Profile Builder enables users to selectively configure which compliance rules to remediate, with per-rule scope and parameter controls.
+The Remediation Builder enables users to selectively configure which compliance rules to remediate, with per-rule scope and parameter controls.
 
 ## User Flow
 
 1. User views scan results in the Results Viewer
-2. User clicks "Build Remediation Profile" to enter the builder
+2. User clicks "Build Remediation" to enter the builder
 3. Builder shows all rules with failures, grouped by severity (CAT I, CAT II, CAT III)
 4. User toggles individual rules on/off, configures scope and parameters
-5. User either saves the profile for reuse or applies remediation immediately
+5. User either saves the remediation for reuse or applies it immediately
 
 ## Key Features
 
@@ -40,12 +40,12 @@ When only a few hosts fail out of many, the builder shows a "homogeneity advice"
 
 Rules with tunable parameters (e.g., SSH timeout interval, crypto policy) expose form fields for customization. Parameter types include text, number, and dropdown select.
 
-### Save as Profile
+### Save Remediation
 
-Users can save their selections, scope choices, and parameter overrides as a named profile. Saved profiles capture institutional knowledge about which rules to enforce and what values to apply. This enables consistent remediation across teams and environments.
+Users can save their selections, scope choices, and parameter overrides as a named remediation. Saved remediations capture institutional knowledge about which rules to enforce and what values to apply. This enables consistent remediation across teams and environments. Saved remediations are accessible from the **Remediations** tab in the top navigation.
 
 ## After the Builder
 
 From the builder, users can:
-- **Save as Profile** -- persist selections for reuse
-- **Apply Remediation** -- proceed to the Remediation Execution view, which runs the actual Ansible playbooks via AAP Controller
+- **Save Remediation** -- persist selections for reuse (accessible from the Remediations tab)
+- **Apply Remediation** -- proceed to the Remediation Execution view, which runs the actual Ansible playbooks via the automation controller

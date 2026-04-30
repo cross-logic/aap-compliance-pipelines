@@ -4,7 +4,7 @@ info:
   description: |
     Backend API for the AAP Compliance Pipelines Backstage plugin.
     Provides endpoints for compliance scanning, findings retrieval,
-    remediation management, cartridge registry, and posture reporting.
+    remediation management, compliance profile registry, and posture reporting.
   version: 0.2.0
   contact:
     name: AAP Compliance Team
@@ -33,11 +33,11 @@ tags:
   - name: workflow
     description: Controller workflow status tracking
   - name: cartridges
-    description: Cartridge registry
+    description: Compliance profile registry (internal API path)
   - name: controller
-    description: Controller resource lookups
+    description: Automation controller resource lookups
   - name: remediation-profiles
-    description: Saved remediation profiles
+    description: Saved remediations
 
 paths:
   /health:
@@ -367,13 +367,13 @@ paths:
   /remediation-profiles:
     get:
       operationId: listRemediationProfiles
-      summary: List saved remediation profiles
-      description: Returns all saved remediation profiles.
+      summary: List saved remediations
+      description: Returns all saved remediations (rule selections, parameters, and scope).
       tags:
         - remediation-profiles
       responses:
         '200':
-          description: List of remediation profiles
+          description: List of saved remediations
           content:
             application/json:
               schema:
@@ -382,8 +382,8 @@ paths:
                   $ref: '#/components/schemas/RemediationProfile'
     post:
       operationId: createRemediationProfile
-      summary: Save a remediation profile
-      description: Creates a new remediation profile with the specified selections and parameters.
+      summary: Save a remediation
+      description: Creates a new remediation with the specified rule selections and parameters.
       tags:
         - remediation-profiles
       requestBody:
@@ -405,13 +405,13 @@ paths:
   /cartridges:
     get:
       operationId: listCartridges
-      summary: List registered cartridges
-      description: Returns all registered compliance cartridges.
+      summary: List registered compliance profiles
+      description: Returns all registered compliance profiles.
       tags:
         - cartridges
       responses:
         '200':
-          description: List of cartridges
+          description: List of compliance profiles
           content:
             application/json:
               schema:
@@ -420,8 +420,8 @@ paths:
                   $ref: '#/components/schemas/ComplianceCartridge'
     post:
       operationId: createCartridge
-      summary: Register a cartridge
-      description: Creates or updates a compliance cartridge that maps a framework to Controller resources.
+      summary: Register a compliance profile
+      description: Creates or updates a compliance profile that maps a standard to automation controller resources.
       tags:
         - cartridges
       requestBody:
@@ -432,7 +432,7 @@ paths:
               $ref: '#/components/schemas/SaveCartridgeRequest'
       responses:
         '201':
-          description: Cartridge created
+          description: Compliance profile created
           content:
             application/json:
               schema:
@@ -443,8 +443,8 @@ paths:
   /cartridges/{id}:
     delete:
       operationId: deleteCartridge
-      summary: Delete a cartridge
-      description: Deletes a registered compliance cartridge by ID.
+      summary: Delete a compliance profile
+      description: Deletes a registered compliance profile by ID.
       tags:
         - cartridges
       parameters:
@@ -455,15 +455,15 @@ paths:
             type: string
       responses:
         '204':
-          description: Cartridge deleted
+          description: Compliance profile deleted
         '404':
-          description: Cartridge not found
+          description: Compliance profile not found
 
   /controller/workflow-job-templates:
     get:
       operationId: listControllerWorkflowJobTemplates
       summary: List Controller workflow job templates
-      description: Returns workflow job templates from the Controller for the cartridge settings UI.
+      description: Returns workflow job templates from the Controller for the compliance profile settings UI.
       tags:
         - controller
       responses:
@@ -487,7 +487,7 @@ paths:
     get:
       operationId: listControllerExecutionEnvironments
       summary: List Controller execution environments
-      description: Returns execution environments from the Controller for the cartridge settings UI.
+      description: Returns execution environments from the Controller for the compliance profile settings UI.
       tags:
         - controller
       responses:

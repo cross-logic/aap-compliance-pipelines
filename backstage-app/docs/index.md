@@ -27,7 +27,7 @@ backstage-app/
 - **Profile Browser** -- Browse and inspect compliance profiles and their rule categories
 - **Scan Launcher** -- Launch compliance scans against AAP inventories
 - **Results Viewer** -- Multi-host findings table with severity filtering and host-level breakdown
-- **Remediation Profile Builder** -- Selectively enable/disable rules, configure parameters, choose scope
+- **Remediation Builder** -- Selectively enable/disable rules, configure parameters, choose scope
 - **Remediation Execution** -- Apply remediation with progress tracking and before/after comparison
 
 ## Getting Started
@@ -38,7 +38,7 @@ See the root [README.md](../README.md) for setup instructions.
 
 - [Compliance Plugin](plugins/compliance.md) -- Frontend plugin architecture and components
 - [Compliance Dashboard](features/compliance-dashboard.md) -- Dashboard feature details
-- [Remediation Profile](features/remediation-profile.md) -- Remediation profile builder feature
+- [Remediation](features/remediation-profile.md) -- Remediation builder feature
 
 ## Setup Guides
 

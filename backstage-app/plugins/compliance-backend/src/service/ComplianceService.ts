@@ -100,7 +100,7 @@ export class ComplianceService {
     }));
   }
 
-  // ─── Workflow templates ─────────────────────────────────────────────
+  // ─── Workflow job templates ─────────────────────────────────────────
 
   async getWorkflowTemplates(
     nameFilter?: string,
@@ -139,7 +139,7 @@ export class ComplianceService {
     ) ?? templates.results[0];
 
     if (!template) {
-      throw new Error(`No compliance workflow template found for profile ${request.profileId}`);
+      throw new Error(`No compliance workflow job template found for profile ${request.profileId}`);
     }
 
     const extraVars: Record<string, unknown> = {
@@ -175,7 +175,7 @@ export class ComplianceService {
     ) ?? templates.results[0];
 
     if (!template) {
-      throw new Error('No compliance remediation workflow template found');
+      throw new Error('No compliance remediation workflow job template found');
     }
 
     const extraVars: Record<string, unknown> = {
@@ -382,7 +382,7 @@ export class ComplianceService {
     return MockDataProvider.getPostureHistory(profileId, days);
   }
 
-  // ─── Remediation profiles ──────────────────────────────────────────
+  // ─── Remediations (saved rule selections) ──────────────────────────
 
   async getRemediationProfiles(): Promise<RemediationProfile[]> {
     return MockDataProvider.getRemediationProfiles();

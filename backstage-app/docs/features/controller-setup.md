@@ -1,9 +1,9 @@
-# Controller Setup for Compliance Pipeline
+# Automation Controller Setup for Compliance Pipeline
 
-This guide covers how to configure Ansible Automation Platform (AAP) Controller
-with the resources required to run the RHEL 9 STIG compliance pipeline. You can
-provision these resources automatically with the setup playbook or create them
-manually through the Controller web UI.
+This guide covers how to configure the automation controller in Ansible
+Automation Platform (AAP) with the resources required to run the RHEL 9 STIG
+compliance pipeline. You can provision these resources automatically with the
+setup playbook or create them manually through the automation controller web UI.
 
 ## Prerequisites
 
@@ -11,11 +11,11 @@ Before you begin, confirm that you have the following:
 
 | Requirement | Details |
 |---|---|
-| **AAP version** | 2.5, 2.6, or 2.7 (Automation Controller included) |
-| **Admin access** | An account with Organization Admin or Superuser privileges on the Controller |
-| **Target host** | A RHEL 9 system reachable via SSH from the Controller execution environment |
+| **AAP version** | 2.5, 2.6, or 2.7 (automation controller included) |
+| **Admin access** | An account with Organization Admin or Superuser privileges on the automation controller |
+| **Target host** | A RHEL 9 system reachable via SSH from the automation controller execution environment |
 | **SSH credentials** | Username and password (or SSH key) with sudo privileges on the target host |
-| **Network access** | Controller must be able to reach `github.com` to sync the project repository |
+| **Network access** | The automation controller must be able to reach `github.com` to sync the project repository |
 
 ### Required Ansible Collections (for automated setup only)
 
@@ -34,7 +34,7 @@ These collections are pre-installed in the AAP bundled execution environments.
 
 ## Resources Created
 
-The compliance pipeline requires the following resources in Controller:
+The compliance pipeline requires the following resources in the automation controller:
 
 | Resource | Name | Purpose |
 |---|---|---|
@@ -59,7 +59,7 @@ in a single run.
 
 | Variable | Description | Example |
 |---|---|---|
-| `controller_host` | AAP Gateway/Controller URL | `https://aap.example.com` |
+| `controller_host` | Platform gateway / automation controller URL | `https://aap.example.com` |
 | `controller_username` | Admin username | `admin` |
 | `controller_password` | Admin password | (your password) |
 | `target_host` | RHEL 9 host IP or FQDN | `192.168.128.128` |
@@ -112,8 +112,8 @@ A summary message is displayed on completion listing all created resources.
 ### AAP Version Compatibility Notes
 
 - **AAP 2.5+**: The playbook uses the `gateway_organizations` role for
-  organization creation (platform-level resource). If the Gateway role is
-  unavailable, it falls back to `controller_organizations`.
+  organization creation (platform-level resource). If the platform gateway role
+  is unavailable, it falls back to `controller_organizations`.
 - **AAP 2.7**: Fully compatible. The `infra.aap_configuration` collection
   handles API differences between versions transparently.
 - **Self-signed certificates**: The playbook sets `aap_validate_certs: false`
@@ -124,11 +124,11 @@ A summary message is displayed on completion listing all created resources.
 
 ## Option B: Manual Setup
 
-Follow these steps to create all resources through the AAP Controller web UI.
+Follow these steps to create all resources through the automation controller web UI.
 
 ### Step 1: Create the Organization
 
-1. Log in to the AAP Controller web UI as an admin user.
+1. Log in to the automation controller web UI as an admin user.
 2. Navigate to **Access** > **Organizations** in the left sidebar.
 3. Click the **Add** button.
 4. Enter the following values:
@@ -243,7 +243,7 @@ fill in the fields, and click **Save**.
 | **Options** | Check **Use Fact Storage** (Enable fact cache) |
 
 > **Note**: The evaluate playbook runs on `localhost` and reads facts from the
-> Controller fact cache. It does not need a machine credential because it does
+> automation controller fact cache. It does not need a machine credential because it does
 > not SSH to any remote hosts.
 
 #### 6c. compliance-remediate
@@ -266,7 +266,7 @@ shows `compliance-gather-facts`, `compliance-evaluate`, and
 ### Step 7: Create the Workflow Job Template
 
 1. Navigate to **Resources** > **Templates**.
-2. Click **Add** > **Add workflow template**.
+2. Click **Add** > **Add workflow job template**.
 3. Enter the following values:
    - **Name**: `compliance-pipeline-rhel9-stig`
    - **Description**: `RHEL 9 STIG compliance pipeline: Gather Facts -> Evaluate -> Remediate`
@@ -369,7 +369,7 @@ sync, with an error about authentication.
 
 **Resolution**: The repository at
 `https://github.com/cross-logic/aap-compliance-pipelines.git` is public and does
-not require authentication. If your Controller is behind a proxy, configure the
+not require authentication. If your automation controller is behind a proxy, configure the
 proxy settings in **Settings** > **Jobs** > **Extra Environment Variables**:
 
 ```json
@@ -386,7 +386,7 @@ proxy settings in **Settings** > **Jobs** > **Extra Environment Variables**:
 `fatal: unsafe repository`.
 
 **Resolution**: This is a Git `safe.directory` issue. Add the following to
-the Controller job settings. Navigate to **Settings** > **Jobs** >
+the automation controller job settings. Navigate to **Settings** > **Jobs** >
 **Extra Environment Variables** and add:
 
 ```json
@@ -410,7 +410,7 @@ with `Connection refused` or `Connection timed out`.
 
 **Resolution**:
 
-1. Verify that the target host is reachable from the Controller execution node:
+1. Verify that the target host is reachable from the automation controller execution node:
    ```bash
    ssh <target_ssh_user>@<target_host>
    ```
@@ -452,7 +452,7 @@ successfully, or when the fact cache has expired between runs.
 
 1. Re-run the full workflow rather than launching `compliance-evaluate` in
    isolation.
-2. In the Controller settings, check the fact cache timeout under
+2. In the automation controller settings, check the fact cache timeout under
    **Settings** > **Jobs** > **Per-Host Ansible Fact Cache Timeout** and
    increase it if needed (default is 0, meaning no expiration).
 
@@ -511,7 +511,7 @@ These paths are relative to the project root
 
 | Variable | Default | Required | Description |
 |---|---|---|---|
-| `controller_host` | `$CONTROLLER_HOST` or `https://aap.example.com` | Yes | AAP Gateway/Controller URL |
+| `controller_host` | `$CONTROLLER_HOST` or `https://aap.example.com` | Yes | Platform gateway / automation controller URL |
 | `controller_username` | `$CONTROLLER_USERNAME` or `admin` | Yes | Admin username |
 | `controller_password` | `$CONTROLLER_PASSWORD` | Yes | Admin password |
 | `target_host` | `$TARGET_HOST` or `192.168.128.128` | Yes | RHEL 9 target host |

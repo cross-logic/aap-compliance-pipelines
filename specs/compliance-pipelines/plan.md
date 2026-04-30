@@ -6,13 +6,13 @@
 
 ## Summary
 
-Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automation Platform today must manually source ComplianceAsCode content, build scan/remediate workflows, parse XCCDF results, and manage remediation decisions — with no integrated portal experience. This feature delivers an end-to-end compliance pipeline within the Ansible Portal that enables administrators to add compliance profiles (EE + workflow mappings), launch scans, review host-level findings, build selective remediation profiles, execute remediation, and verify results — all without leaving the portal or requiring Controller expertise.
+Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automation Platform today must manually source ComplianceAsCode content, build scan/remediate workflows, parse XCCDF results, and manage remediation decisions — with no integrated portal experience. This feature delivers an end-to-end compliance pipeline within the Ansible Portal that enables administrators to add compliance profiles (EE + workflow mappings), launch scans, review host-level findings, build selective remediations, execute remediation, and verify results — all without leaving the portal or requiring Controller expertise.
 
-**Technical Approach**: The compliance plugin operates as a scanner orchestrator, not a scanner. It invokes existing AAP workflow templates via the Gateway API, parses scan output into structured findings stored in Backstage PostgreSQL, and provides a remediation profile builder that translates user decisions into `--limit`, `--tags`, and `--extra-vars` parameters for the remediation workflow node. ComplianceAsCode's `rhel9-playbook-stig.yml` (55K+ lines, 4400+ tasks) from the `scap-security-guide` RPM IS the remediation engine — we consume it, not author it.
+**Technical Approach**: The compliance plugin operates as a scanner orchestrator, not a scanner. It invokes existing AAP workflow templates via the Gateway API, parses scan output into structured findings stored in Backstage PostgreSQL, and provides a remediation builder that translates user decisions into `--limit`, `--tags`, and `--extra-vars` parameters for the remediation workflow node. ComplianceAsCode's `rhel9-playbook-stig.yml` (55K+ lines, 4400+ tasks) from the `scap-security-guide` RPM IS the remediation engine — we consume it, not author it.
 
 **Key Architecture Decisions**:
 
-1. Scanner orchestrator, not scanner — our value is UX, orchestration, and the remediation profile builder
+1. Scanner orchestrator, not scanner — our value is UX, orchestration, and the remediation builder
 2. Cartridge model (maps to "compliance profile" in the UI) — pluggable scanner registration (Tier 1: OpenSCAP/PowerSTIG, Tier 2: BYOS Qualys/Tenable, Tier 3: hybrid)
 3. CaC content consumption — selective remediation via Ansible `--tags` + `--extra-vars` + `--limit`
 4. Controller workflow as pipeline — uses AAP's existing workflow engine (gather, evaluate, remediate nodes), not a new pipeline runtime
@@ -22,7 +22,7 @@ Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automat
 
 **Language/Version**: TypeScript 5.8, Node.js 20/22
 **Primary Dependencies**: Backstage 0.33.1, Knex.js (migrations/queries), @backstage/backend-plugin-api, Material-UI v4 / PatternFly 6
-**Storage**: PostgreSQL (production), SQLite (local dev) for compliance tables (compliance profiles, scans, findings, remediation profiles, posture)
+**Storage**: PostgreSQL (production), SQLite (local dev) for compliance tables (compliance profiles, scans, findings, remediations, posture)
 **Testing**: Jest (unit), Playwright (E2E), supertest (API contract)
 **Target Platform**: Ansible Portal (RHDH) on RHEL 9+ or OpenShift 4.14+, local dev (yarn start)
 **Project Type**: Backstage plugin suite (1 frontend plugin, 1 backend plugin, 1 common package)
@@ -42,7 +42,7 @@ Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automat
 │  ├─ ScanLauncher/ - Configure and launch scans                      │
 │  ├─ FindingsViewer/ - Host-level findings with severity grouping    │
 │  ├─ ProfileBuilder/ - Selective rule toggles, parameter overrides   │
-│  ├─ ProfileManager/ - Save, load, apply remediation profiles        │
+│  ├─ ProfileManager/ - Save, load, apply remediations                │
 │  ├─ CartridgeSettings/ - Admin compliance profile registration      │
 │  └─ ExportDialog/ - CSV/JSON export configuration                   │
 └─────────────────────────────────────────────────────────────────────┘
@@ -55,14 +55,14 @@ Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automat
 │  │   ├─ GET  /cartridges - List compliance profiles                 │
 │  │   ├─ POST /scans - Launch scan                                   │
 │  │   ├─ GET  /scans/:id/findings - Get findings                     │
-│  │   ├─ POST /profiles - Save remediation profile                   │
+│  │   ├─ POST /profiles - Save remediation                           │
 │  │   ├─ POST /remediate - Execute remediation                       │
 │  │   └─ GET  /posture - Dashboard data                              │
 │  ├─ CartridgeService - Compliance profile CRUD + validation         │
 │  ├─ ScanService - Workflow invocation + result parsing              │
 │  ├─ FindingsService - Finding storage + query                       │
 │  ├─ ProfileService - Profile CRUD + application logic               │
-│  ├─ RemediationService - Profile → workflow params translation      │
+│  ├─ RemediationService - Remediation → workflow params translation  │
 │  ├─ PostureService - Compliance trend aggregation                   │
 │  ├─ ExportService - CSV/JSON generation                             │
 │  └─ AapGatewayClient - AAP Gateway API wrapper                     │
@@ -107,7 +107,7 @@ Admin clicks           Portal backend          AAP Gateway          Execution No
      │◄── findings ready ──┤                       │                     │
      │                      │                       │                     │
 Admin builds            Portal translates       AAP dispatches       Hosts remediated
-remediation profile     profile → params        remediate node       via CaC playbook
+remediation             remediation → params    remediate node       via CaC playbook
      │                      │                       │                     │
      ├── POST /remediate ──►│                       │                     │
      │                      ├── POST workflow_job ──►│                     │
@@ -252,7 +252,7 @@ plugins/compliance-backend/
 │   │   ├── ScanService.ts                 # Workflow invocation + parsing
 │   │   ├── FindingsService.ts             # Finding storage + query
 │   │   ├── ProfileService.ts              # Profile CRUD + application
-│   │   ├── RemediationService.ts          # Profile → workflow params
+│   │   ├── RemediationService.ts          # Remediation → workflow params
 │   │   ├── PostureService.ts              # Trend aggregation
 │   │   └── ExportService.ts               # CSV/JSON generation
 │   ├── gateway/
@@ -326,7 +326,7 @@ CREATE INDEX idx_findings_rule ON compliance_findings(rule_id);
 CREATE INDEX idx_findings_host ON compliance_findings(hostname);
 CREATE INDEX idx_findings_severity ON compliance_findings(severity);
 
--- Saved remediation profiles
+-- Saved remediations
 CREATE TABLE compliance_profiles (
   id TEXT PRIMARY KEY,                    -- UUID
   profile_name TEXT NOT NULL,
@@ -414,7 +414,7 @@ GET  /api/compliance/scans/:id/findings/export
   → Binary file download (CSV or JSON)
 ```
 
-### Remediation Profiles
+### Remediations
 
 ```
 POST /api/compliance/profiles
@@ -548,14 +548,14 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 - Build `HomogeneityAdvisory` component for outlier host detection
 - Integration tests (scan launch → findings storage → dashboard display)
 
-### Phase 3: Remediation Profile Builder (2 weeks)
+### Phase 3: Remediation Builder (2 weeks)
 
-- Implement `ProfileService` — CRUD for saved remediation profiles
-- Implement `RemediationService` — translate profile decisions to `--limit`, `--tags`, `--extra-vars`
-- Implement profile application logic (match saved profile to new findings, flag unreviewed rules)
+- Implement `ProfileService` — CRUD for saved remediations
+- Implement `RemediationService` — translate remediation decisions to `--limit`, `--tags`, `--extra-vars`
+- Implement remediation application logic (match saved remediation to new findings, flag unreviewed rules)
 - Build frontend `ProfileBuilder` component (rule toggles, scope selection, parameter overrides)
 - Build frontend `ExecutionPreview` component (rule x host matrix)
-- Build frontend `ProfileManager` component (save, load, apply profiles)
+- Build frontend `ProfileManager` component (save, load, apply remediations)
 - Build frontend `CartridgeSettings` admin page (compliance profile management)
 - Implement remediation REST API endpoints
 - Implement automatic verification re-scan trigger after remediation
@@ -583,7 +583,7 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 ### Phase 6: Documentation and Hardening (3-5 days)
 
 - API documentation (endpoint reference with request/response examples)
-- Administrator guide (compliance profile registration, remediation profile management, EDA setup)
+- Administrator guide (compliance profile registration, remediation management, EDA setup)
 - Dynamic plugin packaging and configuration documentation
 - Security review of all AAP token handling paths
 - Load testing with simulated 20K host scan results
@@ -596,7 +596,7 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 | **XCCDF parsing complexity**: ComplianceAsCode output format varies between scanner versions | Abstract parser behind interface, version-detect in XCCDF header, maintain parser test fixtures from known scanner versions |
 | **AAP Gateway API stability**: Gateway API may change between AAP releases | Isolate all Gateway calls in `AapGatewayClient`, version-detect API paths, maintain integration test suite against Gateway |
 | **Large finding sets**: 300 rules x 20K hosts = 6M findings per scan | Database pagination, indexed queries, frontend virtualization (react-window), async export for large datasets |
-| **Workflow parameter translation**: Mapping profile decisions to `--tags`/`--limit`/`--extra-vars` is complex | Extensive unit tests for `RemediationService`, validate generated parameters against known CaC playbook tag names |
+| **Workflow parameter translation**: Mapping remediation decisions to `--tags`/`--limit`/`--extra-vars` is complex | Extensive unit tests for `RemediationService`, validate generated parameters against known CaC playbook tag names |
 | **EE availability**: Referenced EE may be deleted or unavailable after compliance profile registration | Compliance profile status check on scan launch, clear error messaging, admin notification for unavailable compliance profiles |
 | **Concurrent scan conflicts**: Multiple scans targeting same hosts may interfere | AAP handles job isolation natively; portal displays warnings and tracks scans independently |
 | **Lab resource constraints**: Prototype lab VM may not support full OpenSCAP scans alongside AAP | Two-track scanning: Track A (fast custom modules) for development, Track B (OpenSCAP) for validation |
@@ -605,9 +605,9 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 
 - Compliance profile registration to first scan: <5 minutes (spec SC-001)
 - Host-level finding detail with actual values: verified in all scan results (spec SC-002)
-- Profile builder supports rule toggles + parameter overrides + scope selection (spec SC-003)
+- Remediation builder supports rule toggles + parameter overrides + scope selection (spec SC-003)
 - Dynamic host grouping scales to 20K+ hosts (spec SC-004)
-- Profile save/load/apply with unreviewed rule flagging (spec SC-005)
+- Remediation save/load/apply with unreviewed rule flagging (spec SC-005)
 - CSV/JSON export with per-host detail (spec SC-006)
 - Auto verification re-scan with before/after comparison (spec SC-007)
 - Event-driven scans indistinguishable from manual in dashboard (spec SC-008)

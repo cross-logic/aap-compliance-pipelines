@@ -94,7 +94,7 @@ export async function createRouter(
     res.json(inventories);
   });
 
-  // ─── Workflow templates ─────────────────────────────────────────────
+  // ─── Workflow job templates ─────────────────────────────────────────
 
   router.get('/workflow-templates', async (req, res) => {
     const userToken = getUserAapToken(req);
@@ -301,7 +301,7 @@ export async function createRouter(
     res.json(history);
   });
 
-  // ─── Remediation profiles ──────────────────────────────────────────
+  // ─── Remediations (saved rule selections) ──────────────────────────
 
   router.get('/remediation-profiles', async (_req, res) => {
     const profiles = await service.getRemediationProfiles();
@@ -333,7 +333,7 @@ export async function createRouter(
       res.status(201).json(profile);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      logger.error(`Failed to save remediation profile: ${msg}`);
+      logger.error(`Failed to save remediation: ${msg}`);
       res.status(500).json({ error: msg });
     }
   });

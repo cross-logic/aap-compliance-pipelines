@@ -250,7 +250,7 @@ const MOCK_EXECUTION_ENVIRONMENTS = [
   { id: 3, name: 'ee-supported-rhel9', image: 'registry.redhat.io/ansible-automation-platform-26/ee-supported-rhel9:latest' },
 ];
 
-// ─── Mock remediation profiles ────────────────────────────────────────
+// ─── Mock remediations (saved rule selections) ───────────────────────
 
 let mockRemediationProfiles: RemediationProfile[] = [];
 

@@ -24,7 +24,7 @@ describe('ResultsViewer', () => {
 
   it('displays the build remediation button', async () => {
     const { getByText } = await renderInTestApp(<ResultsViewer />);
-    const button = getByText(/Build Remediation Profile/);
+    const button = getByText(/Build Remediation/);
     expect(button).toBeInTheDocument();
   });
 
