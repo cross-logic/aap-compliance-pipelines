@@ -47,6 +47,46 @@ export class ComplianceDatabase {
     await this.db('compliance_scans').where('id', scanId).update(update);
   }
 
+  async getScanByWorkflowJobId(workflowJobId: number): Promise<ComplianceScan | null> {
+    const row = await this.db('compliance_scans')
+      .where('workflow_job_id', workflowJobId)
+      .first();
+    if (!row) return null;
+    return this.mapScanRow(row);
+  }
+
+  /**
+   * Persist findings for an existing scan record.
+   * Unlike saveScanResults (which creates the scan too), this method
+   * attaches findings to an already-created scan row.
+   */
+  async saveFindingsForScan(
+    scanId: string,
+    findings: Array<Omit<StoredFinding, 'id'>>,
+  ): Promise<number> {
+    if (findings.length === 0) return 0;
+
+    const rows = findings.map(f => ({
+      id: randomUUID(),
+      scan_id: scanId,
+      rule_id: f.ruleId,
+      stig_id: f.stigId,
+      host: f.host,
+      status: f.status,
+      severity: f.severity,
+      actual_value: f.actualValue,
+      expected_value: f.expectedValue,
+      evidence: f.evidence,
+    }));
+
+    const batchSize = 100;
+    for (let i = 0; i < rows.length; i += batchSize) {
+      await this.db('compliance_findings').insert(rows.slice(i, i + batchSize));
+    }
+
+    return findings.length;
+  }
+
   async getRecentScans(limit: number = 10): Promise<ComplianceScan[]> {
     const rows = await this.db('compliance_scans')
       .orderBy('started_at', 'desc')
