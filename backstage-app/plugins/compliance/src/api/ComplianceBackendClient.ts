@@ -25,15 +25,37 @@ import type {
   SaveCartridgeRequest,
 } from '@aap-compliance/common';
 
+import { DiscoveryApi } from '@backstage/core-plugin-api';
 import type { ComplianceApi } from './complianceApiRef';
 
-const BACKEND_BASE = '/api/compliance';
+let discoveryApi: DiscoveryApi | undefined;
+let resolvedBaseUrl: string | undefined;
+
+export function setDiscoveryApi(api: DiscoveryApi) {
+  discoveryApi = api;
+}
+
+async function getBackendBase(): Promise<string> {
+  if (resolvedBaseUrl) return resolvedBaseUrl;
+  if (discoveryApi) {
+    try {
+      resolvedBaseUrl = await discoveryApi.getBaseUrl('compliance');
+      return resolvedBaseUrl;
+    } catch {
+      // fall through to default
+    }
+  }
+  // Fallback: if backend runs on same host, use relative path
+  // If running separately (dev mode), use explicit backend URL
+  return 'http://localhost:7007/api/compliance';
+}
 
 async function request<T>(
   path: string,
   options?: { method?: string; body?: unknown; aapToken?: string },
 ): Promise<T> {
-  const url = `${BACKEND_BASE}${path}`;
+  const base = await getBackendBase();
+  const url = `${base}${path}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
