@@ -39,7 +39,7 @@ Cards for each active framework showing target OS, rule count, compliance percen
 
 ## Data Source
 
-Currently uses mock data defined inline. In production, data will be fetched from the compliance backend API via `ComplianceApiClient`.
+In mock mode (`./bin/start.sh mock`), uses hardcoded demo data. In live mode (`./bin/start.sh live`), fetches real data from the compliance backend API. The dashboard shows a welcome/onboarding state when no scan history exists in the database.
 
 ## Configuration
 
