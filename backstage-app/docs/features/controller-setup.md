@@ -42,7 +42,7 @@ The compliance pipeline requires the following resources in Controller:
 | Inventory | `compliance-rhel9-inventory` | Contains target RHEL 9 hosts |
 | Host | User-provided (e.g., `192.168.128.128`) | The RHEL 9 system to scan |
 | Machine Credential | `compliance-lab-ssh` | SSH authentication with sudo |
-| Project | `compliance-cartridge` | Git project pointing to the compliance repo |
+| Project | `compliance-content` | Git project pointing to the compliance repo |
 | Job Template | `compliance-gather-facts` | Collects compliance-relevant facts |
 | Job Template | `compliance-evaluate` | Evaluates facts against STIG rules |
 | Job Template | `compliance-remediate` | Applies CaC STIG remediation |
@@ -101,7 +101,7 @@ The playbook runs seven steps in sequence:
 
 1. Creates the `compliance-prototype` organization
 2. Creates the `compliance-lab-ssh` machine credential
-3. Creates the `compliance-cartridge` project and waits for the initial Git sync
+3. Creates the `compliance-content` project and waits for the initial Git sync
 4. Creates the `compliance-rhel9-inventory` inventory
 5. Adds the target host to the inventory
 6. Creates three job templates (gather-facts, evaluate, remediate)
@@ -189,7 +189,7 @@ password field shows `Encrypted` after saving.
 1. Navigate to **Resources** > **Projects**.
 2. Click **Add**.
 3. Enter the following values:
-   - **Name**: `compliance-cartridge`
+   - **Name**: `compliance-content`
    - **Description**: `Compliance pipeline collection and playbooks`
    - **Organization**: Select `compliance-prototype`
    - **Source Control Type**: Select **Git**
@@ -223,7 +223,7 @@ fill in the fields, and click **Save**.
 | **Description** | `Gather compliance-relevant facts from target hosts` |
 | **Job Type** | Run |
 | **Inventory** | `compliance-rhel9-inventory` |
-| **Project** | `compliance-cartridge` |
+| **Project** | `compliance-content` |
 | **Playbook** | `collections/ansible_collections/security/compliance_rhel9_stig/playbooks/gather_facts.yml` |
 | **Credentials** | `compliance-lab-ssh` |
 | **Options** | Check **Privilege Escalation** (Enable become) |
@@ -237,7 +237,7 @@ fill in the fields, and click **Save**.
 | **Description** | `Evaluate gathered facts against STIG rules` |
 | **Job Type** | Run |
 | **Inventory** | `compliance-rhel9-inventory` |
-| **Project** | `compliance-cartridge` |
+| **Project** | `compliance-content` |
 | **Playbook** | `collections/ansible_collections/security/compliance_rhel9_stig/playbooks/evaluate.yml` |
 | **Credentials** | (none required -- runs on localhost) |
 | **Options** | Check **Use Fact Storage** (Enable fact cache) |
@@ -254,7 +254,7 @@ fill in the fields, and click **Save**.
 | **Description** | `Apply CaC STIG remediation to target hosts` |
 | **Job Type** | Run |
 | **Inventory** | `compliance-rhel9-inventory` |
-| **Project** | `compliance-cartridge` |
+| **Project** | `compliance-content` |
 | **Playbook** | `collections/ansible_collections/security/compliance_rhel9_stig/playbooks/remediate.yml` |
 | **Credentials** | `compliance-lab-ssh` |
 | **Options** | Check **Privilege Escalation** (Enable become) |
@@ -305,20 +305,20 @@ Build the following three-node pipeline:
 **Expected result**: The visualizer shows three nodes connected in a linear
 chain from left to right: Gather Facts, Evaluate, Remediate.
 
-### Step 8: Register the Cartridge in the Plugin (Optional)
+### Step 8: Add a Compliance Profile in the Plugin (Optional)
 
-If you are using the Backstage compliance plugin, register the cartridge so the
+If you are using the Backstage compliance plugin, add a compliance profile so the
 UI can launch the workflow:
 
 1. Open the Compliance plugin in Backstage.
 2. Navigate to the **Settings** tab.
-3. Click **Add Cartridge**.
+3. Click **Add Profile**.
 4. Fill in:
-   - **Display Name**: `DISA STIG for RHEL 9`
-   - **Framework**: `DISA STIG`
-   - **Version**: `V2R8`
-   - **Platform**: `RHEL 9`
-   - **Workflow Template**: Select `compliance-pipeline-rhel9-stig`
+   - **Profile Name**: `DISA STIG for RHEL 9`
+   - **Compliance Standard**: `DISA STIG`
+   - **Standard Version**: `V2R8`
+   - **Target Platform**: `RHEL 9`
+   - **Workflow Job Template**: Select `compliance-pipeline-rhel9-stig`
 5. Click **Save**.
 
 ---
@@ -330,7 +330,7 @@ After completing either automated or manual setup, verify that everything works:
 ### 1. Confirm the Project Sync
 
 1. Navigate to **Resources** > **Projects**.
-2. The `compliance-cartridge` project should show a green checkmark indicating
+2. The `compliance-content` project should show a green checkmark indicating
    a successful sync.
 3. Click into the project and verify the **Last Updated** timestamp is recent.
 
@@ -364,7 +364,7 @@ After completing either automated or manual setup, verify that everything works:
 
 ### Project sync fails with "authentication required"
 
-**Symptom**: The `compliance-cartridge` project shows a red failure status after
+**Symptom**: The `compliance-content` project shows a red failure status after
 sync, with an error about authentication.
 
 **Resolution**: The repository at

@@ -338,7 +338,7 @@ export async function createRouter(
     }
   });
 
-  // ─── Cartridge registry ─────────────────────────────────────────────
+  // ─── Compliance profile registry ────────────────────────────────────
 
   router.get('/cartridges', async (_req, res) => {
     const cartridges = await database.listCartridges();
@@ -380,7 +380,7 @@ export async function createRouter(
       res.status(201).json(cartridge);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      logger.error(`Failed to save cartridge: ${msg}`);
+      logger.error(`Failed to save compliance profile: ${msg}`);
       res.status(500).json({ error: msg });
     }
   });
@@ -390,18 +390,18 @@ export async function createRouter(
     try {
       const deleted = await database.deleteCartridge(id);
       if (!deleted) {
-        res.status(404).json({ error: 'Cartridge not found' });
+        res.status(404).json({ error: 'Compliance profile not found' });
         return;
       }
       res.status(204).send();
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      logger.error(`Failed to delete cartridge: ${msg}`);
+      logger.error(`Failed to delete compliance profile: ${msg}`);
       res.status(500).json({ error: msg });
     }
   });
 
-  // ─── Controller resource lookups (for cartridge settings UI) ───────
+  // ─── Controller resource lookups (for compliance profile settings) ──
 
   router.get('/controller/workflow-job-templates', async (req, res) => {
     const userToken = getUserAapToken(req);

@@ -8,8 +8,8 @@ Before submitting to the downstream repo, ensure the following are complete:
 
 1. **Jira ticket created**: An ANSTRAT feature ticket must exist for the compliance pipelines feature, linked to the appropriate parent Outcome (recommended: ANSTRAT-1670, Initiative 3: Strategic Domain Content)
 2. **Spec review passed**: The spec at `specs/compliance-pipelines/spec.md` must be reviewed and approved by the Portal team. Run the quality checklist at `specs/compliance-pipelines/checklists/requirements.md` before submitting
-3. **Architecture approval**: The cartridge model, Gateway-only API routing, and Backstage PostgreSQL persistence approach must be approved via an ADR in the downstream repo
-4. **Prototype validation**: Core workflows (cartridge registration, scan launch, findings review, profile builder) must be demonstrated in the prototype environment
+3. **Architecture approval**: The cartridge model (user-facing: "compliance profile"), Gateway-only API routing, and Backstage PostgreSQL persistence approach must be approved via an ADR in the downstream repo
+4. **Prototype validation**: Core workflows (compliance profile registration, scan launch, findings review, profile builder) must be demonstrated in the prototype environment
 5. **Downstream branch created**: A feature branch in `ansible/ansible-rhdh-plugins` following the naming convention (e.g., `NNN-compliance-pipelines`)
 
 ## File Mapping
@@ -113,7 +113,7 @@ The prototype code may need adjustments:
 ### Step 6: Create ADRs in downstream format
 
 Write architecture decision records in `docs/adrs/` covering:
-- ADR: Cartridge model for pluggable scanner registration
+- ADR: Cartridge model (compliance profile) for pluggable scanner registration
 - ADR: Gateway-only API routing (no direct Controller access)
 - ADR: Backstage PostgreSQL for compliance data persistence
 - ADR: CaC content consumption model (consume, don't author)

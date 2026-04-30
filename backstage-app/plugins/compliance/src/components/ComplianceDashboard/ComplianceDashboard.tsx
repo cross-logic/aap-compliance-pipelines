@@ -171,16 +171,16 @@ export const ComplianceDashboard = () => {
                 <div className={classes.welcomeStep}>
                   <div className={classes.stepNumber}>1</div>
                   <div>
-                    <Typography variant="subtitle1">Register a Cartridge</Typography>
+                    <Typography variant="subtitle1">Add a Compliance Profile</Typography>
                     <Typography variant="body2" color="textSecondary">
-                      Map a compliance framework to a Controller workflow template in Settings.
+                      Map a compliance standard to a workflow job template in Settings.
                     </Typography>
                   </div>
                 </div>
                 <div className={classes.welcomeStep}>
                   <div className={classes.stepNumber}>2</div>
                   <div>
-                    <Typography variant="subtitle1">Launch Your First Scan</Typography>
+                    <Typography variant="subtitle1">Launch a Scan</Typography>
                     <Typography variant="body2" color="textSecondary">
                       Select a profile, choose an inventory, and run a compliance scan.
                     </Typography>

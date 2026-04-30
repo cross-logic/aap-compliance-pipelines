@@ -171,7 +171,7 @@ export interface DashboardStats {
   }>;
 }
 
-/** A compliance cartridge maps a framework profile to Controller resources. */
+/** A compliance profile maps a standard (e.g., DISA STIG) to Controller resources. */
 export interface ComplianceCartridge {
   id: string;
   displayName: string;
@@ -203,7 +203,7 @@ export interface RemediationPlan {
   totalHosts: number;
 }
 
-/** Request to create or update a cartridge. */
+/** Request to create or update a compliance profile registration. */
 export interface SaveCartridgeRequest {
   id?: string;
   displayName: string;

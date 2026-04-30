@@ -6,8 +6,8 @@ automated `setup_controller.yml` playbook.
 
 ## Prerequisites
 
-- AAP Controller 2.6 with admin access
-- A container registry accessible from Controller (for the compliance EE)
+- Red Hat Ansible Automation Platform 2.6 with admin access
+- A container registry accessible from automation controller (for the compliance EE)
 - SSH access to target RHEL 9 hosts
 - The compliance pipeline repository cloned or available as a Git URL
 
@@ -167,27 +167,28 @@ Install Scanner -> Run Scan -> Fetch/Normalize -> Uninstall Scanner -> Remediate
    - Save
 7. Click **Save** on the visualizer
 
-## Step 8: Register Cartridge in Backstage
+## Step 8: Add a Compliance Profile in Backstage
 
-Once the Controller resources are set up, register a cartridge in the
-Backstage compliance plugin so the UI knows how to use them.
+Once the platform resources are set up, register a compliance profile in the
+Backstage compliance plugin so the UI knows which standard to scan against and
+which platform resources to invoke.
 
 1. Open the Compliance plugin in Backstage
 2. Go to the **Settings** tab
-3. Click **Add Cartridge**
+3. Click **Add Profile**
 4. Fill in the fields as described below:
 
 | Field | Value | Description |
 |-------|-------|-------------|
-| Display Name | `DISA STIG for RHEL 9` | Human-readable name shown in the plugin UI |
-| Description | `DISA STIG V2R8 compliance scanning and remediation for RHEL 9` | Optional description |
-| Framework | `DISA_STIG` | The compliance framework. Options: `DISA_STIG`, `CIS`, `PCI_DSS`, `HIPAA`, `NIST_800_53` |
-| Version | `V2R8` | The framework version (matches the DISA STIG release) |
-| Platform | `RHEL 9` | The target operating system |
-| Workflow Template | `compliance-pipeline-rhel9-stig` | Select from the dropdown — this is the Controller workflow that runs the scan/evaluate/remediate pipeline |
-| Execution Environment | `Compliance STIG RHEL 9` | Select from the dropdown — this is the custom EE with scap-security-guide and OpenSCAP baked in |
-| Remediation Playbook Path | `/usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml` | The path inside the EE where the ComplianceAsCode remediation playbook lives. This playbook is installed as part of the `scap-security-guide` RPM in the EE. Controller uses this path with `--tags` for selective remediation. |
-| Scan Tags | *(leave empty)* | Optional comma-separated tags to filter which STIG rules are included in scans. Leave empty to include all rules in the profile. Example: `sshd_set_idle_timeout,accounts_tmout` would scan only those two rules. |
+| Profile Name | `DISA STIG for RHEL 9` | A descriptive name for this profile shown in the plugin UI |
+| Description | `DISA STIG V2R8 compliance scanning and remediation for RHEL 9` | Optional context shown alongside the profile name |
+| Compliance Standard | `DISA_STIG` | The compliance standard. Options: `DISA_STIG`, `CIS`, `PCI_DSS`, `HIPAA`, `NIST_800_53` |
+| Standard Version | `V2R8` | The release version of the standard (matches the DISA STIG release) |
+| Target Platform | `RHEL 9` | The operating system or platform this profile applies to |
+| Workflow Job Template | `compliance-pipeline-rhel9-stig` | Select from the dropdown — this is the workflow job template that orchestrates the scan-evaluate-remediate pipeline |
+| Execution Environment | `Compliance STIG RHEL 9` | Select from the dropdown — the execution environment containing scap-security-guide and OpenSCAP |
+| Remediation Playbook Path | `/usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml` | Filesystem path inside the execution environment where the ComplianceAsCode remediation playbook lives. Installed by the `scap-security-guide` RPM. Used with `--tags` for selective remediation. |
+| Scan Tags | *(leave empty)* | Optional comma-separated rule IDs to limit which rules are included. Leave empty to scan all rules in the standard. Example: `sshd_set_idle_timeout,accounts_tmout` |
 
 5. Click **Save**
 
@@ -205,7 +206,7 @@ The `scap-security-guide` RPM installs pre-rendered Ansible playbooks at
 | PCI-DSS | `/usr/share/scap-security-guide/ansible/rhel9-playbook-pci-dss.yml` |
 | HIPAA | `/usr/share/scap-security-guide/ansible/rhel9-playbook-hipaa.yml` |
 
-**Scan Tags** — When the remediation step runs, Controller passes these
+**Scan Tags** — When the remediation step runs, automation controller passes these
 tags to Ansible's `--tags` parameter. This restricts which tasks in the CaC
 playbook are executed. Each task in the CaC playbook is tagged with its STIG
 rule ID (e.g., `sshd_set_idle_timeout`, `DISA-STIG-RHEL-09-255040`).
@@ -216,9 +217,9 @@ rule ID (e.g., `sshd_set_idle_timeout`, `DISA-STIG-RHEL-09-255040`).
 ## Verification
 
 1. Go to the **New Scan** tab
-2. You should see the cartridge-sourced profile in the profile list
+2. You should see the registered profile in the profile list
 3. Select it, choose an inventory, and launch a scan
-4. The scan should use the mapped workflow template from the cartridge
+4. The scan should use the mapped workflow template from the profile
 
 ## Automated Setup
 

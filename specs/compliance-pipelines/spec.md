@@ -9,26 +9,26 @@
 
 ## User Scenarios & Testing _(mandatory)_
 
-### User Story 1 - Admin Registers a Compliance Cartridge (Priority: P1)
+### User Story 1 - Admin Adds a Compliance Profile (Priority: P1)
 
-Before compliance scanning can begin, a platform administrator must register a "cartridge" — a mapping between a compliance profile (e.g., RHEL 9 DISA STIG), the Execution Environment that contains the scanner tooling and remediation content, and the AAP workflow template that orchestrates the scan-evaluate-remediate pipeline. Without this registration, the portal has no knowledge of what compliance standards are available or how to invoke them.
+Before compliance scanning can begin, a platform administrator must add a compliance profile — a mapping between a compliance standard (e.g., RHEL 9 DISA STIG), the Execution Environment that contains the scanner tooling and remediation content, and the AAP workflow template that orchestrates the scan-evaluate-remediate pipeline. Without this registration, the portal has no knowledge of what compliance standards are available or how to invoke them.
 
-**Why this priority**: This is the foundational configuration step. No cartridge registration means no scan profiles available, no scan launches possible, and no compliance functionality of any kind. Every other user story depends on at least one cartridge being registered.
+**Why this priority**: This is the foundational configuration step. No compliance profile registered means no scan profiles available, no scan launches possible, and no compliance functionality of any kind. Every other user story depends on at least one compliance profile being registered.
 
-**Independent Test**: Log in as a platform administrator, navigate to Compliance > Settings, register a new cartridge by selecting an EE, mapping it to a workflow template, and assigning a compliance profile name. Verify the cartridge appears in the profile browser and is available for scan launches.
+**Independent Test**: Log in as a platform administrator, navigate to Compliance > Settings, add a new compliance profile by selecting an EE, mapping it to a workflow template, and assigning a compliance profile name. Verify the compliance profile appears in the profile browser and is available for scan launches.
 
 **Acceptance Scenarios**:
 
-1. **Given** a portal with the compliance plugin installed but no cartridges registered, **When** an admin navigates to Compliance > Settings, **Then** they see an empty state with instructions to register their first compliance cartridge and a "Register Cartridge" button
-2. **Given** the cartridge registration form, **When** the admin selects an Execution Environment from a dropdown populated via the AAP Gateway API, maps it to a workflow template, and provides a display name and compliance standard identifier (e.g., `rhel9-stig-v2r8`), **Then** the cartridge is persisted to the compliance database and appears in the cartridge list
-3. **Given** a registered cartridge, **When** the admin views the cartridge details, **Then** they see the EE name, workflow template name, compliance standard, creation date, and a status indicator showing whether the EE and workflow template are still accessible via the AAP Gateway
-4. **Given** one or more registered cartridges, **When** any user navigates to the compliance profile browser, **Then** the registered profiles appear as selectable options for launching scans
+1. **Given** a portal with the compliance plugin installed but no compliance profiles registered, **When** an admin navigates to Compliance > Settings, **Then** they see an empty state with instructions to add a compliance profile and an "Add Compliance Profile" button
+2. **Given** the compliance profile registration form, **When** the admin selects an Execution Environment from a dropdown populated via the AAP Gateway API, maps it to a workflow template, and provides a display name and compliance standard identifier (e.g., `rhel9-stig-v2r8`), **Then** the compliance profile is persisted to the compliance database (internally: `compliance_cartridges` table) and appears in the compliance profile list
+3. **Given** a registered compliance profile, **When** the admin views the compliance profile details, **Then** they see the EE name, workflow template name, compliance standard, creation date, and a status indicator showing whether the EE and workflow template are still accessible via the AAP Gateway
+4. **Given** one or more registered compliance profiles, **When** any user navigates to the compliance profile browser, **Then** the registered profiles appear as selectable options for launching scans
 
 ---
 
 ### User Story 2 - Admin Launches a Compliance Scan from the Portal (Priority: P1)
 
-Platform administrators need to initiate compliance scans against target infrastructure directly from the portal without requiring AAP Controller expertise or CLI access. The scan must invoke the correct AAP workflow (gather, evaluate) using the EE and content specified by the selected cartridge, targeting hosts specified by the administrator.
+Platform administrators need to initiate compliance scans against target infrastructure directly from the portal without requiring AAP Controller expertise or CLI access. The scan must invoke the correct AAP workflow (gather, evaluate) using the EE and content specified by the selected compliance profile, targeting hosts specified by the administrator.
 
 **Why this priority**: Scanning is the entry point for the entire compliance pipeline. Without the ability to launch scans from the portal, users must fall back to the Controller UI or CLI, eliminating the value of the portal integration entirely.
 
@@ -36,7 +36,7 @@ Platform administrators need to initiate compliance scans against target infrast
 
 **Acceptance Scenarios**:
 
-1. **Given** at least one registered cartridge, **When** the admin clicks "Launch Scan" from the compliance dashboard, **Then** they see a scan configuration form with fields for: compliance profile (dropdown of registered cartridges), target inventory or host pattern, and optional scan parameters
+1. **Given** at least one registered compliance profile, **When** the admin clicks "Launch Scan" from the compliance dashboard, **Then** they see a scan configuration form with fields for: compliance profile (dropdown of registered compliance profiles), target inventory or host pattern, and optional scan parameters
 2. **Given** a completed scan configuration form, **When** the admin clicks "Start Scan", **Then** the portal invokes the mapped AAP workflow template via the Gateway API with the appropriate EE, inventory, and extra variables, and displays a progress indicator linking to the active workflow job
 3. **Given** a scan is in progress, **When** the admin views the compliance dashboard, **Then** they see the active scan with real-time status (pending, running, completed, failed) pulled from the AAP Gateway API job status endpoint
 4. **Given** a scan completes successfully, **When** the admin views the scan results, **Then** parsed findings are stored in the compliance database with per-host, per-rule detail and the scan appears in the scan history list
@@ -141,16 +141,16 @@ Automation architects need infrastructure changes (new host provisioned, configu
 
 **Acceptance Scenarios**:
 
-1. **Given** a registered compliance cartridge and a configured EDA rulebook, **When** an infrastructure change event is received by EDA (e.g., new host added to inventory, configuration drift webhook), **Then** EDA triggers the compliance scan workflow via the AAP Gateway API using the mapped cartridge
+1. **Given** a registered compliance profile and a configured EDA rulebook, **When** an infrastructure change event is received by EDA (e.g., new host added to inventory, configuration drift webhook), **Then** EDA triggers the compliance scan workflow via the AAP Gateway API using the mapped compliance profile
 2. **Given** an event-driven scan is triggered, **When** the scan completes, **Then** the findings are stored in the same compliance database and appear in the same dashboard as manually launched scans, with the trigger source marked as "event-driven" rather than "manual"
 3. **Given** continuous event-driven scanning is active, **When** multiple events arrive within a configurable cooldown window (e.g., 5 minutes), **Then** they are batched into a single scan rather than triggering redundant concurrent scans
-4. **Given** event-driven scanning, **When** a scan finds CAT I (critical) failures, **Then** the portal can optionally trigger an automatic remediation using a saved remediation profile if the cartridge is configured for auto-remediation mode
+4. **Given** event-driven scanning, **When** a scan finds CAT I (critical) failures, **Then** the portal can optionally trigger an automatic remediation using a saved remediation profile if the compliance profile is configured for auto-remediation mode
 
 ---
 
 ### Edge Cases
 
-- **Cartridge with deleted EE**: What happens when the EE referenced by a registered cartridge is deleted from AAP? The cartridge status indicator shows "EE unavailable", scan launches using that cartridge are blocked with a clear error message, and the admin is directed to update the cartridge mapping
+- **Compliance profile with deleted EE**: What happens when the EE referenced by a registered compliance profile is deleted from AAP? The compliance profile status indicator shows "EE unavailable", scan launches using that compliance profile are blocked with a clear error message, and the admin is directed to update the compliance profile mapping
 - **Scan against empty inventory**: What happens when a scan is launched against an inventory with zero reachable hosts? The AAP workflow completes with zero findings, the portal displays "No hosts reachable" with the inventory name, and the scan is recorded in history with a "no results" status
 - **Partial host failures**: What happens when a scan succeeds on 18 of 20 hosts but 2 hosts are unreachable? Findings are stored for the 18 successful hosts, the 2 unreachable hosts are listed with "unreachable" status, and the scan is marked "completed with warnings"
 - **Concurrent scans same hosts**: What happens when two scans target overlapping hosts simultaneously? Both scans proceed independently (AAP handles job isolation), but the portal shows a warning on the second scan launch and stores findings from both scans with distinct scan IDs and timestamps
@@ -163,17 +163,17 @@ Automation architects need infrastructure changes (new host provisioned, configu
 
 ### Functional Requirements
 
-#### Cartridge Registration
+#### Compliance Profile Registration
 
-- **FR-001**: System MUST provide a cartridge registration interface where administrators map a compliance profile name, an Execution Environment, and an AAP workflow template into a reusable scanning configuration
-- **FR-002**: System MUST validate that the referenced EE and workflow template are accessible via the AAP Gateway API before accepting a cartridge registration
-- **FR-003**: System MUST display registered cartridges with status indicators reflecting the current accessibility of the mapped EE and workflow template
-- **FR-004**: System MUST allow administrators to update or delete cartridge registrations
+- **FR-001**: System MUST provide a compliance profile registration interface where administrators map a compliance standard name, an Execution Environment, and an AAP workflow template into a reusable scanning configuration (internally: cartridge)
+- **FR-002**: System MUST validate that the referenced EE and workflow template are accessible via the AAP Gateway API before accepting a compliance profile registration
+- **FR-003**: System MUST display registered compliance profiles with status indicators reflecting the current accessibility of the mapped EE and workflow template
+- **FR-004**: System MUST allow administrators to update or delete compliance profile registrations
 
 #### Scan Execution
 
-- **FR-005**: System MUST allow administrators to launch compliance scans by selecting a registered cartridge, specifying target hosts or inventory, and providing optional scan parameters
-- **FR-006**: System MUST invoke the AAP workflow template mapped by the selected cartridge via the AAP Gateway API, passing the target inventory, EE, and extra variables
+- **FR-005**: System MUST allow administrators to launch compliance scans by selecting a registered compliance profile, specifying target hosts or inventory, and providing optional scan parameters
+- **FR-006**: System MUST invoke the AAP workflow template mapped by the selected compliance profile via the AAP Gateway API, passing the target inventory, EE, and extra variables
 - **FR-007**: System MUST track scan progress by polling the AAP Gateway API for workflow job status and display real-time status updates in the portal
 - **FR-008**: System MUST parse scan output (XCCDF/JSON) into structured per-host, per-rule findings and persist them to the compliance database
 
@@ -212,7 +212,7 @@ Automation architects need infrastructure changes (new host provisioned, configu
 
 #### Event-Driven Integration
 
-- **FR-027**: System MUST support EDA-triggered compliance scans using registered cartridges
+- **FR-027**: System MUST support EDA-triggered compliance scans using registered compliance profiles
 - **FR-028**: System MUST batch rapid-fire events within a configurable cooldown window to prevent redundant concurrent scans
 - **FR-029**: Event-driven scan findings MUST be stored in the same database and appear in the same dashboard as manual scan findings
 
@@ -224,8 +224,8 @@ Automation architects need infrastructure changes (new host provisioned, configu
 
 ### Key Entities _(include if feature involves data)_
 
-- **Compliance Cartridge**: A registered mapping between a compliance standard, an Execution Environment, and an AAP workflow template. Attributes: display name, compliance standard identifier (e.g., `rhel9-stig-v2r8`), EE reference (id, name), workflow template reference (id, name), status (active, ee-unavailable, workflow-unavailable), created/updated timestamps
-- **Compliance Scan**: A single execution of a compliance assessment against target hosts. Attributes: scan ID, cartridge reference, target inventory/host pattern, trigger source (manual, event-driven), AAP workflow job ID, status (pending, running, completed, failed, completed-with-warnings), start/end timestamps
+- **Compliance Profile** (internally: `ComplianceCartridge`): A registered mapping between a compliance standard, an Execution Environment, and an AAP workflow template. Attributes: display name, compliance standard identifier (e.g., `rhel9-stig-v2r8`), EE reference (id, name), workflow template reference (id, name), status (active, ee-unavailable, workflow-unavailable), created/updated timestamps
+- **Compliance Scan**: A single execution of a compliance assessment against target hosts. Attributes: scan ID, compliance profile reference, target inventory/host pattern, trigger source (manual, event-driven), AAP workflow job ID, status (pending, running, completed, failed, completed-with-warnings), start/end timestamps
 - **Compliance Finding**: A single rule evaluation result for a specific host. Attributes: scan reference, rule ID, rule title, description, severity (CAT I/II/III), host, compliance status (pass, fail, error, not-applicable), actual value, expected value, check type
 - **Remediation Profile**: A saved set of remediation decisions. Attributes: profile name, description, tags, compliance standard, rule selections (per-rule: included/excluded, scope, parameter override, justification), creation date, last used date, associated scan IDs
 - **Posture Record**: A point-in-time compliance summary for dashboard and trend reporting. Attributes: scan reference, total rules, passed, failed, not-applicable, error, host count, compliance percentage, timestamp
@@ -234,7 +234,7 @@ Automation architects need infrastructure changes (new host provisioned, configu
 
 ### Measurable Outcomes
 
-- **SC-001**: Platform administrators can register a compliance cartridge (EE + workflow mapping) and launch a scan from the portal in under 5 minutes without AAP Controller UI access
+- **SC-001**: Platform administrators can add a compliance profile (EE + workflow mapping) and launch a scan from the portal in under 5 minutes without AAP Controller UI access
 - **SC-002**: Scan findings display per-host, per-rule detail including actual observed values — not just aggregate pass/fail percentages
 - **SC-003**: Remediation profile builder supports selective rule toggling, parameter overrides, and scope selection (failed-only vs standardize-all) for individual rules
 - **SC-004**: Remediation execution uses dynamic host grouping, generating no more than N jobs for N distinct remediation configurations regardless of host count (scales to 20,000+ hosts without creating per-host jobs)
@@ -250,11 +250,11 @@ Automation architects need infrastructure changes (new host provisioned, configu
 - AAP 2.6+ is deployed and accessible via the AAP Gateway URL with OAuth2 authentication configured
 - The Ansible Portal (RHDH/Backstage) is the frontend hosting environment with the compliance plugin installed as a dynamic plugin
 - ComplianceAsCode remediation content (`scap-security-guide` RPM) is available in the Execution Environment and provides the remediation playbooks — the compliance plugin does not author remediation content
-- Compliance cartridges use the collection + EE profile model: an Ansible collection (e.g., `security.compliance_rhel9_stig`) ships an EE profile definition, and the EE Builder constructs the EE from it
-- AAP workflow templates for compliance pipelines (gather, evaluate, remediate nodes) are pre-created in the Controller before cartridge registration
+- Compliance profiles use the collection + EE packaging model (internally: cartridge model): an Ansible collection (e.g., `security.compliance_rhel9_stig`) ships an EE profile definition, and the EE Builder constructs the EE from it
+- AAP workflow templates for compliance pipelines (gather, evaluate, remediate nodes) are pre-created in the Controller before compliance profile registration
 - The AAP Gateway is the sole API entry point — direct Controller API access is not used (aligns with AAP 2.7+ architecture)
-- Backstage PostgreSQL is available for compliance data persistence (findings, profiles, posture history, cartridge registry)
+- Backstage PostgreSQL is available for compliance data persistence (findings, profiles, posture history, compliance profile registry)
 - Per-user AAP tokens are available via the `x-aap-token` header pattern established by the Portal authentication flow
-- OpenSCAP is the Tier 1 scanner for RHEL STIG/CIS benchmarks; the architecture supports pluggable Tier 2 (BYOS: Qualys, Tenable) and Tier 3 (hybrid) scanners via additional cartridge types
+- OpenSCAP is the Tier 1 scanner for RHEL STIG/CIS benchmarks; the architecture supports pluggable Tier 2 (BYOS: Qualys, Tenable) and Tier 3 (hybrid) scanners via additional compliance profile types
 - EDA integration (User Story 8) depends on EDA Server being deployed and configured with appropriate rulebooks — this is a stretch goal
 - The compliance plugin operates as a scanner orchestrator, not a scanner — it invokes existing scanning tools through AAP workflows rather than performing scans directly

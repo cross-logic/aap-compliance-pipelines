@@ -123,7 +123,7 @@ export const ScanLauncher = () => {
             id: c.id,
             name: c.displayName,
             version: c.version || '',
-            rules: 0, // rule count not tracked in cartridge
+            rules: 0,
           }));
           setProfiles(prev => {
             // Merge: cartridge-sourced profiles + any built-in that don't overlap

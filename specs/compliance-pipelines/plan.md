@@ -6,14 +6,14 @@
 
 ## Summary
 
-Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automation Platform today must manually source ComplianceAsCode content, build scan/remediate workflows, parse XCCDF results, and manage remediation decisions — with no integrated portal experience. This feature delivers an end-to-end compliance pipeline within the Ansible Portal that enables administrators to register compliance "cartridges" (EE + workflow mappings), launch scans, review host-level findings, build selective remediation profiles, execute remediation, and verify results — all without leaving the portal or requiring Controller expertise.
+Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automation Platform today must manually source ComplianceAsCode content, build scan/remediate workflows, parse XCCDF results, and manage remediation decisions — with no integrated portal experience. This feature delivers an end-to-end compliance pipeline within the Ansible Portal that enables administrators to add compliance profiles (EE + workflow mappings), launch scans, review host-level findings, build selective remediation profiles, execute remediation, and verify results — all without leaving the portal or requiring Controller expertise.
 
 **Technical Approach**: The compliance plugin operates as a scanner orchestrator, not a scanner. It invokes existing AAP workflow templates via the Gateway API, parses scan output into structured findings stored in Backstage PostgreSQL, and provides a remediation profile builder that translates user decisions into `--limit`, `--tags`, and `--extra-vars` parameters for the remediation workflow node. ComplianceAsCode's `rhel9-playbook-stig.yml` (55K+ lines, 4400+ tasks) from the `scap-security-guide` RPM IS the remediation engine — we consume it, not author it.
 
 **Key Architecture Decisions**:
 
 1. Scanner orchestrator, not scanner — our value is UX, orchestration, and the remediation profile builder
-2. Cartridge model — pluggable scanner registration (Tier 1: OpenSCAP/PowerSTIG, Tier 2: BYOS Qualys/Tenable, Tier 3: hybrid)
+2. Cartridge model (maps to "compliance profile" in the UI) — pluggable scanner registration (Tier 1: OpenSCAP/PowerSTIG, Tier 2: BYOS Qualys/Tenable, Tier 3: hybrid)
 3. CaC content consumption — selective remediation via Ansible `--tags` + `--extra-vars` + `--limit`
 4. Controller workflow as pipeline — uses AAP's existing workflow engine (gather, evaluate, remediate nodes), not a new pipeline runtime
 5. All API calls through Gateway — no direct Controller access (aligns with AAP 2.7+ architecture)
@@ -22,7 +22,7 @@ Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automat
 
 **Language/Version**: TypeScript 5.8, Node.js 20/22
 **Primary Dependencies**: Backstage 0.33.1, Knex.js (migrations/queries), @backstage/backend-plugin-api, Material-UI v4 / PatternFly 6
-**Storage**: PostgreSQL (production), SQLite (local dev) for compliance tables (cartridges, scans, findings, profiles, posture)
+**Storage**: PostgreSQL (production), SQLite (local dev) for compliance tables (compliance profiles, scans, findings, remediation profiles, posture)
 **Testing**: Jest (unit), Playwright (E2E), supertest (API contract)
 **Target Platform**: Ansible Portal (RHDH) on RHEL 9+ or OpenShift 4.14+, local dev (yarn start)
 **Project Type**: Backstage plugin suite (1 frontend plugin, 1 backend plugin, 1 common package)
@@ -38,12 +38,12 @@ Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automat
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Frontend (plugins/compliance)                                      │
 │  ├─ ComplianceDashboard/ - Posture overview, scan history           │
-│  ├─ ProfileBrowser/ - Browse registered cartridges                  │
+│  ├─ ProfileBrowser/ - Browse registered compliance profiles           │
 │  ├─ ScanLauncher/ - Configure and launch scans                      │
 │  ├─ FindingsViewer/ - Host-level findings with severity grouping    │
 │  ├─ ProfileBuilder/ - Selective rule toggles, parameter overrides   │
 │  ├─ ProfileManager/ - Save, load, apply remediation profiles        │
-│  ├─ CartridgeSettings/ - Admin cartridge registration               │
+│  ├─ CartridgeSettings/ - Admin compliance profile registration      │
 │  └─ ExportDialog/ - CSV/JSON export configuration                   │
 └─────────────────────────────────────────────────────────────────────┘
                               │
@@ -51,14 +51,14 @@ Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automat
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Backend (plugins/compliance-backend)                                │
 │  ├─ REST API Router - Express routes                                │
-│  │   ├─ POST /cartridges - Register cartridge                       │
-│  │   ├─ GET  /cartridges - List cartridges                          │
+│  │   ├─ POST /cartridges - Add compliance profile                   │
+│  │   ├─ GET  /cartridges - List compliance profiles                 │
 │  │   ├─ POST /scans - Launch scan                                   │
 │  │   ├─ GET  /scans/:id/findings - Get findings                     │
 │  │   ├─ POST /profiles - Save remediation profile                   │
 │  │   ├─ POST /remediate - Execute remediation                       │
 │  │   └─ GET  /posture - Dashboard data                              │
-│  ├─ CartridgeService - Cartridge CRUD + validation                  │
+│  ├─ CartridgeService - Compliance profile CRUD + validation         │
 │  ├─ ScanService - Workflow invocation + result parsing              │
 │  ├─ FindingsService - Finding storage + query                       │
 │  ├─ ProfileService - Profile CRUD + application logic               │
@@ -143,11 +143,11 @@ Track B: Audit-Grade Scanning (full OpenSCAP)
 └──────────────────────────────────────────────┘
 ```
 
-### Cartridge Model
+### Cartridge Model (user-facing: "Compliance Profile")
 
 ```
 ┌─────────────────────────────────────┐
-│ Compliance Cartridge                 │
+│ Compliance Profile                   │
 │                                     │
 │ display_name: "RHEL 9 DISA STIG"   │
 │ standard_id:  "rhel9-stig-v2r8"    │
@@ -164,15 +164,15 @@ Track B: Audit-Grade Scanning (full OpenSCAP)
 
 Tier 1: Built-in (OpenSCAP, PowerSTIG)
   → EE includes scanner + content
-  → Fully supported, ships with cartridge collection
+  → Fully supported, ships with compliance profile collection
 
 Tier 2: BYOS (Qualys, Tenable, Rapid7)
   → Customer provides scanner license + credentials
-  → Cartridge provides workflow orchestration + result parsing
+  → Compliance profile provides workflow orchestration + result parsing
 
 Tier 3: Hybrid (one tool, many domains)
   → Single scanner covers multiple compliance standards
-  → Cartridge maps scanner outputs to domain-specific findings
+  → Compliance profile maps scanner outputs to domain-specific findings
 ```
 
 ## Project Structure
@@ -204,10 +204,10 @@ plugins/compliance/
 │   │   │   ├── ScanHistory.tsx            # Recent scan list
 │   │   │   └── ActiveScans.tsx            # In-progress scans
 │   │   ├── ProfileBrowser/
-│   │   │   ├── ProfileBrowser.tsx         # Cartridge selection grid
-│   │   │   └── CartridgeCard.tsx          # Individual cartridge card
+│   │   │   ├── ProfileBrowser.tsx         # Compliance profile selection grid
+│   │   │   └── CartridgeCard.tsx          # Individual compliance profile card
 │   │   ├── ScanLauncher/
-│   │   │   ├── ScanLauncher.tsx           # Scan configuration form
+│   │   │   ├── ScanLauncher.tsx           # Scan configuration form (compliance profile selection, inventory, launch)
 │   │   │   └── ScanProgress.tsx           # Real-time progress view
 │   │   ├── FindingsViewer/
 │   │   │   ├── FindingsViewer.tsx         # Main findings page
@@ -225,8 +225,8 @@ plugins/compliance/
 │   │   │   ├── ProfileManager.tsx         # Saved profiles list
 │   │   │   └── ApplyProfileDialog.tsx     # Apply to new findings
 │   │   ├── CartridgeSettings/
-│   │   │   ├── CartridgeSettings.tsx      # Admin cartridge list
-│   │   │   └── CartridgeForm.tsx          # Register/edit cartridge
+│   │   │   ├── CartridgeSettings.tsx      # Admin compliance profile list
+│   │   │   └── CartridgeForm.tsx          # Add/edit compliance profile
 │   │   └── ExportDialog/
 │   │       └── ExportDialog.tsx           # Format + scope selection
 │   ├── hooks/
@@ -248,7 +248,7 @@ plugins/compliance-backend/
 │   │   └── migrations/
 │   │       └── 20260423_001_init.ts       # All compliance tables
 │   ├── service/
-│   │   ├── CartridgeService.ts            # Cartridge CRUD + validation
+│   │   ├── CartridgeService.ts            # Compliance profile CRUD + validation
 │   │   ├── ScanService.ts                 # Workflow invocation + parsing
 │   │   ├── FindingsService.ts             # Finding storage + query
 │   │   ├── ProfileService.ts              # Profile CRUD + application
@@ -273,7 +273,7 @@ plugins/compliance-common/
 ## Database Schema
 
 ```sql
--- Compliance cartridge registry
+-- Compliance profile registry (internal table name: compliance_cartridges)
 CREATE TABLE compliance_cartridges (
   id TEXT PRIMARY KEY,                    -- UUID
   display_name TEXT NOT NULL,
@@ -360,24 +360,24 @@ CREATE INDEX idx_posture_created ON compliance_posture(created_at);
 
 ## API Design
 
-### Cartridge Management
+### Compliance Profile Management (API path: `/cartridges`)
 
 ```
-POST /api/compliance/cartridges
+POST /api/compliance/cartridges          # Add compliance profile
   { displayName, standardId, eeId, workflowTemplateId, scannerTier?, config? }
   → { id, displayName, standardId, eeId, eeName, workflowTemplateId, workflowTemplateName, status }
 
-GET  /api/compliance/cartridges
+GET  /api/compliance/cartridges          # List compliance profiles
   → [{ id, displayName, standardId, eeName, workflowTemplateName, status, createdAt }]
 
-GET  /api/compliance/cartridges/:id
+GET  /api/compliance/cartridges/:id      # Get compliance profile details
   → { id, displayName, standardId, eeId, eeName, workflowTemplateId, workflowTemplateName, scannerTier, status, config, createdAt, updatedAt }
 
-PUT  /api/compliance/cartridges/:id
+PUT  /api/compliance/cartridges/:id      # Update compliance profile
   { displayName?, eeId?, workflowTemplateId?, config? }
   → { id, ...updated fields }
 
-DELETE /api/compliance/cartridges/:id
+DELETE /api/compliance/cartridges/:id    # Delete compliance profile
   → { success: true }
 ```
 
@@ -385,11 +385,11 @@ DELETE /api/compliance/cartridges/:id
 
 ```
 POST /api/compliance/scans
-  { cartridgeId, targetInventory, scanParams? }
+  { cartridgeId, targetInventory, scanParams? }    # cartridgeId = compliance profile ID
   → { id, cartridgeId, targetInventory, aapWorkflowJobId, status: "pending" }
 
 GET  /api/compliance/scans
-  ?status=completed&cartridgeId=<id>&limit=20&offset=0
+  ?status=completed&cartridgeId=<id>&limit=20&offset=0    # cartridgeId = compliance profile ID
   → { items: [{ id, cartridgeId, targetInventory, triggerSource, status, hostCount, startedAt, completedAt }], total }
 
 GET  /api/compliance/scans/:id
@@ -458,7 +458,7 @@ GET  /api/compliance/remediate/:id/comparison
 
 ```
 GET  /api/compliance/posture
-  ?cartridgeId=<id>&from=<date>&to=<date>
+  ?cartridgeId=<id>&from=<date>&to=<date>    # cartridgeId = compliance profile ID
   → { current: { compliancePct, passed, failed, lastScanAt }, trend: [{ date, compliancePct, hostCount }], recentScans: [...] }
 ```
 
@@ -488,7 +488,7 @@ GET  /api/compliance/posture
 |---|---|---|
 | **EE Builder / Pattern Loading Service** (ANSTRAT-1285) | Automated EE construction from collection EE profiles | Planned — manual EE build works today |
 | **EDA Server** | Event-driven scan triggers | Available but integration is P3 |
-| **Content Discovery** (ANSTRAT-1534) | Auto-discovery of compliance cartridges via Hub API | Planned — manual registration works today |
+| **Content Discovery** (ANSTRAT-1534) | Auto-discovery of compliance profiles via Hub API | Planned — manual registration works today |
 
 ## Security Model
 
@@ -507,7 +507,7 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 
 ### Authorization
 
-- Cartridge registration: requires admin role (Backstage RBAC)
+- Compliance profile registration: requires admin role (Backstage RBAC)
 - Scan launch: requires authenticated user with AAP inventory access
 - Findings view: requires authenticated user
 - Remediation execution: requires authenticated user with AAP job template execute permission
@@ -530,8 +530,8 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 - Write Knex database migrations for all compliance tables
 - Implement `DatabaseHandler` with CRUD operations for all entities
 - Implement `AapGatewayClient` for AAP Gateway API communication
-- Implement `CartridgeService` with EE/workflow validation via Gateway API
-- Implement cartridge REST API endpoints
+- Implement `CartridgeService` (internally: cartridge) with EE/workflow validation via Gateway API
+- Implement compliance profile REST API endpoints (path: `/cartridges`)
 - Package compliance Ansible collection with EE profile definition
 - Unit tests for all services (>80% coverage target)
 
@@ -543,7 +543,7 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 - Implement `PostureService` — compliance trend aggregation from findings
 - Implement scan and findings REST API endpoints
 - Build frontend `ComplianceDashboard` component (posture summary, scan history)
-- Build frontend `ScanLauncher` component (cartridge selection, inventory, launch)
+- Build frontend `ScanLauncher` component (compliance profile selection, inventory, launch)
 - Build frontend `FindingsViewer` component (severity groups, host detail panels)
 - Build `HomogeneityAdvisory` component for outlier host detection
 - Integration tests (scan launch → findings storage → dashboard display)
@@ -556,7 +556,7 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 - Build frontend `ProfileBuilder` component (rule toggles, scope selection, parameter overrides)
 - Build frontend `ExecutionPreview` component (rule x host matrix)
 - Build frontend `ProfileManager` component (save, load, apply profiles)
-- Build frontend `CartridgeSettings` admin page
+- Build frontend `CartridgeSettings` admin page (compliance profile management)
 - Implement remediation REST API endpoints
 - Implement automatic verification re-scan trigger after remediation
 - Build before/after comparison view
@@ -569,7 +569,7 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 - Implement export REST API endpoint
 - Add scan history pagination and filtering
 - Performance optimization for large finding sets (database query tuning, frontend virtualization)
-- E2E tests (full workflow: register cartridge → scan → review → remediate → verify → export)
+- E2E tests (full workflow: add compliance profile → scan → review → remediate → verify → export)
 
 ### Phase 5: EDA Integration (1 week — stretch goal)
 
@@ -578,12 +578,12 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 - Implement cooldown window and event batching logic
 - Mark event-driven scans with `trigger_source: 'event-driven'` in scan records
 - Test EDA → compliance scan → findings flow end-to-end
-- Document EDA rulebook configuration for administrators
+- Document EDA rulebook configuration for administrators (compliance profile mapping)
 
 ### Phase 6: Documentation and Hardening (3-5 days)
 
 - API documentation (endpoint reference with request/response examples)
-- Administrator guide (cartridge registration, profile management, EDA setup)
+- Administrator guide (compliance profile registration, remediation profile management, EDA setup)
 - Dynamic plugin packaging and configuration documentation
 - Security review of all AAP token handling paths
 - Load testing with simulated 20K host scan results
@@ -597,13 +597,13 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 | **AAP Gateway API stability**: Gateway API may change between AAP releases | Isolate all Gateway calls in `AapGatewayClient`, version-detect API paths, maintain integration test suite against Gateway |
 | **Large finding sets**: 300 rules x 20K hosts = 6M findings per scan | Database pagination, indexed queries, frontend virtualization (react-window), async export for large datasets |
 | **Workflow parameter translation**: Mapping profile decisions to `--tags`/`--limit`/`--extra-vars` is complex | Extensive unit tests for `RemediationService`, validate generated parameters against known CaC playbook tag names |
-| **EE availability**: Referenced EE may be deleted or unavailable after cartridge registration | Cartridge status check on scan launch, clear error messaging, admin notification for unavailable cartridges |
+| **EE availability**: Referenced EE may be deleted or unavailable after compliance profile registration | Compliance profile status check on scan launch, clear error messaging, admin notification for unavailable compliance profiles |
 | **Concurrent scan conflicts**: Multiple scans targeting same hosts may interfere | AAP handles job isolation natively; portal displays warnings and tracks scans independently |
 | **Lab resource constraints**: Prototype lab VM may not support full OpenSCAP scans alongside AAP | Two-track scanning: Track A (fast custom modules) for development, Track B (OpenSCAP) for validation |
 
 ## Success Metrics
 
-- Cartridge registration to first scan: <5 minutes (spec SC-001)
+- Compliance profile registration to first scan: <5 minutes (spec SC-001)
 - Host-level finding detail with actual values: verified in all scan results (spec SC-002)
 - Profile builder supports rule toggles + parameter overrides + scope selection (spec SC-003)
 - Dynamic host grouping scales to 20K+ hosts (spec SC-004)
@@ -616,7 +616,7 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 
 ## Open Questions
 
-1. Should cartridge registration validate EE contents (verify `scap-security-guide` RPM is installed) or only validate EE existence via Gateway API?
+1. Should compliance profile registration validate EE contents (verify `scap-security-guide` RPM is installed) or only validate EE existence via Gateway API?
    - **Recommendation**: Validate existence only. EE content validation requires launching a test job, which is heavy for a registration step. Document EE content requirements in the admin guide.
 
 2. Should the export endpoint support scheduled/automated exports (e.g., "email CSV every Monday") or only on-demand?

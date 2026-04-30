@@ -232,7 +232,7 @@ export const CartridgeSettings = () => {
         <Box mt={3} />
         <InfoCard title="Access Denied">
           <Typography variant="body1">
-            You do not have permission to manage compliance cartridges.
+            You do not have permission to manage compliance profiles.
             Contact your administrator if you need access.
           </Typography>
         </InfoCard>
@@ -255,10 +255,10 @@ export const CartridgeSettings = () => {
 
       <Box mt={3} />
 
-      <InfoCard title="Cartridge Registry">
+      <InfoCard title="Compliance Profiles">
         <div className={classes.headerRow}>
           <Typography variant="body2" color="textSecondary">
-            Map compliance frameworks to Controller workflow templates and execution environments.
+            Each profile maps a compliance standard (e.g., DISA STIG, CIS) to an automation controller workflow job template and execution environment.
           </Typography>
           <Button
             variant="contained"
@@ -266,7 +266,7 @@ export const CartridgeSettings = () => {
             startIcon={<AddIcon />}
             onClick={handleOpenDialog}
           >
-            Add Cartridge
+            Add Profile
           </Button>
         </div>
 
@@ -274,11 +274,12 @@ export const CartridgeSettings = () => {
           <div className={classes.emptyState}>
             <SettingsIcon style={{ fontSize: 64, color: '#6A6E73', marginBottom: 16 }} />
             <Typography variant="h6" color="textSecondary" gutterBottom>
-              No compliance cartridges configured
+              No compliance profiles configured
             </Typography>
             <Typography variant="body2" color="textSecondary" paragraph>
-              A cartridge maps a compliance framework (e.g., DISA STIG, CIS) to an
-              AAP Controller workflow template and execution environment. Add one to get started.
+              A compliance profile maps a standard (e.g., DISA STIG for RHEL 9) to
+              a workflow job template and execution environment so you can scan
+              and remediate from the portal.
             </Typography>
             <Button
               variant="contained"
@@ -286,7 +287,7 @@ export const CartridgeSettings = () => {
               startIcon={<AddIcon />}
               onClick={handleOpenDialog}
             >
-              Add Your First Cartridge
+              Add Compliance Profile
             </Button>
           </div>
         ) : (
@@ -298,8 +299,8 @@ export const CartridgeSettings = () => {
                   <TableCell>Framework</TableCell>
                   <TableCell>Version</TableCell>
                   <TableCell>Platform</TableCell>
-                  <TableCell>Workflow Template ID</TableCell>
-                  <TableCell>EE ID</TableCell>
+                  <TableCell>Workflow Job Template</TableCell>
+                  <TableCell>Execution Environment</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -326,13 +327,13 @@ export const CartridgeSettings = () => {
                     </TableCell>
                     <TableCell>{c.version || '--'}</TableCell>
                     <TableCell>{c.platform || '--'}</TableCell>
-                    <TableCell>{c.workflowTemplateId ?? '--'}</TableCell>
-                    <TableCell>{c.eeId ?? '--'}</TableCell>
+                    <TableCell>{getWorkflowTemplateName(c.workflowTemplateId)}</TableCell>
+                    <TableCell>{getEeName(c.eeId)}</TableCell>
                     <TableCell>
                       <IconButton
                         size="small"
                         onClick={() => handleDeleteClick(c)}
-                        aria-label="delete cartridge"
+                        aria-label="delete compliance profile"
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -345,7 +346,7 @@ export const CartridgeSettings = () => {
         )}
       </InfoCard>
 
-      {/* ── Add Cartridge Dialog ──────────────────────────────────────── */}
+      {/* ── Add Compliance Profile Dialog ──────────────────────────────── */}
 
       <Dialog
         open={dialogOpen}
@@ -353,16 +354,17 @@ export const CartridgeSettings = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Add Cartridge</DialogTitle>
+        <DialogTitle>Add Compliance Profile</DialogTitle>
         <DialogContent>
           <div className={classes.dialogContent}>
             <TextField
-              label="Display Name"
+              label="Profile Name"
               variant="outlined"
               fullWidth
               required
               value={form.displayName}
               onChange={e => updateForm('displayName', e.target.value)}
+              helperText="A descriptive name for this profile, e.g. 'DISA STIG for RHEL 9'"
               className={classes.formField}
             />
 
@@ -374,15 +376,16 @@ export const CartridgeSettings = () => {
               rows={2}
               value={form.description}
               onChange={e => updateForm('description', e.target.value)}
+              helperText="Optional context shown alongside the profile name in scan and results views"
               className={classes.formField}
             />
 
             <FormControl variant="outlined" fullWidth className={classes.formField}>
-              <InputLabel>Framework</InputLabel>
+              <InputLabel>Compliance Standard</InputLabel>
               <Select
                 value={form.framework}
                 onChange={e => updateForm('framework', e.target.value)}
-                label="Framework"
+                label="Compliance Standard"
               >
                 {FRAMEWORK_OPTIONS.map(f => (
                   <MenuItem key={f.value} value={f.value}>
@@ -393,34 +396,36 @@ export const CartridgeSettings = () => {
             </FormControl>
 
             <TextField
-              label="Version"
+              label="Standard Version"
               variant="outlined"
               fullWidth
               placeholder="e.g., V2R8"
               value={form.version}
               onChange={e => updateForm('version', e.target.value)}
+              helperText="The release version of the standard (e.g., V2R8 for DISA STIG, v1.0 for CIS)"
               className={classes.formField}
             />
 
             <TextField
-              label="Platform"
+              label="Target Platform"
               variant="outlined"
               fullWidth
               placeholder="e.g., RHEL 9"
               value={form.platform}
               onChange={e => updateForm('platform', e.target.value)}
+              helperText="The operating system or platform this profile applies to"
               className={classes.formField}
             />
 
             <FormControl variant="outlined" fullWidth className={classes.formField}>
-              <InputLabel>Workflow Template</InputLabel>
+              <InputLabel>Workflow Job Template</InputLabel>
               <Select
                 value={form.workflowTemplateId ?? ''}
                 onChange={e => {
                   const val = e.target.value;
                   updateForm('workflowTemplateId', val === '' ? null : Number(val));
                 }}
-                label="Workflow Template"
+                label="Workflow Job Template"
               >
                 <MenuItem value="">
                   <em>None</em>
@@ -431,6 +436,9 @@ export const CartridgeSettings = () => {
                   </MenuItem>
                 ))}
               </Select>
+              <Typography variant="caption" color="textSecondary" style={{ marginTop: 4, marginLeft: 14 }}>
+                The workflow job template that orchestrates the scan-evaluate-remediate pipeline
+              </Typography>
             </FormControl>
 
             <FormControl variant="outlined" fullWidth className={classes.formField}>
@@ -452,6 +460,9 @@ export const CartridgeSettings = () => {
                   </MenuItem>
                 ))}
               </Select>
+              <Typography variant="caption" color="textSecondary" style={{ marginTop: 4, marginLeft: 14 }}>
+                The EE that contains the scanner tooling and compliance content (e.g., scap-security-guide)
+              </Typography>
             </FormControl>
 
             <TextField
@@ -461,7 +472,7 @@ export const CartridgeSettings = () => {
               placeholder="/usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml"
               value={form.remediationPlaybookPath}
               onChange={e => updateForm('remediationPlaybookPath', e.target.value)}
-              helperText="Path to the CaC remediation playbook inside the Execution Environment"
+              helperText="Filesystem path inside the EE to the remediation playbook. Installed by scap-security-guide at /usr/share/scap-security-guide/ansible/"
               className={classes.formField}
             />
 
@@ -469,10 +480,10 @@ export const CartridgeSettings = () => {
               label="Scan Tags"
               variant="outlined"
               fullWidth
-              placeholder="stig,rhel9,cat_i"
+              placeholder="e.g., sshd_set_idle_timeout, accounts_tmout"
               value={form.scanTags}
               onChange={e => updateForm('scanTags', e.target.value)}
-              helperText="Comma-separated tags for filtering scanning rules"
+              helperText="Optional. Comma-separated rule IDs to limit which rules are included. Leave empty to scan all rules in the standard."
               className={classes.formField}
             />
           </div>
@@ -496,12 +507,12 @@ export const CartridgeSettings = () => {
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
       >
-        <DialogTitle>Delete Cartridge</DialogTitle>
+        <DialogTitle>Delete Compliance Profile</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete the cartridge{' '}
-            <strong>{deleteTarget?.displayName}</strong>? This action cannot be
-            undone.
+            Are you sure you want to delete the compliance profile{' '}
+            <strong>{deleteTarget?.displayName}</strong>? This will not affect
+            existing scan results or platform resources.
           </Typography>
         </DialogContent>
         <DialogActions>
