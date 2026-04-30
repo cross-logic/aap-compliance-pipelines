@@ -509,6 +509,24 @@ export class ComplianceService {
       evidence = JSON.stringify(raw.evidence);
     }
 
+    // Extract actual/expected values from explicit fields or parse from evidence string.
+    // Evidence format: "sshd_config clientaliveinterval: <actual> (expected: <expected>)"
+    let actualValue = raw.actual_value ?? '';
+    let expectedValue = raw.expected_value ?? '';
+
+    if (!actualValue && !expectedValue && typeof raw.evidence === 'string') {
+      const evidenceStr = raw.evidence;
+      const expMatch = evidenceStr.match(/\(expected:\s*(.+?)\)\s*$/);
+      if (expMatch) {
+        expectedValue = expMatch[1].trim();
+        const beforeParen = evidenceStr.slice(0, evidenceStr.lastIndexOf('('));
+        const colonIdx = beforeParen.lastIndexOf(':');
+        if (colonIdx >= 0) {
+          actualValue = beforeParen.slice(colonIdx + 1).trim() || '(not set)';
+        }
+      }
+    }
+
     return {
       scanId,
       ruleId: raw.rule_id,
@@ -516,8 +534,8 @@ export class ComplianceService {
       host,
       status: raw.status,
       severity,
-      actualValue: raw.actual_value ?? '',
-      expectedValue: raw.expected_value ?? '',
+      actualValue,
+      expectedValue,
       evidence,
     };
   }
