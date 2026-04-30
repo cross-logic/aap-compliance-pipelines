@@ -170,30 +170,38 @@ export async function createRouter(
       }
 
       // 2. In live mode, if no DB findings exist, try to fetch and parse
-      //    from the Controller API. The scanId is formatted as "scan-{workflowJobId}".
+      //    from the Controller API. The scanId may be a workflowJobId (numeric).
       if (service.getDataSource() === 'live') {
-        const workflowJobIdMatch = scanId.match(/^scan-(\d+)$/);
+        const workflowJobIdMatch = scanId.match(/^(?:scan-)?(\d+)$/);
         if (workflowJobIdMatch) {
           const workflowJobId = Number(workflowJobIdMatch[1]);
           try {
-            // Check workflow status first — only parse if completed
             const status = await service.getWorkflowJobStatus(workflowJobId, userToken);
-            if (status.status.toLowerCase() === 'successful') {
+            const st = status.status.toLowerCase();
+            if (st === 'successful' || st === 'failed') {
+              // Resolve the DB scan record from the workflowJobId
+              const dbScan = await database.getScanByWorkflowJobId(workflowJobId);
+              const dbScanId = dbScan?.id ?? scanId;
+
               logger.info(
-                `Workflow ${workflowJobId} is complete — fetching and parsing results`,
+                `Workflow ${workflowJobId} is complete — fetching and parsing results (dbScanId=${dbScanId})`,
               );
               const parsed = await service.fetchAndParseResults(
                 workflowJobId,
-                scanId,
+                dbScanId,
                 userToken,
               );
               if (parsed.length > 0) {
-                // Re-read from DB to get the findings with IDs
-                const freshFindings = await database.getFindingsByScanId(scanId);
+                // Try DB first (cached), fall back to in-memory aggregation
+                const freshFindings = await database.getFindingsByScanId(dbScanId);
                 if (freshFindings.length > 0) {
                   res.json(freshFindings);
                   return;
                 }
+                // DB persist may have failed — aggregate and return directly
+                const aggregated = service.aggregateFindings(parsed);
+                res.json(aggregated);
+                return;
               }
             } else {
               logger.info(
@@ -203,7 +211,6 @@ export async function createRouter(
           } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
             logger.warn(`Failed to fetch/parse results for scan ${scanId}: ${msg}`);
-            // Fall through to mock data
           }
         }
       }

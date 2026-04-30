@@ -331,9 +331,7 @@ export class ComplianceService {
       }
     }
 
-    // Fall back to mock data if no live data is available
-    this.logger.warn('No live findings available for scan — returning mock data');
-    return MockDataProvider.getFindings();
+    return [];
   }
 
   // ─── Scan result fetching & parsing ────────────────────────────────
@@ -406,17 +404,23 @@ export class ComplianceService {
       `Parsed ${findings.length} findings from evaluate job ${evaluateJobId}`,
     );
 
-    // Step 4: Persist to the database
+    // Step 4: Try to persist to the database (non-fatal if it fails)
     if (this.database && findings.length > 0) {
-      await this.database.saveFindingsForScan(scanId, findings);
-      await this.database.updateScanStatus(
-        scanId,
-        'completed',
-        new Date().toISOString(),
-      );
-      this.logger.info(
-        `Persisted ${findings.length} findings for scan ${scanId}`,
-      );
+      try {
+        await this.database.saveFindingsForScan(scanId, findings);
+        await this.database.updateScanStatus(
+          scanId,
+          'completed',
+          new Date().toISOString(),
+        );
+        this.logger.info(
+          `Persisted ${findings.length} findings for scan ${scanId}`,
+        );
+      } catch (persistError) {
+        this.logger.warn(
+          `Could not persist findings to DB (scan ${scanId}): ${persistError instanceof Error ? persistError.message : String(persistError)}`,
+        );
+      }
     }
 
     return findings;
@@ -456,6 +460,7 @@ export class ComplianceService {
       // 1. res.findings (direct module output — Track A compliance_evaluate)
       // 2. res.ansible_facts.findings (facts-based output)
       // 3. res.ansible_facts.compliance_results.findings (nested facts)
+      // 4. res.ansible_facts.compliance_report.findings (consolidated report)
       const factsSource =
         (res.ansible_facts as Record<string, unknown>) ?? {};
 
@@ -463,6 +468,8 @@ export class ComplianceService {
         (res.findings as RawControllerFinding[]) ??
         (factsSource.findings as RawControllerFinding[]) ??
         ((factsSource.compliance_results as Record<string, unknown>)
+          ?.findings as RawControllerFinding[] | undefined) ??
+        ((factsSource.compliance_report as Record<string, unknown>)
           ?.findings as RawControllerFinding[] | undefined);
 
       if (rawFindings && Array.isArray(rawFindings)) {
@@ -520,6 +527,12 @@ export class ComplianceService {
    * for the frontend. Groups findings by ruleId and collects per-host
    * status into the hosts array.
    */
+  aggregateFindings(
+    stored: Array<Omit<StoredFinding, 'id'>>,
+  ): MultiHostFinding[] {
+    return this.storedFindingsToMultiHost(stored as StoredFinding[]);
+  }
+
   private storedFindingsToMultiHost(
     stored: StoredFinding[],
   ): MultiHostFinding[] {
