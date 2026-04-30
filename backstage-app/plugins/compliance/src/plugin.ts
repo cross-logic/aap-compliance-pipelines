@@ -3,11 +3,12 @@ import {
   createRoutableExtension,
   createApiFactory,
   discoveryApiRef,
+  fetchApiRef,
 } from '@backstage/core-plugin-api';
 
 import { rootRouteRef } from './routes';
 import { complianceApiRef } from './api/complianceApiRef';
-import { ComplianceBackendClient, setDiscoveryApi } from './api/ComplianceBackendClient';
+import { ComplianceBackendClient } from './api/ComplianceBackendClient';
 
 export const compliancePlugin = createPlugin({
   id: 'compliance',
@@ -17,11 +18,9 @@ export const compliancePlugin = createPlugin({
   apis: [
     createApiFactory({
       api: complianceApiRef,
-      deps: { discoveryApi: discoveryApiRef },
-      factory: ({ discoveryApi }) => {
-        setDiscoveryApi(discoveryApi);
-        return new ComplianceBackendClient();
-      },
+      deps: { discoveryApi: discoveryApiRef, fetchApi: fetchApiRef },
+      factory: ({ discoveryApi, fetchApi }) =>
+        new ComplianceBackendClient({ discoveryApi, fetchApi }),
     }),
   ],
 });
