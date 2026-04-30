@@ -39,3 +39,8 @@ See the root [README.md](../README.md) for setup instructions.
 - [Compliance Plugin](plugins/compliance.md) -- Frontend plugin architecture and components
 - [Compliance Dashboard](features/compliance-dashboard.md) -- Dashboard feature details
 - [Remediation Profile](features/remediation-profile.md) -- Remediation profile builder feature
+
+## Setup Guides
+
+- [Controller Setup](features/controller-setup.md) -- Automated and manual setup of AAP Controller resources for the compliance pipeline
+- [Manual Setup (legacy)](features/manual-setup.md) -- Previous manual setup instructions
