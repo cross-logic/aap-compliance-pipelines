@@ -35,7 +35,8 @@ backend:
     credentials: true
   database:
     client: better-sqlite3
-    connection: './compliance.sqlite'
+    connection:
+      directory: ./sqlite-data
   auth:
     keys:
       - secret: ${BACKEND_SECRET}
