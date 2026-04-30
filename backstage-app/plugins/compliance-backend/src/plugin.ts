@@ -47,6 +47,7 @@ export const complianceBackendPlugin = createBackendPlugin({
 
         // ─── Service ────────────────────────────────────────────
         const service = new ComplianceService(config, logger);
+        service.setDatabase(complianceDb);
         logger.info(
           `Compliance service ready (dataSource=${service.getDataSource()})`,
         );

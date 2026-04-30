@@ -11,6 +11,7 @@ import { LoggerService } from '@backstage/backend-plugin-api';
 import type {
   ComplianceProfile,
   MultiHostFinding,
+  StoredFinding,
   DashboardStats,
   LaunchScanRequest,
   LaunchScanResponse,
@@ -28,7 +29,39 @@ import type {
 } from '@aap-compliance/common';
 
 import { ControllerClient } from './ControllerClient';
+import { ComplianceDatabase } from '../database/ComplianceDatabase';
 import { MockDataProvider } from './MockDataProvider';
+
+// ─── Severity mapping (Track A uses lowercase, stored as CAT_*) ──────
+
+const SEVERITY_MAP: Record<string, string> = {
+  high: 'CAT_I',
+  medium: 'CAT_II',
+  low: 'CAT_III',
+};
+
+/**
+ * Shape of a single finding from the compliance_evaluate Ansible module.
+ * This is what appears in event_data.res.findings[] (Track A)
+ * or in the normalized XCCDF output (Track B).
+ */
+interface RawControllerFinding {
+  rule_id: string;
+  stig_id?: string;
+  title?: string;
+  severity?: string;
+  status: string;
+  host?: string;
+  evidence?: string | Record<string, unknown>;
+  actual_value?: string;
+  expected_value?: string;
+  category?: string;
+  check_type?: string;
+  fix_text?: string;
+  check_text?: string;
+  disruption?: string;
+  parameters?: unknown[];
+}
 
 export type DataSource = 'mock' | 'live';
 
@@ -36,6 +69,7 @@ export class ComplianceService {
   private readonly dataSource: DataSource;
   private readonly controllerClient: ControllerClient | null;
   private readonly logger: LoggerService;
+  private database: ComplianceDatabase | null = null;
 
   constructor(config: Config, logger: LoggerService) {
     this.logger = logger;
@@ -72,6 +106,14 @@ export class ComplianceService {
 
   getDataSource(): DataSource {
     return this.dataSource;
+  }
+
+  /**
+   * Inject the database reference after construction.
+   * Called from plugin.ts — avoids a circular constructor dependency.
+   */
+  setDatabase(db: ComplianceDatabase): void {
+    this.database = db;
   }
 
   // ─── Profiles ───────────────────────────────────────────────────────
@@ -132,31 +174,99 @@ export class ComplianceService {
       return MockDataProvider.launchScan(request.profileId);
     }
 
-    // In live mode: find the matching workflow job template, then launch it
-    const templates = await this.controllerClient!.listWorkflowJobTemplates('compliance', token);
-    const template = templates.results.find(t =>
-      t.name.toLowerCase().includes(request.profileId.replace(/-/g, '_')),
-    ) ?? templates.results[0];
+    // ── Resolve the workflow template ID ──────────────────────────────
+    // Priority: (1) explicit request, (2) cartridge registry in DB, (3) name-based search
+    const resolvedTemplateId = await this.resolveWorkflowTemplateId(
+      request.profileId,
+      request.workflowTemplateId,
+      token,
+    );
 
-    if (!template) {
-      throw new Error(`No compliance workflow job template found for profile ${request.profileId}`);
-    }
-
+    // ── Build extra_vars for the workflow launch ─────────────────────
     const extraVars: Record<string, unknown> = {
       compliance_profile: request.profileId,
       evaluate_only: request.evaluateOnly,
+      inventory_id: request.inventoryId,
     };
-    if (request.limit) {
-      extraVars.limit_hosts = request.limit;
-    }
 
-    const launch = await this.controllerClient!.launchWorkflow(template.id, extraVars, token);
+    // ── Launch the workflow ──────────────────────────────────────────
+    this.logger.info(
+      `Launching workflow template ${resolvedTemplateId} for profile=${request.profileId} inventory=${request.inventoryId}` +
+      (request.limit ? ` limit=${request.limit}` : ''),
+    );
+
+    const launch = await this.controllerClient!.launchWorkflow(
+      resolvedTemplateId,
+      extraVars,
+      token,
+      request.limit,
+    );
+
+    const workflowJobId = launch.workflow_job ?? launch.id;
+
+    this.logger.info(
+      `Workflow job ${workflowJobId} launched (status=${launch.status})`,
+    );
 
     return {
-      scanId: `scan-${launch.workflow_job ?? launch.id}`,
-      workflowJobId: launch.workflow_job ?? launch.id,
+      scanId: `scan-${workflowJobId}`,
+      workflowJobId,
       status: launch.status,
     };
+  }
+
+  /**
+   * Resolve the workflow job template ID to use for a scan.
+   *
+   * Resolution order:
+   *   1. Explicit `workflowTemplateId` from the scan request (user override)
+   *   2. Cartridge registry in the database (mapped per compliance profile)
+   *   3. Name-based search on the Controller (fallback for unconfigured profiles)
+   */
+  private async resolveWorkflowTemplateId(
+    profileId: string,
+    requestTemplateId?: number,
+    token?: string,
+  ): Promise<number> {
+    // (1) Explicit from request — highest priority
+    if (requestTemplateId) {
+      this.logger.info(
+        `Using workflow template ${requestTemplateId} from scan request`,
+      );
+      return requestTemplateId;
+    }
+
+    // (2) Look up the cartridge in the DB
+    if (this.database) {
+      const cartridge = await this.database.getCartridge(profileId);
+      if (cartridge?.workflowTemplateId) {
+        this.logger.info(
+          `Using workflow template ${cartridge.workflowTemplateId} from cartridge registry (profile=${profileId})`,
+        );
+        return cartridge.workflowTemplateId;
+      }
+    }
+
+    // (3) Name-based search on the Controller
+    this.logger.info(
+      `No workflow template configured for profile=${profileId} — searching Controller by name`,
+    );
+    const templates = await this.controllerClient!.listWorkflowJobTemplates('compliance', token);
+    const template = templates.results.find(t =>
+      t.name.toLowerCase().includes(profileId.replace(/-/g, '_')),
+    ) ?? templates.results[0];
+
+    if (!template) {
+      throw new Error(
+        `No compliance workflow job template found for profile ${profileId}. ` +
+        `Register one in the cartridge registry or provide workflowTemplateId in the scan request.`,
+      );
+    }
+
+    this.logger.info(
+      `Resolved workflow template ${template.id} ("${template.name}") by name search`,
+    );
+    return template.id;
   }
 
   // ─── Remediation ────────────────────────────────────────────────────
@@ -182,30 +292,283 @@ export class ComplianceService {
       compliance_profile: request.profileId,
       remediation_selections: request.selections,
     };
-    if (request.limit) {
-      extraVars.limit_hosts = request.limit;
-    }
 
-    const launch = await this.controllerClient!.launchWorkflow(template.id, extraVars, token);
+    this.logger.info(
+      `Launching remediation workflow template ${template.id} for profile=${request.profileId}` +
+      (request.limit ? ` limit=${request.limit}` : ''),
+    );
+
+    const launch = await this.controllerClient!.launchWorkflow(
+      template.id,
+      extraVars,
+      token,
+      request.limit,
+    );
+
+    const workflowJobId = launch.workflow_job ?? launch.id;
 
     return {
-      remediationId: `remediation-${launch.workflow_job ?? launch.id}`,
-      workflowJobId: launch.workflow_job ?? launch.id,
+      remediationId: `remediation-${workflowJobId}`,
+      workflowJobId,
       status: launch.status,
     };
   }
 
   // ─── Findings ───────────────────────────────────────────────────────
 
-  async getFindings(_scanId?: string): Promise<MultiHostFinding[]> {
+  async getFindings(scanId?: string): Promise<MultiHostFinding[]> {
     if (this.dataSource === 'mock') {
       return MockDataProvider.getFindings();
     }
 
-    // In live mode, we would parse scan job events into MultiHostFinding[].
-    // For the prototype, fall back to mock if no real scan data is available.
-    this.logger.warn('Live findings parsing not yet implemented — returning mock data');
+    // In live mode, check DB for stored findings first
+    if (scanId && this.database) {
+      const dbFindings = await this.database.getFindingsByScanId(scanId);
+      if (dbFindings.length > 0) {
+        return this.storedFindingsToMultiHost(dbFindings);
+      }
+    }
+
+    // Fall back to mock data if no live data is available
+    this.logger.warn('No live findings available for scan — returning mock data');
     return MockDataProvider.getFindings();
+  }
+
+  // ─── Scan result fetching & parsing ────────────────────────────────
+
+  /**
+   * Fetch scan results from the Controller API, parse them, and persist
+   * to the database.
+   *
+   * Called when a scan workflow completes and we need to collect the
+   * evaluate node's output. Supports both Track A (compliance_evaluate
+   * module with ansible_facts) and Track B (normalize_xccdf output).
+   *
+   * Returns the parsed StoredFinding[] (without the id field — the DB
+   * generates IDs on insert).
+   */
+  async fetchAndParseResults(
+    workflowJobId: number,
+    scanId: string,
+    token?: string,
+  ): Promise<Array<Omit<StoredFinding, 'id'>>> {
+    if (!this.controllerClient) {
+      throw new Error('Cannot fetch results in mock mode — no Controller client');
+    }
+
+    this.logger.info(
+      `Fetching results for workflow job ${workflowJobId} (scan ${scanId})`,
+    );
+
+    // Step 1: Get workflow nodes to find the evaluate job
+    const nodesResponse = await this.controllerClient.getWorkflowNodes(
+      workflowJobId,
+      token,
+    );
+    const nodes = nodesResponse.results;
+
+    // Find the evaluate node — look for identifier containing "evaluate",
+    // or fall back to a job name containing "evaluate"
+    const evaluateNode = nodes.find(
+      n =>
+        n.identifier?.toLowerCase().includes('evaluat') ||
+        n.summary_fields?.job?.name?.toLowerCase().includes('evaluat'),
+    );
+
+    if (!evaluateNode?.summary_fields?.job?.id) {
+      this.logger.warn(
+        `No evaluate node found in workflow ${workflowJobId}. ` +
+        `Nodes: ${nodes.map(n => `${n.identifier}(${n.summary_fields?.job?.name ?? 'no-job'})`).join(', ')}`,
+      );
+      return [];
+    }
+
+    const evaluateJobId = evaluateNode.summary_fields.job.id;
+    this.logger.info(
+      `Found evaluate job ${evaluateJobId} (node: ${evaluateNode.identifier})`,
+    );
+
+    // Step 2: Fetch runner_on_ok events from the evaluate job
+    const eventsResponse = await this.controllerClient.getRunnerOkEvents(
+      evaluateJobId,
+      token,
+    );
+    const events = eventsResponse.results;
+    this.logger.info(
+      `Retrieved ${events.length} runner_on_ok events from evaluate job ${evaluateJobId}`,
+    );
+
+    // Step 3: Parse findings from job events
+    const findings = this.parseJobEvents(events, scanId);
+    this.logger.info(
+      `Parsed ${findings.length} findings from evaluate job ${evaluateJobId}`,
+    );
+
+    // Step 4: Persist to the database
+    if (this.database && findings.length > 0) {
+      await this.database.saveFindingsForScan(scanId, findings);
+      await this.database.updateScanStatus(
+        scanId,
+        'completed',
+        new Date().toISOString(),
+      );
+      this.logger.info(
+        `Persisted ${findings.length} findings for scan ${scanId}`,
+      );
+    }
+
+    return findings;
+  }
+
+  /**
+   * Parse job events from the evaluate job into StoredFinding rows.
+   *
+   * Supports two tracks:
+   *   - Track A: compliance_evaluate module output with findings[] array
+   *     appearing in event_data.res or event_data.res.ansible_facts
+   *   - Track B: normalize_xccdf output surfaced through ansible_facts
+   *
+   * In both cases, the per-host findings appear in event_data.res.findings
+   * or event_data.res.ansible_facts.findings.
+   */
+  private parseJobEvents(
+    events: JobEvent[],
+    scanId: string,
+  ): Array<Omit<StoredFinding, 'id'>> {
+    const findings: Array<Omit<StoredFinding, 'id'>> = [];
+
+    for (const event of events) {
+      const eventData = event.event_data as Record<string, unknown>;
+      const res = eventData?.res as Record<string, unknown> | undefined;
+      if (!res) continue;
+
+      // Determine the host — from event_data.host, event.host_name, or
+      // the module's own 'host' return value
+      const host =
+        (eventData.host as string) ||
+        event.host_name ||
+        (res.host as string) ||
+        'unknown';
+
+      // Look for findings in multiple locations:
+      // 1. res.findings (direct module output — Track A compliance_evaluate)
+      // 2. res.ansible_facts.findings (facts-based output)
+      // 3. res.ansible_facts.compliance_results.findings (nested facts)
+      const factsSource =
+        (res.ansible_facts as Record<string, unknown>) ?? {};
+
+      const rawFindings: RawControllerFinding[] | undefined =
+        (res.findings as RawControllerFinding[]) ??
+        (factsSource.findings as RawControllerFinding[]) ??
+        ((factsSource.compliance_results as Record<string, unknown>)
+          ?.findings as RawControllerFinding[] | undefined);
+
+      if (rawFindings && Array.isArray(rawFindings)) {
+        for (const raw of rawFindings) {
+          // Track A findings carry a host field; Track B may have per-host
+          const findingHost = raw.host || host;
+          findings.push(this.mapRawFinding(raw, findingHost, scanId));
+        }
+      }
+    }
+
+    return findings;
+  }
+
+  /**
+   * Map a single raw finding from the Ansible module output to our
+   * StoredFinding format.
+   */
+  private mapRawFinding(
+    raw: RawControllerFinding,
+    host: string,
+    scanId: string,
+  ): Omit<StoredFinding, 'id'> {
+    // Map severity: the module uses lowercase (high/medium/low),
+    // but the XCCDF normalizer already maps to CAT_I/II/III.
+    // Handle both cases.
+    let severity = raw.severity ?? 'medium';
+    if (!severity.startsWith('CAT_')) {
+      severity = SEVERITY_MAP[severity.toLowerCase()] ?? 'CAT_II';
+    }
+
+    // Evidence can be a string or a structured object
+    let evidence: string | null = null;
+    if (typeof raw.evidence === 'string') {
+      evidence = raw.evidence;
+    } else if (raw.evidence && typeof raw.evidence === 'object') {
+      evidence = JSON.stringify(raw.evidence);
+    }
+
+    return {
+      scanId,
+      ruleId: raw.rule_id,
+      stigId: raw.stig_id ?? '',
+      host,
+      status: raw.status,
+      severity,
+      actualValue: raw.actual_value ?? '',
+      expectedValue: raw.expected_value ?? '',
+      evidence,
+    };
+  }
+
+  /**
+   * Convert flat StoredFinding[] rows into aggregated MultiHostFinding[]
+   * for the frontend. Groups findings by ruleId and collects per-host
+   * status into the hosts array.
+   */
+  private storedFindingsToMultiHost(
+    stored: StoredFinding[],
+  ): MultiHostFinding[] {
+    const byRule = new Map<string, {
+      finding: StoredFinding;
+      hosts: Array<{
+        host: string;
+        status: 'pass' | 'fail' | 'error';
+        actualValue: string;
+        expectedValue: string;
+      }>;
+    }>();
+
+    for (const f of stored) {
+      let entry = byRule.get(f.ruleId);
+      if (!entry) {
+        entry = { finding: f, hosts: [] };
+        byRule.set(f.ruleId, entry);
+      }
+      entry.hosts.push({
+        host: f.host,
+        status: (f.status as 'pass' | 'fail' | 'error') || 'error',
+        actualValue: f.actualValue,
+        expectedValue: f.expectedValue,
+      });
+    }
+
+    const results: MultiHostFinding[] = [];
+    for (const [ruleId, entry] of byRule) {
+      const passCount = entry.hosts.filter(h => h.status === 'pass').length;
+      const failCount = entry.hosts.filter(h => h.status === 'fail').length;
+
+      results.push({
+        ruleId,
+        stigId: entry.finding.stigId,
+        title: ruleId,
+        description: '',
+        fixText: '',
+        checkText: '',
+        severity: (entry.finding.severity as 'CAT_I' | 'CAT_II' | 'CAT_III') || 'CAT_II',
+        category: '',
+        disruption: 'low',
+        parameters: [],
+        hosts: entry.hosts,
+        passCount,
+        failCount,
+        totalCount: entry.hosts.length,
+      });
+    }
+
+    return results;
   }
 
   // ─── Workflow status (for polling) ──────────────────────────────────

@@ -172,10 +172,14 @@ export class ControllerClient {
     workflowId: number,
     extraVars?: Record<string, unknown>,
     token?: string,
+    limit?: string,
   ): Promise<{ id: number; workflow_job: number; status: string }> {
     const body: Record<string, unknown> = {};
     if (extraVars) {
       body.extra_vars = JSON.stringify(extraVars);
+    }
+    if (limit) {
+      body.limit = limit;
     }
     return this.executePostRequest(
       `api/controller/v2/workflow_job_templates/${workflowId}/launch/`,
@@ -218,6 +222,21 @@ export class ControllerClient {
   ): Promise<PaginatedResponse<JobEvent>> {
     return this.executeGetRequest(
       `api/controller/v2/jobs/${jobId}/job_events/?page_size=200`,
+      token,
+    );
+  }
+
+  /**
+   * Fetch job events filtered to runner_on_ok — these contain task results.
+   * The evaluate module's findings live in event_data.res.ansible_facts
+   * or event_data.res within these events.
+   */
+  async getRunnerOkEvents(
+    jobId: number,
+    token?: string,
+  ): Promise<PaginatedResponse<JobEvent>> {
+    return this.executeGetRequest(
+      `api/controller/v2/jobs/${jobId}/job_events/?event=runner_on_ok&page_size=200`,
       token,
     );
   }

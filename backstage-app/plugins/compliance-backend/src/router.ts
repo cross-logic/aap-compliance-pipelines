@@ -128,6 +128,7 @@ export async function createRouter(
       inventoryId: body.inventoryId,
       evaluateOnly: body.evaluateOnly ?? true,
       limit: body.limit,
+      workflowTemplateId: body.workflowTemplateId ?? undefined,
     };
 
     logger.info(`Launching scan for profile=${scanRequest.profileId}`);
@@ -158,17 +159,57 @@ export async function createRouter(
 
   router.get('/findings', async (req, res) => {
     const scanId = req.query.scanId as string | undefined;
+    const userToken = getUserAapToken(req);
 
-    // If a scanId is given and we have DB records, use the database
+    // 1. If a scanId is given, check the DB for stored findings first
     if (scanId) {
       const dbFindings = await database.getFindingsByScanId(scanId);
       if (dbFindings.length > 0) {
         res.json(dbFindings);
         return;
       }
+
+      // 2. In live mode, if no DB findings exist, try to fetch and parse
+      //    from the Controller API. The scanId is formatted as "scan-{workflowJobId}".
+      if (service.getDataSource() === 'live') {
+        const workflowJobIdMatch = scanId.match(/^scan-(\d+)$/);
+        if (workflowJobIdMatch) {
+          const workflowJobId = Number(workflowJobIdMatch[1]);
+          try {
+            // Check workflow status first — only parse if completed
+            const status = await service.getWorkflowJobStatus(workflowJobId, userToken);
+            if (status.status.toLowerCase() === 'successful') {
+              logger.info(
+                `Workflow ${workflowJobId} is complete — fetching and parsing results`,
+              );
+              const parsed = await service.fetchAndParseResults(
+                workflowJobId,
+                scanId,
+                userToken,
+              );
+              if (parsed.length > 0) {
+                // Re-read from DB to get the findings with IDs
+                const freshFindings = await database.getFindingsByScanId(scanId);
+                if (freshFindings.length > 0) {
+                  res.json(freshFindings);
+                  return;
+                }
+              }
+            } else {
+              logger.info(
+                `Workflow ${workflowJobId} status is "${status.status}" — not yet ready to parse`,
+              );
+            }
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            logger.warn(`Failed to fetch/parse results for scan ${scanId}: ${msg}`);
+            // Fall through to mock data
+          }
+        }
+      }
     }
 
-    // Otherwise fall through to the service (mock data)
+    // 3. Fall through to the service (mock data or DB-based in live mode)
     const findings = await service.getFindings(scanId);
     res.json(findings);
   });

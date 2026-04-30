@@ -11,6 +11,7 @@ export interface LaunchScanRequest {
   inventoryId: number;
   evaluateOnly: boolean;
   limit?: string;
+  workflowTemplateId?: number;
 }
 
 /** Response from launching a scan. */
