@@ -294,8 +294,8 @@ export const ScanLauncher = () => {
                 </Typography>
                 <Typography variant="body2" color="textSecondary">
                   For most use cases, we recommend scanning first (evaluate only),
-                  then using the Remediation Profile Builder to selectively choose
-                  which rules to apply.
+                  then building a remediation to selectively choose which rules
+                  to apply.
                 </Typography>
               </DialogContent>
               <DialogActions>

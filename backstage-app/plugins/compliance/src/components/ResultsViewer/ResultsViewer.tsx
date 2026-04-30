@@ -341,7 +341,7 @@ export const ResultsViewer = () => {
           startIcon={<BuildIcon />}
           onClick={() => navigate(`/compliance/remediation/${jobId}`)}
         >
-          Build Remediation Profile ({rulesWithFailures} rules with failures)
+          Build Remediation ({rulesWithFailures} rules with failures)
         </Button>
       </Box>
 

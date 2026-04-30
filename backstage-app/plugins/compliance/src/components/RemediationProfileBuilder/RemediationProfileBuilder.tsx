@@ -467,7 +467,7 @@ export const RemediationProfileBuilder = () => {
         <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate(`/compliance/results/${jobId}`)}>
           Scan Results
         </Typography>
-        <Typography>Remediation Profile</Typography>
+        <Typography>Remediation</Typography>
       </Breadcrumbs>
 
       <Box mt={2} />
@@ -518,7 +518,7 @@ export const RemediationProfileBuilder = () => {
       {/* Action Buttons */}
       <Box display="flex" justifyContent="flex-end" style={{ gap: 16 }}>
         <Button variant="outlined" startIcon={<SaveIcon />} onClick={() => setSaveDialogOpen(true)}>
-          Save as Profile
+          Save Remediation
         </Button>
         <Button
           variant="contained"
@@ -533,22 +533,23 @@ export const RemediationProfileBuilder = () => {
         </Button>
       </Box>
 
-      {/* Save Profile Dialog */}
+      {/* Save Remediation Dialog */}
       <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Save Remediation Profile</DialogTitle>
+        <DialogTitle>Save Remediation</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="textSecondary" paragraph>
-            Save your selections, scope choices, and parameter overrides as a reusable profile.
-            This profile captures institutional knowledge about which rules to enforce,
-            which hosts to target, and what values to apply.
+            Save your rule selections, scope choices, and parameter overrides as a
+            reusable remediation. You can find and re-apply saved remediations from the
+            Remediations tab.
           </Typography>
           <TextField
-            label="Profile Name"
+            label="Name"
             variant="outlined"
             fullWidth
             value={profileName}
             onChange={e => setProfileName(e.target.value)}
             placeholder="e.g., production-web-servers-stig-v2r8"
+            helperText="A descriptive name to identify this remediation later"
             style={{ marginTop: 8 }}
           />
           <TextField
@@ -559,7 +560,8 @@ export const RemediationProfileBuilder = () => {
             rows={3}
             value={profileDescription}
             onChange={e => setProfileDescription(e.target.value)}
-            placeholder="e.g., STIG profile for production web tier — FIPS disabled due to legacy TLS, SSH timeout set to 900"
+            placeholder="e.g., STIG for production web tier — FIPS disabled due to legacy TLS, SSH timeout set to 900"
+            helperText="Capture institutional knowledge about why rules were included or excluded"
             style={{ marginTop: 16 }}
           />
         </DialogContent>
@@ -598,7 +600,7 @@ export const RemediationProfileBuilder = () => {
               }
             }}
           >
-            {saving ? 'Saving...' : 'Save Profile'}
+            {saving ? 'Saving...' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>

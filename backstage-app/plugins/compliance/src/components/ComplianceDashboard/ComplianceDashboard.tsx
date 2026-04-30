@@ -163,7 +163,7 @@ export const ComplianceDashboard = () => {
               </Typography>
               <Typography variant="body1" color="textSecondary" paragraph>
                 Scan your infrastructure against industry compliance frameworks like DISA STIG,
-                CIS Benchmarks, and PCI-DSS. Review findings and build remediation profiles to
+                CIS Benchmarks, and PCI-DSS. Review findings, build remediations, and
                 bring your systems into compliance.
               </Typography>
 
@@ -191,7 +191,7 @@ export const ComplianceDashboard = () => {
                   <div>
                     <Typography variant="subtitle1">Review Findings</Typography>
                     <Typography variant="body2" color="textSecondary">
-                      Analyze per-host results, build remediation profiles, and apply fixes.
+                      Analyze per-host results, build remediations, and apply fixes.
                     </Typography>
                   </div>
                 </div>
@@ -358,9 +358,9 @@ export const ComplianceDashboard = () => {
         </div>
       </div>
 
-      {/* Framework Cards */}
+      {/* Active Compliance Profiles */}
       <div className={classes.section}>
-        <InfoCard title="Active Compliance Frameworks">
+        <InfoCard title="Active Compliance Profiles">
           <div className={classes.row}>
             {stats.frameworkScores.map(fw => (
               <div className={classes.frameworkItem} key={fw.name}>
