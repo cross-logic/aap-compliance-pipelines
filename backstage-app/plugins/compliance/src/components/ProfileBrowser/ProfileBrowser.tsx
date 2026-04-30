@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   InfoCard,
   Breadcrumbs,
+  Progress,
 } from '@backstage/core-components';
 import {
   Grid,
@@ -23,6 +24,9 @@ import {
 import SecurityIcon from '@material-ui/icons/Security';
 import VerifiedUserIcon from '@material-ui/icons/VerifiedUser';
 import PolicyIcon from '@material-ui/icons/Policy';
+import { useApi } from '@backstage/core-plugin-api';
+import { complianceApiRef } from '../../api';
+import type { ComplianceCartridge } from '@aap-compliance/common';
 
 const useStyles = makeStyles(theme => ({
   frameworkChip: {
@@ -40,7 +44,52 @@ const useStyles = makeStyles(theme => ({
   },
 }));
 
-const PROFILES = [
+/** Shape used internally by the ProfileBrowser for rendering profile cards. */
+interface DisplayProfile {
+  id: string;
+  name: string;
+  framework: string;
+  version: string;
+  description: string;
+  applicableOs: string[];
+  ruleCount: number;
+  lastUpdated: string;
+  source: string;
+  categories: Array<{ name: string; count: number }>;
+  severity: { catI: number; catII: number; catIII: number };
+  icon: React.ReactElement;
+  /** True when this profile was loaded from the cartridge registry. */
+  fromRegistry?: boolean;
+}
+
+/** Map a cartridge from the registry into the display format. */
+function cartridgeToDisplayProfile(c: ComplianceCartridge): DisplayProfile {
+  return {
+    id: c.id,
+    name: c.displayName,
+    framework: c.framework,
+    version: c.version,
+    description: c.description,
+    applicableOs: c.platform ? [c.platform] : [],
+    ruleCount: 0,
+    lastUpdated: c.updatedAt ?? c.createdAt ?? '',
+    source: 'Compliance Profile Registry',
+    categories: [],
+    severity: { catI: 0, catII: 0, catIII: 0 },
+    icon: <SecurityIcon />,
+    fromRegistry: true,
+  };
+}
+
+/** Pick an icon based on the framework name. */
+function frameworkIcon(framework: string): React.ReactElement {
+  const fw = framework.toUpperCase();
+  if (fw.includes('CIS')) return <VerifiedUserIcon />;
+  if (fw.includes('PCI')) return <PolicyIcon />;
+  return <SecurityIcon />;
+}
+
+const BUILTIN_PROFILES: DisplayProfile[] = [
   {
     id: 'rhel9-stig',
     name: 'DISA STIG for RHEL 9',
@@ -113,20 +162,71 @@ const PROFILES = [
 
 const frameworkColor: Record<string, 'primary' | 'secondary' | 'default'> = {
   'DISA STIG': 'secondary',
+  'DISA_STIG': 'secondary',
   CIS: 'primary',
   'PCI-DSS': 'default',
+  'PCI_DSS': 'default',
 };
 
 export const ProfileBrowser = () => {
   const classes = useStyles();
   const navigate = useNavigate();
+  const api = useApi(complianceApiRef);
   const { profileId } = useParams<{ profileId?: string }>();
 
+  const [profiles, setProfiles] = useState<DisplayProfile[]>(BUILTIN_PROFILES);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch cartridges from the compliance profile registry on mount.
+  // Registry profiles take precedence; built-in profiles fill in as fallback.
+  useEffect(() => {
+    let cancelled = false;
+
+    api.getCartridges()
+      .then(cartridges => {
+        if (cancelled) return;
+
+        if (cartridges.length > 0) {
+          // Map cartridges to display format, using framework-appropriate icons
+          const registryProfiles = cartridges.map(c => ({
+            ...cartridgeToDisplayProfile(c),
+            icon: frameworkIcon(c.framework),
+          }));
+
+          // Merge: registry profiles first, then built-in profiles whose IDs
+          // don't collide with any registry entry (fallback for non-overlapping)
+          const registryIds = new Set(registryProfiles.map(p => p.id));
+          const remaining = BUILTIN_PROFILES.filter(p => !registryIds.has(p.id));
+          setProfiles([...registryProfiles, ...remaining]);
+        }
+        // If no cartridges registered, keep BUILTIN_PROFILES (initial state)
+      })
+      .catch(() => {
+        // On error, keep the built-in fallback profiles
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [api]);
+
   const selectedProfile = profileId
-    ? PROFILES.find(p => p.id === profileId)
+    ? profiles.find(p => p.id === profileId)
     : undefined;
 
+  // Show loading indicator while fetching registry profiles
+  if (loading) {
+    return <Progress />;
+  }
+
   if (selectedProfile) {
+    const hasCategories = selectedProfile.categories.length > 0;
+    const hasSeverity =
+      selectedProfile.severity.catI > 0 ||
+      selectedProfile.severity.catII > 0 ||
+      selectedProfile.severity.catIII > 0;
+
     return (
       <>
         <Breadcrumbs>
@@ -166,10 +266,12 @@ export const ProfileBrowser = () => {
                   </Grid>
                   <Grid item xs={4}>
                     <Typography variant="caption" color="textSecondary">
-                      Applicable OS
+                      Platform
                     </Typography>
                     <Typography variant="body1">
-                      {selectedProfile.applicableOs.join(', ')}
+                      {selectedProfile.applicableOs.length > 0
+                        ? selectedProfile.applicableOs.join(', ')
+                        : 'Not specified'}
                     </Typography>
                   </Grid>
                   <Grid item xs={4}>
@@ -177,55 +279,61 @@ export const ProfileBrowser = () => {
                       Last Updated
                     </Typography>
                     <Typography variant="body1">
-                      {selectedProfile.lastUpdated}
+                      {selectedProfile.lastUpdated || 'N/A'}
                     </Typography>
                   </Grid>
                 </Grid>
               </InfoCard>
 
-              <Box mt={3} />
+              {hasCategories && (
+                <>
+                  <Box mt={3} />
 
-              <InfoCard title="Rule Categories">
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Category</TableCell>
-                      <TableCell align="right">Rules</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {selectedProfile.categories.map(cat => (
-                      <TableRow key={cat.name}>
-                        <TableCell>{cat.name}</TableCell>
-                        <TableCell align="right">{cat.count}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </InfoCard>
+                  <InfoCard title="Rule Categories">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Category</TableCell>
+                          <TableCell align="right">Rules</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {selectedProfile.categories.map(cat => (
+                          <TableRow key={cat.name}>
+                            <TableCell>{cat.name}</TableCell>
+                            <TableCell align="right">{cat.count}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </InfoCard>
+                </>
+              )}
             </Grid>
 
             <Grid item xs={12} md={4}>
-              <InfoCard title="Severity Distribution">
-                <div className={classes.ruleCategory}>
-                  <Chip label="CAT I — Critical" size="small" color="secondary" />
-                  <Typography variant="subtitle2">
-                    {selectedProfile.severity.catI}
-                  </Typography>
-                </div>
-                <div className={classes.ruleCategory}>
-                  <Chip label="CAT II — Medium" size="small" style={{ backgroundColor: '#ff9800', color: '#fff' }} />
-                  <Typography variant="subtitle2">
-                    {selectedProfile.severity.catII}
-                  </Typography>
-                </div>
-                <div className={classes.ruleCategory}>
-                  <Chip label="CAT III — Low" size="small" color="primary" />
-                  <Typography variant="subtitle2">
-                    {selectedProfile.severity.catIII}
-                  </Typography>
-                </div>
-              </InfoCard>
+              {hasSeverity && (
+                <InfoCard title="Severity Distribution">
+                  <div className={classes.ruleCategory}>
+                    <Chip label="CAT I — Critical" size="small" color="secondary" />
+                    <Typography variant="subtitle2">
+                      {selectedProfile.severity.catI}
+                    </Typography>
+                  </div>
+                  <div className={classes.ruleCategory}>
+                    <Chip label="CAT II — Medium" size="small" style={{ backgroundColor: '#ff9800', color: '#fff' }} />
+                    <Typography variant="subtitle2">
+                      {selectedProfile.severity.catII}
+                    </Typography>
+                  </div>
+                  <div className={classes.ruleCategory}>
+                    <Chip label="CAT III — Low" size="small" color="primary" />
+                    <Typography variant="subtitle2">
+                      {selectedProfile.severity.catIII}
+                    </Typography>
+                  </div>
+                </InfoCard>
+              )}
 
               <Box mt={2} />
 
@@ -238,6 +346,17 @@ export const ProfileBrowser = () => {
               >
                 Scan with this Profile
               </Button>
+
+              {selectedProfile.fromRegistry && (
+                <Box mt={1}>
+                  <Chip
+                    label="From compliance profile registry"
+                    size="small"
+                    variant="outlined"
+                    color="primary"
+                  />
+                </Box>
+              )}
             </Grid>
           </Grid>
       </>
@@ -260,7 +379,7 @@ export const ProfileBrowser = () => {
         <Box mt={3} />
 
         <Grid container spacing={3}>
-          {PROFILES.map(profile => (
+          {profiles.map(profile => (
             <Grid item xs={12} sm={6} md={4} key={profile.id}>
               <Card variant="outlined" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent style={{ flex: 1 }}>
@@ -272,20 +391,34 @@ export const ProfileBrowser = () => {
                       color={frameworkColor[profile.framework] ?? 'default'}
                       className={classes.frameworkChip}
                     />
+                    {profile.fromRegistry && (
+                      <Chip
+                        label="Registered"
+                        size="small"
+                        variant="outlined"
+                        color="primary"
+                      />
+                    )}
                   </Box>
                   <Typography variant="h6" gutterBottom>
                     {profile.name}
                   </Typography>
                   <Typography variant="body2" color="textSecondary" paragraph>
-                    {profile.description.slice(0, 150)}...
+                    {profile.description.length > 150
+                      ? `${profile.description.slice(0, 150)}...`
+                      : profile.description}
                   </Typography>
                   <Box display="flex" style={{ gap: 16 }} flexWrap="wrap">
-                    <Typography variant="caption">
-                      {profile.ruleCount} rules
-                    </Typography>
-                    <Typography variant="caption">
-                      {profile.applicableOs.join(', ')}
-                    </Typography>
+                    {profile.ruleCount > 0 && (
+                      <Typography variant="caption">
+                        {profile.ruleCount} rules
+                      </Typography>
+                    )}
+                    {profile.applicableOs.length > 0 && (
+                      <Typography variant="caption">
+                        {profile.applicableOs.join(', ')}
+                      </Typography>
+                    )}
                     <Typography variant="caption">
                       v{profile.version}
                     </Typography>
@@ -305,7 +438,7 @@ export const ProfileBrowser = () => {
                     variant="outlined"
                     onClick={() => navigate(`/compliance/scan?profile=${profile.id}`)}
                   >
-                    Scan
+                    Launch Scan
                   </Button>
                 </CardActions>
               </Card>
