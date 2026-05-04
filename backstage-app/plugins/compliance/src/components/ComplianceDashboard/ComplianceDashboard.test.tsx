@@ -1,46 +1,116 @@
 import React from 'react';
-import { renderInTestApp } from '@backstage/test-utils';
+import { renderInTestApp, TestApiProvider } from '@backstage/test-utils';
+import { screen, waitFor } from '@testing-library/react';
 import { ComplianceDashboard } from './ComplianceDashboard';
+import { complianceApiRef } from '../../api';
+import {
+  createMockComplianceApi,
+  MOCK_DASHBOARD_STATS,
+} from '../../__testutils__/mockComplianceApi';
+import type { ComplianceApi } from '../../api';
 
 describe('ComplianceDashboard', () => {
-  it('renders without crashing', async () => {
-    const { getByText } = await renderInTestApp(<ComplianceDashboard />);
-    expect(getByText('Compliance Posture')).toBeInTheDocument();
+  let mockApi: jest.Mocked<ComplianceApi>;
+
+  beforeEach(() => {
+    mockApi = createMockComplianceApi();
   });
 
-  it('displays key metric cards', async () => {
-    const { getByText } = await renderInTestApp(<ComplianceDashboard />);
-    expect(getByText('Hosts Scanned')).toBeInTheDocument();
-    expect(getByText('Critical (CAT I)')).toBeInTheDocument();
-    expect(getByText('Pending Remediation')).toBeInTheDocument();
-    expect(getByText('Active Profiles')).toBeInTheDocument();
+  const renderDashboard = () =>
+    renderInTestApp(
+      <TestApiProvider apis={[[complianceApiRef, mockApi]]}>
+        <ComplianceDashboard />
+      </TestApiProvider>,
+    );
+
+  it('renders compliance posture heading after loading', async () => {
+    await renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText('Compliance Posture')).toBeInTheDocument();
+    });
+  });
+
+  it('displays key metric cards with mock values', async () => {
+    await renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText('Hosts Scanned')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Critical (CAT I)')).toBeInTheDocument();
+    expect(screen.getByText('Pending Remediation')).toBeInTheDocument();
+    expect(screen.getByText('Active Profiles')).toBeInTheDocument();
+    // Verify the actual stat values from mock data
+    expect(screen.getByText(String(MOCK_DASHBOARD_STATS.hostsScanned))).toBeInTheDocument();
+    expect(screen.getByText(String(MOCK_DASHBOARD_STATS.criticalFindings))).toBeInTheDocument();
+    expect(screen.getByText(String(MOCK_DASHBOARD_STATS.activeProfiles))).toBeInTheDocument();
   });
 
   it('displays quick action buttons', async () => {
-    const { getByText } = await renderInTestApp(<ComplianceDashboard />);
-    expect(getByText('New Scan')).toBeInTheDocument();
-    expect(getByText('Browse Profiles')).toBeInTheDocument();
+    await renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText('New Scan')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Browse Profiles')).toBeInTheDocument();
   });
 
-  it('displays recent scans section', async () => {
-    const { getByText } = await renderInTestApp(<ComplianceDashboard />);
-    expect(getByText('Recent Scans')).toBeInTheDocument();
-    expect(getByText('RHEL 9 STIG V2R8')).toBeInTheDocument();
+  it('displays recent scans from mock data', async () => {
+    await renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText('Recent Scans')).toBeInTheDocument();
+    });
+    expect(screen.getByText('RHEL 9 STIG V2R8')).toBeInTheDocument();
+    // "CIS Benchmark L1" appears in both Recent Scans and Active Profiles
+    expect(screen.getAllByText('CIS Benchmark L1').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('displays active compliance profiles', async () => {
-    const { getByText } = await renderInTestApp(<ComplianceDashboard />);
-    expect(getByText('Active Compliance Profiles')).toBeInTheDocument();
-    expect(getByText('DISA STIG V2R8')).toBeInTheDocument();
-    expect(getByText('CIS Benchmark L1')).toBeInTheDocument();
-    expect(getByText('PCI-DSS v4.0')).toBeInTheDocument();
+  it('displays active compliance profiles section', async () => {
+    await renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText('Active Compliance Profiles')).toBeInTheDocument();
+    });
+    // Framework names come from MOCK_DASHBOARD_STATS.frameworkScores.
+    // Some names appear in multiple sections so we use getAllByText.
+    expect(screen.getAllByText('DISA STIG V2R8').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('CIS Benchmark L1').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('PCI-DSS v4.0').length).toBeGreaterThanOrEqual(1);
   });
 
   it('displays compliance gauge labels', async () => {
-    const { getByText } = await renderInTestApp(<ComplianceDashboard />);
-    expect(getByText('Overall')).toBeInTheDocument();
-    expect(getByText('DISA STIG')).toBeInTheDocument();
-    expect(getByText('CIS L1')).toBeInTheDocument();
-    expect(getByText('PCI-DSS')).toBeInTheDocument();
+    await renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText('Overall')).toBeInTheDocument();
+    });
+  });
+
+  it('shows welcome state when dashboard stats are empty', async () => {
+    mockApi.getDashboardStats.mockResolvedValue({
+      hostsScanned: 0,
+      criticalFindings: 0,
+      pendingRemediation: 0,
+      activeProfiles: 0,
+      recentScans: [],
+      frameworkScores: [],
+    });
+
+    await renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText('Welcome to AAP Compliance')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Get Started with Compliance Scanning')).toBeInTheDocument();
+  });
+
+  it('shows welcome state when API errors', async () => {
+    mockApi.getDashboardStats.mockRejectedValue(new Error('Network error'));
+
+    await renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText('Welcome to AAP Compliance')).toBeInTheDocument();
+    });
+  });
+
+  it('calls getDashboardStats on mount', async () => {
+    await renderDashboard();
+    await waitFor(() => {
+      expect(mockApi.getDashboardStats).toHaveBeenCalledTimes(1);
+    });
   });
 });

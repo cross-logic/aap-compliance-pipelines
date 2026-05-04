@@ -1,6 +1,13 @@
 import React from 'react';
-import { renderInTestApp } from '@backstage/test-utils';
+import { renderInTestApp, TestApiProvider } from '@backstage/test-utils';
+import { screen, waitFor } from '@testing-library/react';
 import { ResultsViewer } from './ResultsViewer';
+import { complianceApiRef } from '../../api';
+import {
+  createMockComplianceApi,
+  MOCK_FINDINGS,
+} from '../../__testutils__/mockComplianceApi';
+import type { ComplianceApi } from '../../api';
 
 // Mock useParams to provide a jobId
 jest.mock('react-router-dom', () => ({
@@ -9,42 +16,92 @@ jest.mock('react-router-dom', () => ({
 }));
 
 describe('ResultsViewer', () => {
-  it('renders without crashing', async () => {
-    const { getByText } = await renderInTestApp(<ResultsViewer />);
-    expect(getByText('Findings by Rule')).toBeInTheDocument();
+  let mockApi: jest.Mocked<ComplianceApi>;
+
+  beforeEach(() => {
+    mockApi = createMockComplianceApi();
   });
 
-  it('displays summary cards', async () => {
-    const { getByText } = await renderInTestApp(<ResultsViewer />);
-    expect(getByText('Overall Compliance')).toBeInTheDocument();
-    expect(getByText('Hosts Scanned')).toBeInTheDocument();
-    expect(getByText('Rules Evaluated')).toBeInTheDocument();
-    expect(getByText('Rules with Failures')).toBeInTheDocument();
+  const renderResults = () =>
+    renderInTestApp(
+      <TestApiProvider apis={[[complianceApiRef, mockApi]]}>
+        <ResultsViewer />
+      </TestApiProvider>,
+    );
+
+  it('renders findings table after loading', async () => {
+    await renderResults();
+    await waitFor(() => {
+      expect(screen.getByText('Findings by Rule')).toBeInTheDocument();
+    });
+  });
+
+  it('displays summary cards with computed values', async () => {
+    await renderResults();
+    await waitFor(() => {
+      expect(screen.getByText('Overall Compliance')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Hosts Scanned')).toBeInTheDocument();
+    expect(screen.getByText('Rules Evaluated')).toBeInTheDocument();
+    expect(screen.getByText('Rules with Failures')).toBeInTheDocument();
   });
 
   it('displays the build remediation button', async () => {
-    const { getByText } = await renderInTestApp(<ResultsViewer />);
-    const button = getByText(/Build Remediation/);
-    expect(button).toBeInTheDocument();
+    await renderResults();
+    await waitFor(() => {
+      expect(screen.getByText(/Build Remediation/)).toBeInTheDocument();
+    });
   });
 
   it('displays finding table headers', async () => {
-    const { getByText } = await renderInTestApp(<ResultsViewer />);
-    expect(getByText('Severity')).toBeInTheDocument();
-    expect(getByText('STIG ID')).toBeInTheDocument();
-    expect(getByText('Title')).toBeInTheDocument();
-    expect(getByText('Hosts')).toBeInTheDocument();
-    expect(getByText('Pass Rate')).toBeInTheDocument();
+    await renderResults();
+    await waitFor(() => {
+      expect(screen.getByText('STIG ID')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Title')).toBeInTheDocument();
+    expect(screen.getByText('Hosts')).toBeInTheDocument();
+    expect(screen.getByText('Pass Rate')).toBeInTheDocument();
+    // "Severity" appears both as a table column header and as a filter label
+    expect(screen.getAllByText('Severity').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('displays severity filter options', async () => {
-    const { getByText } = await renderInTestApp(<ResultsViewer />);
-    expect(getByText('Scan Results')).toBeInTheDocument();
+  it('displays scan results title', async () => {
+    await renderResults();
+    await waitFor(() => {
+      expect(screen.getByText('Scan Results')).toBeInTheDocument();
+    });
   });
 
   it('displays findings from mock data', async () => {
-    const { getByText } = await renderInTestApp(<ResultsViewer />);
-    expect(getByText('Set SSH Client Alive Interval')).toBeInTheDocument();
-    expect(getByText('V-257844')).toBeInTheDocument();
+    await renderResults();
+    await waitFor(() => {
+      expect(screen.getByText('Set SSH Client Alive Interval')).toBeInTheDocument();
+    });
+    expect(screen.getByText('V-257844')).toBeInTheDocument();
+    expect(screen.getByText('Set Password Minimum Length')).toBeInTheDocument();
+    expect(screen.getByText('V-257856')).toBeInTheDocument();
+  });
+
+  it('calls getFindings with the jobId from route params', async () => {
+    await renderResults();
+    await waitFor(() => {
+      expect(mockApi.getFindings).toHaveBeenCalledWith('42');
+    });
+  });
+
+  it('shows empty state when there are no findings', async () => {
+    mockApi.getFindings.mockResolvedValue([]);
+    await renderResults();
+    await waitFor(() => {
+      expect(screen.getByText('No scan results yet')).toBeInTheDocument();
+    });
+  });
+
+  it('shows error state when API fails', async () => {
+    mockApi.getFindings.mockRejectedValue(new Error('Connection refused'));
+    await renderResults();
+    await waitFor(() => {
+      expect(screen.getByText(/Connection refused/)).toBeInTheDocument();
+    });
   });
 });

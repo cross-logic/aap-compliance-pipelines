@@ -1,0 +1,684 @@
+import knex, { Knex } from 'knex';
+import { ComplianceDatabase } from './ComplianceDatabase';
+
+let db: Knex;
+let complianceDb: ComplianceDatabase;
+
+// ─── Schema setup ────────────────────────────────────────────────────
+
+async function createTables(database: Knex): Promise<void> {
+  await database.schema.createTable('compliance_scans', table => {
+    table.string('id').primary();
+    table.string('profile_id').notNullable();
+    table.integer('inventory_id').notNullable();
+    table.string('scanner').notNullable().defaultTo('oscap');
+    table.integer('workflow_job_id').nullable();
+    table.string('status').notNullable().defaultTo('pending');
+    table.timestamp('started_at').notNullable().defaultTo(database.fn.now());
+    table.timestamp('completed_at').nullable();
+  });
+
+  await database.schema.createTable('compliance_findings', table => {
+    table.string('id').primary();
+    table
+      .string('scan_id')
+      .notNullable()
+      .references('id')
+      .inTable('compliance_scans')
+      .onDelete('CASCADE');
+    table.string('rule_id').notNullable();
+    table.string('stig_id').notNullable();
+    table.string('host').notNullable();
+    table.string('status').notNullable();
+    table.string('severity').notNullable();
+    table.text('actual_value').defaultTo('');
+    table.text('expected_value').defaultTo('');
+    table.text('evidence').nullable();
+  });
+
+  await database.schema.createTable(
+    'compliance_remediation_profiles',
+    table => {
+      table.string('id').primary();
+      table.string('name').notNullable();
+      table.text('description').defaultTo('');
+      table.string('profile_id').notNullable();
+      table.text('selections_json').notNullable();
+      table
+        .timestamp('created_at')
+        .notNullable()
+        .defaultTo(database.fn.now());
+      table
+        .timestamp('updated_at')
+        .notNullable()
+        .defaultTo(database.fn.now());
+    },
+  );
+
+  await database.schema.createTable(
+    'compliance_posture_snapshots',
+    table => {
+      table.string('id').primary();
+      table.string('profile_id').notNullable();
+      table
+        .timestamp('timestamp')
+        .notNullable()
+        .defaultTo(database.fn.now());
+      table.integer('total_hosts').notNullable().defaultTo(0);
+      table.integer('total_rules').notNullable().defaultTo(0);
+      table.integer('pass_count').notNullable().defaultTo(0);
+      table.integer('fail_count').notNullable().defaultTo(0);
+      table.float('compliance_pct').notNullable().defaultTo(0);
+    },
+  );
+
+  await database.schema.createTable(
+    'compliance_cartridge_registry',
+    table => {
+      table.string('id').primary();
+      table.string('display_name').notNullable();
+      table.text('description').defaultTo('');
+      table.string('framework').notNullable();
+      table.string('version').defaultTo('');
+      table.string('platform').defaultTo('');
+      table.integer('workflow_template_id').nullable();
+      table.integer('ee_id').nullable();
+      table.text('remediation_playbook_path').defaultTo('');
+      table.string('scan_tags').defaultTo('');
+      table
+        .timestamp('created_at')
+        .notNullable()
+        .defaultTo(database.fn.now());
+      table
+        .timestamp('updated_at')
+        .notNullable()
+        .defaultTo(database.fn.now());
+    },
+  );
+}
+
+// ─── Lifecycle ───────────────────────────────────────────────────────
+
+beforeEach(async () => {
+  db = knex({
+    client: 'better-sqlite3',
+    connection: ':memory:',
+    useNullAsDefault: true,
+  });
+  await createTables(db);
+  complianceDb = new ComplianceDatabase(db);
+});
+
+afterEach(async () => {
+  await db.destroy();
+});
+
+// ─── Tests ───────────────────────────────────────────────────────────
+
+describe('ComplianceDatabase', () => {
+  // ─── createScan + getRecentScans ─────────────────────────────────
+
+  describe('createScan + getRecentScans', () => {
+    it('creates a scan and retrieves it in recent scans', async () => {
+      const scan = await complianceDb.createScan({
+        profileId: 'rhel9-stig',
+        inventoryId: 1,
+        scanner: 'oscap',
+        workflowJobId: 42,
+        status: 'pending',
+        startedAt: '2026-04-30T10:00:00.000Z',
+        completedAt: null,
+      });
+
+      expect(scan.id).toBeDefined();
+      expect(scan.profileId).toBe('rhel9-stig');
+      expect(scan.workflowJobId).toBe(42);
+
+      const recent = await complianceDb.getRecentScans(10);
+      expect(recent).toHaveLength(1);
+      expect(recent[0].id).toBe(scan.id);
+      expect(recent[0].profileId).toBe('rhel9-stig');
+      expect(recent[0].inventoryId).toBe(1);
+      expect(recent[0].status).toBe('pending');
+    });
+
+    it('returns scans ordered by started_at descending', async () => {
+      await complianceDb.createScan({
+        profileId: 'rhel9-stig',
+        inventoryId: 1,
+        scanner: 'oscap',
+        workflowJobId: 1,
+        status: 'completed',
+        startedAt: '2026-04-29T10:00:00.000Z',
+        completedAt: '2026-04-29T10:05:00.000Z',
+      });
+      await complianceDb.createScan({
+        profileId: 'cis-rhel9',
+        inventoryId: 2,
+        scanner: 'oscap',
+        workflowJobId: 2,
+        status: 'pending',
+        startedAt: '2026-04-30T10:00:00.000Z',
+        completedAt: null,
+      });
+
+      const recent = await complianceDb.getRecentScans(10);
+      expect(recent).toHaveLength(2);
+      // Most recent first
+      expect(recent[0].profileId).toBe('cis-rhel9');
+      expect(recent[1].profileId).toBe('rhel9-stig');
+    });
+
+    it('respects the limit parameter', async () => {
+      for (let i = 0; i < 5; i++) {
+        await complianceDb.createScan({
+          profileId: `profile-${i}`,
+          inventoryId: 1,
+          scanner: 'oscap',
+          workflowJobId: i,
+          status: 'completed',
+          startedAt: `2026-04-${String(25 + i).padStart(2, '0')}T10:00:00.000Z`,
+          completedAt: `2026-04-${String(25 + i).padStart(2, '0')}T10:05:00.000Z`,
+        });
+      }
+
+      const recent = await complianceDb.getRecentScans(3);
+      expect(recent).toHaveLength(3);
+    });
+  });
+
+  // ─── getScanByWorkflowJobId ──────────────────────────────────────
+
+  describe('getScanByWorkflowJobId', () => {
+    it('returns the scan matching the workflow job ID', async () => {
+      const scan = await complianceDb.createScan({
+        profileId: 'rhel9-stig',
+        inventoryId: 1,
+        scanner: 'oscap',
+        workflowJobId: 42,
+        status: 'running',
+        startedAt: '2026-04-30T10:00:00.000Z',
+        completedAt: null,
+      });
+
+      const found = await complianceDb.getScanByWorkflowJobId(42);
+      expect(found).not.toBeNull();
+      expect(found!.id).toBe(scan.id);
+      expect(found!.workflowJobId).toBe(42);
+    });
+
+    it('returns null when no scan matches', async () => {
+      const found = await complianceDb.getScanByWorkflowJobId(999);
+      expect(found).toBeNull();
+    });
+  });
+
+  // ─── updateScanStatus ────────────────────────────────────────────
+
+  describe('updateScanStatus', () => {
+    it('updates the status of a scan', async () => {
+      const scan = await complianceDb.createScan({
+        profileId: 'rhel9-stig',
+        inventoryId: 1,
+        scanner: 'oscap',
+        workflowJobId: 42,
+        status: 'pending',
+        startedAt: '2026-04-30T10:00:00.000Z',
+        completedAt: null,
+      });
+
+      await complianceDb.updateScanStatus(
+        scan.id,
+        'completed',
+        '2026-04-30T10:05:00.000Z',
+      );
+
+      const recent = await complianceDb.getRecentScans(1);
+      expect(recent[0].status).toBe('completed');
+    });
+  });
+
+  // ─── saveScanResults + getFindingsByScanId ───────────────────────
+
+  describe('saveScanResults + getFindingsByScanId', () => {
+    it('saves findings and retrieves them by scan ID', async () => {
+      const findings = [
+        {
+          ruleId: 'xccdf_rule_sshd_config',
+          stigId: 'RHEL-09-255040',
+          host: 'host1.example.com',
+          status: 'fail',
+          severity: 'high',
+          actualValue: 'PermitRootLogin yes',
+          expectedValue: 'PermitRootLogin no',
+          evidence: 'sshd_config line 42',
+        },
+        {
+          ruleId: 'xccdf_rule_audit_rules',
+          stigId: 'RHEL-09-654010',
+          host: 'host1.example.com',
+          status: 'pass',
+          severity: 'medium',
+          actualValue: 'enabled',
+          expectedValue: 'enabled',
+          evidence: null,
+        },
+      ];
+
+      const result = await complianceDb.saveScanResults(
+        {
+          profileId: 'rhel9-stig',
+          inventoryId: 1,
+          scanner: 'oscap',
+          workflowJobId: 42,
+          status: 'completed',
+          startedAt: '2026-04-30T10:00:00.000Z',
+          completedAt: '2026-04-30T10:05:00.000Z',
+        },
+        findings,
+      );
+
+      expect(result.scanId).toBeDefined();
+      expect(result.findingCount).toBe(2);
+
+      const retrieved = await complianceDb.getFindingsByScanId(result.scanId);
+      expect(retrieved).toHaveLength(2);
+
+      // Findings should be ordered by severity ascending
+      const ruleIds = retrieved.map(f => f.ruleId);
+      expect(ruleIds).toContain('xccdf_rule_sshd_config');
+      expect(ruleIds).toContain('xccdf_rule_audit_rules');
+
+      // Check field mapping
+      const sshFinding = retrieved.find(
+        f => f.ruleId === 'xccdf_rule_sshd_config',
+      )!;
+      expect(sshFinding.stigId).toBe('RHEL-09-255040');
+      expect(sshFinding.host).toBe('host1.example.com');
+      expect(sshFinding.status).toBe('fail');
+      expect(sshFinding.severity).toBe('high');
+      expect(sshFinding.actualValue).toBe('PermitRootLogin yes');
+      expect(sshFinding.expectedValue).toBe('PermitRootLogin no');
+      expect(sshFinding.evidence).toBe('sshd_config line 42');
+      expect(sshFinding.scanId).toBe(result.scanId);
+      expect(sshFinding.id).toBeDefined();
+    });
+
+    it('handles empty findings array', async () => {
+      const result = await complianceDb.saveScanResults(
+        {
+          profileId: 'rhel9-stig',
+          inventoryId: 1,
+          scanner: 'oscap',
+          workflowJobId: 42,
+          status: 'completed',
+          startedAt: '2026-04-30T10:00:00.000Z',
+          completedAt: '2026-04-30T10:05:00.000Z',
+        },
+        [],
+      );
+
+      expect(result.findingCount).toBe(0);
+
+      const retrieved = await complianceDb.getFindingsByScanId(result.scanId);
+      expect(retrieved).toHaveLength(0);
+    });
+
+    it('returns empty array for nonexistent scan ID', async () => {
+      const findings = await complianceDb.getFindingsByScanId(
+        'nonexistent-scan-id',
+      );
+      expect(findings).toEqual([]);
+    });
+  });
+
+  // ─── saveFindingsForScan ─────────────────────────────────────────
+
+  describe('saveFindingsForScan', () => {
+    it('attaches findings to an existing scan', async () => {
+      const scan = await complianceDb.createScan({
+        profileId: 'rhel9-stig',
+        inventoryId: 1,
+        scanner: 'oscap',
+        workflowJobId: 42,
+        status: 'completed',
+        startedAt: '2026-04-30T10:00:00.000Z',
+        completedAt: '2026-04-30T10:05:00.000Z',
+      });
+
+      const count = await complianceDb.saveFindingsForScan(scan.id, [
+        {
+          ruleId: 'rule-1',
+          stigId: 'RHEL-09-001',
+          host: 'host1',
+          status: 'fail',
+          severity: 'high',
+          actualValue: 'off',
+          expectedValue: 'on',
+          evidence: null,
+        },
+      ]);
+
+      expect(count).toBe(1);
+
+      const retrieved = await complianceDb.getFindingsByScanId(scan.id);
+      expect(retrieved).toHaveLength(1);
+      expect(retrieved[0].ruleId).toBe('rule-1');
+    });
+
+    it('returns 0 for empty findings', async () => {
+      const scan = await complianceDb.createScan({
+        profileId: 'rhel9-stig',
+        inventoryId: 1,
+        scanner: 'oscap',
+        workflowJobId: 42,
+        status: 'completed',
+        startedAt: '2026-04-30T10:00:00.000Z',
+        completedAt: '2026-04-30T10:05:00.000Z',
+      });
+
+      const count = await complianceDb.saveFindingsForScan(scan.id, []);
+      expect(count).toBe(0);
+    });
+  });
+
+  // ─── Cartridge CRUD ──────────────────────────────────────────────
+
+  describe('listCartridges + saveCartridge + deleteCartridge', () => {
+    it('starts with an empty cartridge list', async () => {
+      const list = await complianceDb.listCartridges();
+      expect(list).toEqual([]);
+    });
+
+    it('saves and lists a cartridge', async () => {
+      const saved = await complianceDb.saveCartridge({
+        displayName: 'RHEL 9 STIG',
+        description: 'DISA STIG for RHEL 9',
+        framework: 'DISA_STIG',
+        version: 'V2R1',
+        platform: 'RHEL 9',
+        workflowTemplateId: 10,
+        eeId: 5,
+        remediationPlaybookPath: '/playbooks/stig-remediate.yml',
+        scanTags: 'stig,rhel9',
+      });
+
+      expect(saved.id).toBeDefined();
+      expect(saved.displayName).toBe('RHEL 9 STIG');
+      expect(saved.framework).toBe('DISA_STIG');
+      expect(saved.workflowTemplateId).toBe(10);
+      expect(saved.eeId).toBe(5);
+      expect(saved.createdAt).toBeDefined();
+      expect(saved.updatedAt).toBeDefined();
+
+      const list = await complianceDb.listCartridges();
+      expect(list).toHaveLength(1);
+      expect(list[0].id).toBe(saved.id);
+    });
+
+    it('updates an existing cartridge when ID matches', async () => {
+      const saved = await complianceDb.saveCartridge({
+        displayName: 'RHEL 9 STIG',
+        description: '',
+        framework: 'DISA_STIG',
+        version: 'V2R1',
+        platform: 'RHEL 9',
+        workflowTemplateId: null,
+        eeId: null,
+        remediationPlaybookPath: '',
+        scanTags: '',
+      });
+
+      const updated = await complianceDb.saveCartridge({
+        id: saved.id,
+        displayName: 'RHEL 9 STIG (Updated)',
+        description: 'Updated description',
+        framework: 'DISA_STIG',
+        version: 'V2R8',
+        platform: 'RHEL 9',
+        workflowTemplateId: 10,
+        eeId: null,
+        remediationPlaybookPath: '',
+        scanTags: '',
+      });
+
+      expect(updated.id).toBe(saved.id);
+      expect(updated.displayName).toBe('RHEL 9 STIG (Updated)');
+      expect(updated.version).toBe('V2R8');
+
+      const list = await complianceDb.listCartridges();
+      expect(list).toHaveLength(1);
+    });
+
+    it('deletes a cartridge and returns true', async () => {
+      const saved = await complianceDb.saveCartridge({
+        displayName: 'RHEL 9 STIG',
+        description: '',
+        framework: 'DISA_STIG',
+        version: '',
+        platform: '',
+        workflowTemplateId: null,
+        eeId: null,
+        remediationPlaybookPath: '',
+        scanTags: '',
+      });
+
+      const deleted = await complianceDb.deleteCartridge(saved.id);
+      expect(deleted).toBe(true);
+
+      const list = await complianceDb.listCartridges();
+      expect(list).toEqual([]);
+    });
+
+    it('returns false when deleting a nonexistent cartridge', async () => {
+      const deleted = await complianceDb.deleteCartridge('nonexistent');
+      expect(deleted).toBe(false);
+    });
+
+    it('retrieves a cartridge by ID', async () => {
+      const saved = await complianceDb.saveCartridge({
+        displayName: 'CIS Benchmark',
+        description: 'CIS Level 1',
+        framework: 'CIS',
+        version: 'v1.0',
+        platform: 'RHEL 9',
+        workflowTemplateId: null,
+        eeId: null,
+        remediationPlaybookPath: '',
+        scanTags: '',
+      });
+
+      const found = await complianceDb.getCartridge(saved.id);
+      expect(found).not.toBeNull();
+      expect(found!.displayName).toBe('CIS Benchmark');
+      expect(found!.framework).toBe('CIS');
+    });
+
+    it('returns null for nonexistent cartridge ID', async () => {
+      const found = await complianceDb.getCartridge('nonexistent');
+      expect(found).toBeNull();
+    });
+  });
+
+  // ─── Remediation profiles ────────────────────────────────────────
+
+  describe('saveRemediationProfile + listRemediationProfiles', () => {
+    it('saves and lists a remediation profile', async () => {
+      const result = await complianceDb.saveRemediationProfile({
+        name: 'Production STIG',
+        description: 'Remediation profile for prod RHEL servers',
+        profileId: 'rhel9-stig',
+        selections: [
+          { ruleId: 'rule-1', enabled: true },
+          { ruleId: 'rule-2', enabled: false },
+        ],
+      });
+
+      expect(result.id).toBeDefined();
+
+      const list = await complianceDb.listRemediationProfiles();
+      expect(list).toHaveLength(1);
+      expect(list[0].name).toBe('Production STIG');
+      expect(list[0].description).toBe(
+        'Remediation profile for prod RHEL servers',
+      );
+      expect(list[0].complianceProfileId).toBe('rhel9-stig');
+      expect(list[0].selections).toHaveLength(2);
+      expect(list[0].selections[0].ruleId).toBe('rule-1');
+      expect(list[0].selections[0].enabled).toBe(true);
+    });
+
+    it('retrieves a remediation profile by ID', async () => {
+      const result = await complianceDb.saveRemediationProfile({
+        name: 'Test Profile',
+        description: '',
+        profileId: 'rhel9-stig',
+        selections: [],
+      });
+
+      const found = await complianceDb.getRemediationProfile(result.id);
+      expect(found).not.toBeNull();
+      expect(found!.name).toBe('Test Profile');
+    });
+
+    it('returns null for nonexistent remediation profile', async () => {
+      const found = await complianceDb.getRemediationProfile('nonexistent');
+      expect(found).toBeNull();
+    });
+  });
+
+  // ─── Posture snapshots ───────────────────────────────────────────
+
+  describe('savePostureSnapshot + getPostureHistory', () => {
+    it('saves and retrieves posture snapshots', async () => {
+      const snapshot = await complianceDb.savePostureSnapshot({
+        profileId: 'rhel9-stig',
+        timestamp: new Date().toISOString(),
+        totalHosts: 10,
+        totalRules: 366,
+        passCount: 340,
+        failCount: 26,
+        compliancePct: 92.9,
+      });
+
+      expect(snapshot.id).toBeDefined();
+      expect(snapshot.totalHosts).toBe(10);
+
+      const history = await complianceDb.getPostureHistory('rhel9-stig', 30);
+      expect(history).toHaveLength(1);
+      expect(history[0].profileId).toBe('rhel9-stig');
+      expect(history[0].passCount).toBe(340);
+      expect(history[0].compliancePct).toBeCloseTo(92.9, 1);
+    });
+
+    it('filters by date range', async () => {
+      // Save an old snapshot beyond the window
+      await complianceDb.savePostureSnapshot({
+        profileId: 'rhel9-stig',
+        timestamp: '2025-01-01T00:00:00.000Z',
+        totalHosts: 5,
+        totalRules: 100,
+        passCount: 80,
+        failCount: 20,
+        compliancePct: 80.0,
+      });
+
+      // Save a recent snapshot within the window
+      await complianceDb.savePostureSnapshot({
+        profileId: 'rhel9-stig',
+        timestamp: new Date().toISOString(),
+        totalHosts: 10,
+        totalRules: 366,
+        passCount: 340,
+        failCount: 26,
+        compliancePct: 92.9,
+      });
+
+      const history = await complianceDb.getPostureHistory('rhel9-stig', 30);
+      expect(history).toHaveLength(1);
+      expect(history[0].totalHosts).toBe(10);
+    });
+
+    it('returns empty array for unknown profile', async () => {
+      const history = await complianceDb.getPostureHistory('nonexistent', 30);
+      expect(history).toEqual([]);
+    });
+  });
+
+  // ─── getLatestFindings ───────────────────────────────────────────
+
+  describe('getLatestFindings', () => {
+    it('returns findings from the most recent completed scan', async () => {
+      // Create an older completed scan with findings
+      const oldResult = await complianceDb.saveScanResults(
+        {
+          profileId: 'rhel9-stig',
+          inventoryId: 1,
+          scanner: 'oscap',
+          workflowJobId: 1,
+          status: 'completed',
+          startedAt: '2026-04-29T10:00:00.000Z',
+          completedAt: '2026-04-29T10:05:00.000Z',
+        },
+        [
+          {
+            ruleId: 'old-rule',
+            stigId: 'RHEL-09-001',
+            host: 'host1',
+            status: 'fail',
+            severity: 'high',
+            actualValue: 'off',
+            expectedValue: 'on',
+            evidence: null,
+          },
+        ],
+      );
+
+      // Create a newer completed scan with findings
+      const newResult = await complianceDb.saveScanResults(
+        {
+          profileId: 'rhel9-stig',
+          inventoryId: 1,
+          scanner: 'oscap',
+          workflowJobId: 2,
+          status: 'completed',
+          startedAt: '2026-04-30T10:00:00.000Z',
+          completedAt: '2026-04-30T10:05:00.000Z',
+        },
+        [
+          {
+            ruleId: 'new-rule',
+            stigId: 'RHEL-09-002',
+            host: 'host1',
+            status: 'pass',
+            severity: 'medium',
+            actualValue: 'on',
+            expectedValue: 'on',
+            evidence: null,
+          },
+        ],
+      );
+
+      const latest = await complianceDb.getLatestFindings('rhel9-stig');
+      expect(latest).toHaveLength(1);
+      expect(latest[0].ruleId).toBe('new-rule');
+      expect(latest[0].scanId).toBe(newResult.scanId);
+    });
+
+    it('returns empty array when no completed scans exist', async () => {
+      // Create a pending scan (not completed)
+      await complianceDb.createScan({
+        profileId: 'rhel9-stig',
+        inventoryId: 1,
+        scanner: 'oscap',
+        workflowJobId: 1,
+        status: 'pending',
+        startedAt: '2026-04-30T10:00:00.000Z',
+        completedAt: null,
+      });
+
+      const latest = await complianceDb.getLatestFindings('rhel9-stig');
+      expect(latest).toEqual([]);
+    });
+  });
+});

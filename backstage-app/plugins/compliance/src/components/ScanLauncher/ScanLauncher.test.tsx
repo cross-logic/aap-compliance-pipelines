@@ -1,54 +1,108 @@
 import React from 'react';
-import { renderInTestApp } from '@backstage/test-utils';
-import { fireEvent } from '@testing-library/react';
+import { renderInTestApp, TestApiProvider } from '@backstage/test-utils';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { ScanLauncher } from './ScanLauncher';
+import { complianceApiRef } from '../../api';
+import {
+  createMockComplianceApi,
+  MOCK_PROFILES,
+  MOCK_INVENTORIES,
+} from '../../__testutils__/mockComplianceApi';
+import type { ComplianceApi } from '../../api';
+
+// Mock usePermission to allow scan actions
+jest.mock('@backstage/plugin-permission-react', () => ({
+  usePermission: () => ({ allowed: true, loading: false }),
+}));
 
 describe('ScanLauncher', () => {
-  it('renders without crashing', async () => {
-    const { getByText } = await renderInTestApp(<ScanLauncher />);
-    expect(getByText('New Scan')).toBeInTheDocument();
+  let mockApi: jest.Mocked<ComplianceApi>;
+
+  beforeEach(() => {
+    mockApi = createMockComplianceApi();
+    // Return no cartridges so ScanLauncher falls through to getProfiles data
+    mockApi.getCartridges.mockResolvedValue([]);
+  });
+
+  const renderLauncher = () =>
+    renderInTestApp(
+      <TestApiProvider apis={[[complianceApiRef, mockApi]]}>
+        <ScanLauncher />
+      </TestApiProvider>,
+    );
+
+  it('renders the New Scan breadcrumb', async () => {
+    await renderLauncher();
+    await waitFor(() => {
+      expect(screen.getByText('New Scan')).toBeInTheDocument();
+    });
   });
 
   it('displays the stepper with all steps', async () => {
-    const { getByText } = await renderInTestApp(<ScanLauncher />);
-    expect(getByText('Select Profile')).toBeInTheDocument();
-    expect(getByText('Select Targets')).toBeInTheDocument();
-    expect(getByText('Review & Launch')).toBeInTheDocument();
+    await renderLauncher();
+    await waitFor(() => {
+      expect(screen.getByText('Select Profile')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Select Targets')).toBeInTheDocument();
+    expect(screen.getByText('Review & Launch')).toBeInTheDocument();
   });
 
-  it('displays compliance profile options', async () => {
-    const { getByText } = await renderInTestApp(<ScanLauncher />);
-    expect(getByText('DISA STIG for RHEL 9')).toBeInTheDocument();
-    expect(getByText('CIS Benchmark RHEL 9 — Level 1')).toBeInTheDocument();
-    expect(getByText('PCI-DSS v4.0 for RHEL 9')).toBeInTheDocument();
+  it('displays compliance profile options from mock data', async () => {
+    await renderLauncher();
+    await waitFor(() => {
+      expect(screen.getByText('DISA STIG for RHEL 9')).toBeInTheDocument();
+    });
+    expect(screen.getByText('CIS Benchmark RHEL 9 — Level 1')).toBeInTheDocument();
+    expect(screen.getByText('PCI-DSS v4.0 for RHEL 9')).toBeInTheDocument();
   });
 
   it('displays rule counts for each profile', async () => {
-    const { getByText } = await renderInTestApp(<ScanLauncher />);
-    expect(getByText('366 rules')).toBeInTheDocument();
-    expect(getByText('189 rules')).toBeInTheDocument();
-    expect(getByText('142 rules')).toBeInTheDocument();
+    await renderLauncher();
+    await waitFor(() => {
+      expect(screen.getByText('366 rules')).toBeInTheDocument();
+    });
+    expect(screen.getByText('189 rules')).toBeInTheDocument();
+    expect(screen.getByText('142 rules')).toBeInTheDocument();
   });
 
   it('disables Next button when no profile is selected', async () => {
-    const { getByText } = await renderInTestApp(<ScanLauncher />);
-    const nextButton = getByText('Next');
+    await renderLauncher();
+    await waitFor(() => {
+      expect(screen.getByText('Next')).toBeInTheDocument();
+    });
+    const nextButton = screen.getByText('Next');
     expect(nextButton.closest('button')).toBeDisabled();
   });
 
   it('enables Next button after selecting a profile', async () => {
-    const { getByText } = await renderInTestApp(<ScanLauncher />);
-    const profileCard = getByText('DISA STIG for RHEL 9');
-    fireEvent.click(profileCard);
-    const nextButton = getByText('Next');
+    await renderLauncher();
+    await waitFor(() => {
+      expect(screen.getByText('DISA STIG for RHEL 9')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('DISA STIG for RHEL 9'));
+    const nextButton = screen.getByText('Next');
     expect(nextButton.closest('button')).not.toBeDisabled();
   });
 
   it('navigates to step 2 when Next is clicked after profile selection', async () => {
-    const { getByText } = await renderInTestApp(<ScanLauncher />);
-    fireEvent.click(getByText('DISA STIG for RHEL 9'));
-    fireEvent.click(getByText('Next'));
-    expect(getByText('Select target hosts to scan')).toBeInTheDocument();
-    expect(getByText('Evaluate only (recommended)')).toBeInTheDocument();
+    await renderLauncher();
+    await waitFor(() => {
+      expect(screen.getByText('DISA STIG for RHEL 9')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('DISA STIG for RHEL 9'));
+    fireEvent.click(screen.getByText('Next'));
+    await waitFor(() => {
+      expect(screen.getByText('Select target hosts to scan')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Evaluate only (recommended)')).toBeInTheDocument();
+  });
+
+  it('calls getCartridges, getProfiles, and getInventories on mount', async () => {
+    await renderLauncher();
+    await waitFor(() => {
+      expect(mockApi.getCartridges).toHaveBeenCalledTimes(1);
+      expect(mockApi.getProfiles).toHaveBeenCalledTimes(1);
+      expect(mockApi.getInventories).toHaveBeenCalledTimes(1);
+    });
   });
 });
