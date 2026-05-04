@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import {
   Page,
   Header,
   HeaderTabs,
   Content,
+  ErrorPanel,
 } from '@backstage/core-components';
+import { Typography, Box, Button } from '@material-ui/core';
 import { ComplianceDashboard } from './ComplianceDashboard';
 import { ProfileBrowser } from './ProfileBrowser';
 import { ScanLauncher } from './ScanLauncher';
@@ -15,6 +17,50 @@ import { RemediationExecution } from './RemediationExecution';
 import { CartridgeSettings } from './CartridgeSettings';
 import { RemediationsList } from './RemediationsList';
 import { ScanHistory } from './ScanHistory';
+
+/**
+ * Error boundary for the Compliance tab.
+ *
+ * React error boundaries must be class components. This catches any unhandled
+ * exception in a child route and renders a Backstage ErrorPanel instead of
+ * crashing the entire tab.
+ */
+class ComplianceErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error?: Error }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = {};
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    const { error } = this.state;
+    if (error) {
+      return (
+        <Box p={4}>
+          <ErrorPanel
+            title="Something went wrong in the Compliance plugin"
+            error={error}
+          />
+          <Box mt={2} display="flex" justifyContent="center">
+            <Button
+              variant="outlined"
+              onClick={() => this.setState({ error: undefined })}
+            >
+              Try Again
+            </Button>
+          </Box>
+        </Box>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -38,7 +84,8 @@ const ComplianceRouter = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const getSelectedTab = () => {
+  // Derive selected tab from URL on every render so browser back/forward stays in sync.
+  const getSelectedTab = (): number => {
     const path = location.pathname.replace(/^\/compliance\/?/, '');
     if (path.startsWith('profiles')) return 1;
     if (path.startsWith('scan')) return 2;
@@ -48,10 +95,9 @@ const ComplianceRouter = () => {
     return 0;
   };
 
-  const [selectedTab, setSelectedTab] = useState(getSelectedTab());
+  const selectedTab = getSelectedTab();
 
   const handleTabChange = (index: number) => {
-    setSelectedTab(index);
     const tab = TABS[index];
     navigate(tabRouteMap[tab.id] || '');
   };
@@ -69,17 +115,19 @@ const ComplianceRouter = () => {
         tabs={TABS}
       />
       <Content>
-        <Routes>
-          <Route path="/" element={<ComplianceDashboard />} />
-          <Route path="/profiles/:profileId" element={<ProfileBrowser />} />
-          <Route path="/scan" element={<ScanLauncher />} />
-          <Route path="/results" element={<ScanHistory />} />
-          <Route path="/results/:jobId" element={<ResultsViewer />} />
-          <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
-          <Route path="/execute/:jobId" element={<RemediationExecution />} />
-          <Route path="/remediations" element={<RemediationsList />} />
-          <Route path="/settings" element={<CartridgeSettings />} />
-        </Routes>
+        <ComplianceErrorBoundary>
+          <Routes>
+            <Route path="/" element={<ComplianceDashboard />} />
+            <Route path="/profiles/:profileId" element={<ProfileBrowser />} />
+            <Route path="/scan" element={<ScanLauncher />} />
+            <Route path="/results" element={<ScanHistory />} />
+            <Route path="/results/:jobId" element={<ResultsViewer />} />
+            <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
+            <Route path="/execute/:jobId" element={<RemediationExecution />} />
+            <Route path="/remediations" element={<RemediationsList />} />
+            <Route path="/settings" element={<CartridgeSettings />} />
+          </Routes>
+        </ComplianceErrorBoundary>
       </Content>
     </Page>
   );

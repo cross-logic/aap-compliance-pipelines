@@ -104,6 +104,7 @@ export const ScanLauncher = () => {
   const [limit, setLimit] = useState('');
   const [evaluateOnly, setEvaluateOnly] = useState(true);
   const [launching, setLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   // Backend-fetched data — start empty, no hardcoded fallback
@@ -148,6 +149,7 @@ export const ScanLauncher = () => {
 
   const handleLaunch = async () => {
     setLaunching(true);
+    setLaunchError(null);
     try {
       // Check if a cartridge is registered for the selected profile and use
       // its workflow template ID for the scan launch request.
@@ -167,8 +169,9 @@ export const ScanLauncher = () => {
       // Navigate to results view with the returned workflow job ID
       navigate(`/compliance/results/${result.workflowJobId}`);
     } catch (err) {
-      // On error, still navigate with a fallback ID for demo purposes
-      navigate('/compliance/results/42');
+      setLaunchError(
+        err instanceof Error ? err.message : 'Failed to launch scan',
+      );
     } finally {
       setLaunching(false);
     }
@@ -191,6 +194,16 @@ export const ScanLauncher = () => {
                       selectedProfile === p.id ? classes.selectedProfile : ''
                     }`}
                     onClick={() => setSelectedProfile(p.id)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedProfile(p.id);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Select compliance profile ${p.name}`}
+                    aria-pressed={selectedProfile === p.id}
                   >
                     <CardContent>
                       <Box display="flex" alignItems="center" style={{ gap: 8 }} mb={1}>
@@ -339,6 +352,14 @@ export const ScanLauncher = () => {
               </div>
             </InfoCard>
 
+            {launchError && (
+              <Box mt={2} p={2} bgcolor="#FAEAE5" borderRadius={4} border="1px solid #C9190B">
+                <Typography variant="body2" style={{ color: '#C9190B' }}>
+                  Scan launch failed: {launchError}
+                </Typography>
+              </Box>
+            )}
+
             {launching ? (
               <Box mt={2}>
                 <Progress />
@@ -356,7 +377,7 @@ export const ScanLauncher = () => {
                 disabled={!profile || !inventory || !canLaunchScan}
                 title={!canLaunchScan ? 'You do not have permission to launch scans' : undefined}
               >
-                Launch Scan
+                {launchError ? 'Retry Scan' : 'Launch Scan'}
               </Button>
             )}
           </div>

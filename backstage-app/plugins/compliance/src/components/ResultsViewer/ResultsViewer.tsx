@@ -403,7 +403,10 @@ export const ResultsViewer = () => {
                     onClick={() => setExpandedRule(expandedRule === finding.ruleId ? null : finding.ruleId)}
                   >
                     <TableCell>
-                      <IconButton size="small">
+                      <IconButton
+                        size="small"
+                        aria-label={expandedRule === finding.ruleId ? `Collapse rule details for ${finding.stigId}` : `Expand rule details for ${finding.stigId}`}
+                      >
                         {expandedRule === finding.ruleId ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                       </IconButton>
                     </TableCell>
@@ -452,13 +455,13 @@ export const ResultsViewer = () => {
                       <Box display="flex" alignItems="center" style={{ gap: 8 }}>
                         <LinearProgress
                           variant="determinate"
-                          value={(finding.passCount / finding.totalCount) * 100}
+                          value={finding.totalCount > 0 ? Math.round((finding.passCount / finding.totalCount) * 100) : 0}
                           className={classes.passBar}
                           style={{ flex: 1 }}
                           color={finding.passCount === finding.totalCount ? 'primary' : 'secondary'}
                         />
                         <Typography variant="caption" style={{ minWidth: 36 }}>
-                          {Math.round((finding.passCount / finding.totalCount) * 100)}%
+                          {finding.totalCount > 0 ? Math.round((finding.passCount / finding.totalCount) * 100) : 0}%
                         </Typography>
                       </Box>
                     </TableCell>

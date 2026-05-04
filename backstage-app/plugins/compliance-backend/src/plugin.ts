@@ -61,31 +61,40 @@ export const complianceBackendPlugin = createBackendPlugin({
 
         httpRouter.use(router);
 
-        // AUTH POLICY: Unauthenticated access for the prototype phase.
+        // ─── Auth Policies ───────────────────────────────────────
         //
-        // In production RHDH, this would be removed — the Backstage framework's
-        // httpAuth service handles authentication automatically when the
-        // auth-backend-module-rhaap-provider is installed. The upstream Ansible
-        // Portal plugins do NOT add explicit auth middleware; they rely on:
+        // PROTOTYPE PHASE: All routes are marked unauthenticated so that
+        // Backstage guest-auth works out of the box. Each route is listed
+        // explicitly so the production upgrade path is clear.
         //
-        //   1. httpRouter's built-in Backstage JWT validation
-        //   2. The RBAC backend plugin (@backstage-community/plugin-rbac-backend)
-        //      evaluating permissions for plugins listed in pluginsWithPermission
-        //   3. Frontend fetchApi auto-attaching identity tokens
-        //
-        // To enable auth in production:
-        //   - Install auth-backend-module-rhaap-provider for AAP Gateway OAuth2
-        //   - Remove this addAuthPolicy call (let httpRouter enforce auth)
-        //   - Add 'compliance' to permission.rbac.pluginsWithPermission in app-config
-        //   - Frontend already passes x-aap-token header (see ComplianceBackendClient)
-        //
-        // The per-request AAP token infrastructure is already wired through
-        // getUserAapToken() in router.ts and the token parameter on all
-        // ControllerClient/ComplianceService methods.
-        httpRouter.addAuthPolicy({
-          path: '/',
-          allow: 'unauthenticated',
-        });
+        // PRODUCTION UPGRADE (TODO):
+        //   1. Install auth-backend-module-rhaap-provider for AAP Gateway OAuth2.
+        //   2. Remove every addAuthPolicy call below — the Backstage httpRouter
+        //      will enforce JWT validation automatically.
+        //   3. Add 'compliance' to permission.rbac.pluginsWithPermission in
+        //      app-config so that @backstage-community/plugin-rbac-backend
+        //      gates access.
+        //   4. For mutating endpoints (POST /scan, POST /cartridges,
+        //      DELETE /cartridges/:id, POST /remediate, POST /remediation-profiles),
+        //      integrate @backstage/plugin-permission-node and gate behind
+        //      catalogEntityCreatePermission (or a custom compliance permission).
+        //   5. Frontend already passes x-aap-token header via
+        //      ComplianceBackendClient; per-request AAP tokens are wired
+        //      through getUserAapToken() in router.ts.
+
+        // --- Read-only endpoints ---
+        httpRouter.addAuthPolicy({ path: '/health', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/profiles', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/scans', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/findings', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/cartridges', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/inventories', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/remediations', allow: 'unauthenticated' });
+
+        // --- Mutating endpoints (TODO: gate behind permissions in production) ---
+        httpRouter.addAuthPolicy({ path: '/scan', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/remediate', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/remediation-profiles', allow: 'unauthenticated' });
       },
     });
   },
