@@ -29,7 +29,3 @@ export type {
   RemediationPlan,
 } from './types';
 
-export {
-  ComplianceApiClient,
-  type ComplianceApiClientOptions,
-} from './client/ComplianceApiClient';

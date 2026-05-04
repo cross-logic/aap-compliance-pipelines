@@ -22,6 +22,7 @@ interface ComplianceGaugeProps {
   label?: string;
 }
 
+// TODO(GA): These are PatternFly 6 palette values hardcoded for RHDH; move to theme overrides before GA.
 const getColor = (value: number): string => {
   if (value >= 90) return '#3E8635';
   if (value >= 75) return '#F0AB00';
