@@ -27,6 +27,7 @@
     "typescript": "~5.8.0"
   },
   "scripts": {
-    "build": "backstage-cli package build"
+    "build": "backstage-cli package build",
+    "test": "backstage-cli package test"
   }
 }
