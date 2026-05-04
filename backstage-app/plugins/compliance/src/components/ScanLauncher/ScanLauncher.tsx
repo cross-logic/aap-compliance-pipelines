@@ -115,8 +115,9 @@ export const ScanLauncher = () => {
   useEffect(() => {
     Promise.all([
       api.getCartridges().catch(() => [] as ComplianceCartridge[]),
+      api.getProfiles().catch(() => []),
       api.getInventories().catch(() => [] as Array<{ id: number; name: string; hostCount: number }>),
-    ]).then(([cartridgeData, inventoryData]) => {
+    ]).then(([cartridgeData, profileData, inventoryData]) => {
       setCartridges(cartridgeData);
       if (cartridgeData.length > 0) {
         setProfiles(cartridgeData.map(c => ({
@@ -125,9 +126,18 @@ export const ScanLauncher = () => {
           version: c.version || '',
           rules: 0,
         })));
+      } else if (profileData.length > 0) {
+        setProfiles(profileData.map(p => ({
+          id: p.id,
+          name: p.name,
+          version: p.version,
+          rules: p.ruleCount,
+        })));
       }
       if (inventoryData.length > 0) {
         setInventories(inventoryData);
+      } else {
+        setInventories(FALLBACK_INVENTORIES);
       }
       setDataLoaded(true);
     });

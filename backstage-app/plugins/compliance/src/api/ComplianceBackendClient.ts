@@ -22,6 +22,7 @@ import type {
   LaunchRemediationRequest,
   LaunchRemediationResponse,
   PostureSnapshot,
+  ComplianceScan,
   RemediationProfile,
   SaveRemediationProfileRequest,
   WorkflowJobStatus,
@@ -122,6 +123,10 @@ export class ComplianceBackendClient implements ComplianceApi {
 
   getProfiles() {
     return this.request<ComplianceProfile[]>('/profiles');
+  }
+
+  getScans() {
+    return this.request<ComplianceScan[]>('/scans');
   }
 
   getInventories() {

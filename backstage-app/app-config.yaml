@@ -43,7 +43,7 @@ backend:
 
 # Compliance plugin settings
 compliance:
-  dataSource: live
+  dataSource: mock
 
 # AAP Connection — configure via .env (see .env.example)
 ansible:

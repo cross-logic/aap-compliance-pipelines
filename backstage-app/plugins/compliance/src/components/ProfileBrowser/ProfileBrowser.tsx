@@ -180,26 +180,26 @@ export const ProfileBrowser = () => {
   useEffect(() => {
     let cancelled = false;
 
-    api.getCartridges()
-      .then(cartridges => {
-        if (cancelled) return;
+    Promise.all([
+      api.getCartridges().catch(() => [] as ComplianceCartridge[]),
+      api.getProfiles().catch(() => []),
+    ]).then(([cartridges, backendProfiles]) => {
+      if (cancelled) return;
 
-        if (cartridges.length > 0) {
-          const registryProfiles = cartridges.map(c => ({
-            ...cartridgeToDisplayProfile(c),
-            icon: frameworkIcon(c.framework),
-          }));
-          setProfiles(registryProfiles);
-        } else {
-          setProfiles([]);
-        }
-      })
-      .catch(() => {
+      if (cartridges.length > 0) {
+        const registryProfiles = cartridges.map(c => ({
+          ...cartridgeToDisplayProfile(c),
+          icon: frameworkIcon(c.framework),
+        }));
+        setProfiles(registryProfiles);
+      } else if (backendProfiles.length > 0) {
+        setProfiles(BUILTIN_PROFILES);
+      } else {
         setProfiles([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      }
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
 
     return () => { cancelled = true; };
   }, [api]);

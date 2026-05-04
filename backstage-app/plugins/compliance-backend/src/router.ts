@@ -86,6 +86,13 @@ export async function createRouter(
     res.json(profiles);
   });
 
+  // ─── Scan history ───────────────────────────────────────────────────
+
+  router.get('/scans', async (_req, res) => {
+    const scans = await database.getRecentScans(50);
+    res.json(scans);
+  });
+
   // ─── Inventories ────────────────────────────────────────────────────
 
   router.get('/inventories', async (req, res) => {

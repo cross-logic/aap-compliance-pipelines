@@ -9,6 +9,7 @@
 import { createApiRef } from '@backstage/core-plugin-api';
 import type {
   ComplianceProfile,
+  ComplianceScan,
   MultiHostFinding,
   DashboardStats,
   LaunchScanRequest,
@@ -31,6 +32,7 @@ export interface ComplianceApi {
   getProfiles(): Promise<ComplianceProfile[]>;
   getInventories(): Promise<Array<{ id: number; name: string; hostCount: number }>>;
   getWorkflowTemplates(nameFilter?: string): Promise<Array<{ id: number; name: string; description: string }>>;
+  getScans(): Promise<ComplianceScan[]>;
   launchScan(body: LaunchScanRequest): Promise<LaunchScanResponse>;
   getFindings(scanId?: string): Promise<MultiHostFinding[]>;
   getWorkflowStatus(jobId: number): Promise<WorkflowJobStatus>;
