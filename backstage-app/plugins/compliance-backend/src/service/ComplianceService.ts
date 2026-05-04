@@ -655,16 +655,16 @@ export class ComplianceService {
    * Each group produces:
    *   { tags: [rule_ids], limit: "host1,host2,...", extra_vars: {overrides}, hostCount, ruleCount }
    */
-  buildRemediationPlan(selections: RemediationSelection[]): RemediationPlan {
+  buildRemediationPlan(
+    selections: RemediationSelection[],
+    findings: MultiHostFinding[],
+  ): RemediationPlan {
     const enabledSelections = selections.filter(s => s.enabled);
 
     if (enabledSelections.length === 0) {
       return { groups: [], totalRules: 0, totalHosts: 0 };
     }
 
-    // Get mock findings to resolve host information for each rule.
-    // In production, this would query the database for the latest scan results.
-    const findings = MockDataProvider.getFindings();
     const findingsMap = new Map(findings.map(f => [f.ruleId, f]));
 
     // For each enabled rule, compute its target host set based on scope

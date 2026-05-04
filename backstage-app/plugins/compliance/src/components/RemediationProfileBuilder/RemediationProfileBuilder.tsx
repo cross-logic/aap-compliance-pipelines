@@ -139,6 +139,7 @@ export const RemediationProfileBuilder = () => {
   const [profileName, setProfileName] = useState('');
   const [profileDescription, setProfileDescription] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Fetch findings from the backend (S2: no frontend mock data)
   const [allFindings, setAllFindings] = useState<MultiHostFinding[]>([]);
@@ -288,7 +289,7 @@ export const RemediationProfileBuilder = () => {
       >
         {/* Rule header */}
         <div className={classes.findingHeader}>
-          <Switch checked={sel.enabled} onChange={() => toggleFinding(finding.ruleId)} color="primary" size="small" />
+          <Switch checked={sel.enabled} onChange={() => toggleFinding(finding.ruleId)} color="primary" size="small" inputProps={{ 'aria-label': `Toggle rule ${finding.stigId} for remediation` }} />
           <Chip
             label={finding.stigId}
             size="small"
@@ -319,6 +320,7 @@ export const RemediationProfileBuilder = () => {
           <IconButton
             size="small"
             onClick={e => { e.stopPropagation(); toggleExpanded(finding.ruleId); }}
+            aria-label={sel.expanded ? `Collapse rule details for ${finding.stigId}` : `Expand rule details for ${finding.stigId}`}
           >
             {sel.expanded ? <ExpandLessIcon /> : <SettingsIcon fontSize="small" />}
           </IconButton>
@@ -517,7 +519,7 @@ export const RemediationProfileBuilder = () => {
 
       {/* Action Buttons */}
       <Box display="flex" justifyContent="flex-end" style={{ gap: 16 }}>
-        <Button variant="outlined" startIcon={<SaveIcon />} onClick={() => setSaveDialogOpen(true)}>
+        <Button variant="outlined" startIcon={<SaveIcon />} onClick={() => { setSaveError(null); setSaveDialogOpen(true); }}>
           Save Remediation
         </Button>
         <Button
@@ -564,6 +566,11 @@ export const RemediationProfileBuilder = () => {
             helperText="Capture institutional knowledge about why rules were included or excluded"
             style={{ marginTop: 16 }}
           />
+          {saveError && (
+            <Typography color="error" variant="body2" style={{ marginTop: 8 }}>
+              {saveError}
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSaveDialogOpen(false)} disabled={saving}>Cancel</Button>
@@ -573,6 +580,7 @@ export const RemediationProfileBuilder = () => {
             disabled={!profileName || saving}
             onClick={async () => {
               setSaving(true);
+              setSaveError(null);
               try {
                 const enabledSelections = failedFindings
                   .filter(f => selections[f.ruleId]?.enabled)
@@ -592,9 +600,8 @@ export const RemediationProfileBuilder = () => {
                 setSaveDialogOpen(false);
                 setProfileName('');
                 setProfileDescription('');
-              } catch {
-                // On error in mock mode, just close the dialog
-                setSaveDialogOpen(false);
+              } catch (err) {
+                setSaveError(err instanceof Error ? err.message : 'Failed to save remediation');
               } finally {
                 setSaving(false);
               }

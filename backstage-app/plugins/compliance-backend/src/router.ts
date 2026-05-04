@@ -325,8 +325,12 @@ export async function createRouter(
     logger.info(`Launching remediation for profile=${remediateRequest.profileId}`);
 
     try {
+      // Fetch the latest findings so the plan builder uses real scan data
+      // (not hardcoded mock data) regardless of data source mode.
+      const findings = await service.getFindings(body.scanId);
+
       // Build an optimized remediation plan from the selections
-      const plan = service.buildRemediationPlan(remediateRequest.selections);
+      const plan = service.buildRemediationPlan(remediateRequest.selections, findings);
       logger.info(
         `Remediation plan: ${plan.groups.length} groups, ${plan.totalRules} rules, ${plan.totalHosts} hosts`,
       );
@@ -351,7 +355,7 @@ export async function createRouter(
 
   router.get('/posture', async (req, res) => {
     const profileId = req.query.profileId as string | undefined;
-    const days = req.query.days ? Number(req.query.days) : 30;
+    const days = Math.max(1, Math.min(365, Number(req.query.days) || 30));
     const history = await service.getPostureHistory(profileId, days);
     res.json(history);
   });

@@ -119,6 +119,8 @@ export const CartridgeSettings = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ComplianceCartridge | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [form, setForm] = useState<SaveCartridgeRequest>({ ...EMPTY_FORM });
 
   // Controller resources for dropdowns
@@ -155,6 +157,7 @@ export const CartridgeSettings = () => {
 
   const handleOpenDialog = () => {
     setForm({ ...EMPTY_FORM });
+    setSaveError(null);
     loadControllerResources();
     setDialogOpen(true);
   };
@@ -166,12 +169,13 @@ export const CartridgeSettings = () => {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       await api.saveCartridge(form);
       handleCloseDialog();
       await loadCartridges();
-    } catch {
-      // error handling would go here
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save profile');
     } finally {
       setSaving(false);
     }
@@ -179,18 +183,20 @@ export const CartridgeSettings = () => {
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
+    setDeleteError(null);
     try {
       await api.deleteCartridge(deleteTarget.id);
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
       await loadCartridges();
-    } catch {
-      // error handling would go here
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete profile');
     }
   };
 
   const handleDeleteClick = (cartridge: ComplianceCartridge) => {
     setDeleteTarget(cartridge);
+    setDeleteError(null);
     setDeleteDialogOpen(true);
   };
 
@@ -487,6 +493,11 @@ export const CartridgeSettings = () => {
               className={classes.formField}
             />
           </div>
+          {saveError && (
+            <Typography color="error" variant="body2" style={{ marginTop: 8 }}>
+              {saveError}
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
@@ -514,6 +525,11 @@ export const CartridgeSettings = () => {
             <strong>{deleteTarget?.displayName}</strong>? This will not affect
             existing scan results or platform resources.
           </Typography>
+          {deleteError && (
+            <Typography color="error" variant="body2" style={{ marginTop: 8 }}>
+              {deleteError}
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
