@@ -43,7 +43,8 @@ describe('RemediationProfileBuilder', () => {
     await waitFor(() => {
       expect(screen.getByText(/rules with failures/)).toBeInTheDocument();
     });
-    expect(screen.getByText(/selected/)).toBeInTheDocument();
+    // "selected" and "skipped" text appear in summary bar and per-group headers
+    expect(screen.getAllByText(/selected/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/skipped/)).toBeInTheDocument();
     expect(screen.getByText(/hosts affected/)).toBeInTheDocument();
   });
@@ -60,10 +61,11 @@ describe('RemediationProfileBuilder', () => {
 
   it('displays severity group headers', async () => {
     await renderBuilder();
+    // The severity group headers use the long labels: "CAT I — Critical", etc.
     await waitFor(() => {
-      expect(screen.getByText(/CAT I/)).toBeInTheDocument();
+      expect(screen.getByText('CAT I — Critical')).toBeInTheDocument();
     });
-    expect(screen.getByText(/CAT II/)).toBeInTheDocument();
+    expect(screen.getByText('CAT II — Medium')).toBeInTheDocument();
   });
 
   it('displays the apply remediation button', async () => {
@@ -97,15 +99,17 @@ describe('RemediationProfileBuilder', () => {
     await waitFor(() => {
       expect(screen.getByText('Clear All')).toBeInTheDocument();
     });
+
+    // After Clear All, the skipped count should match total failed findings
     fireEvent.click(screen.getByText('Clear All'));
     await waitFor(() => {
-      // After clearing, the "selected" count should show 0
-      expect(screen.getByText(/\b0\b/)).toBeInTheDocument();
+      expect(screen.getByText(/skipped/)).toHaveTextContent('2');
     });
+
+    // After Select All, the skipped count should be 0
     fireEvent.click(screen.getByText('Select All'));
-    // After selecting all, the count should match number of failed findings
     await waitFor(() => {
-      expect(screen.getByText(/\b2\b/)).toBeInTheDocument();
+      expect(screen.getByText(/skipped/)).toHaveTextContent('0');
     });
   });
 
