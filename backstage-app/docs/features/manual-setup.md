@@ -46,7 +46,7 @@ the automated `setup_controller.yml` playbook.
 3. Name: `compliance-content`
 4. Organization: `compliance-prototype`
 5. Source Control Type: **Git**
-6. Source Control URL: your repo URL (e.g., `https://github.com/cross-logic/aap-compliance-pipelines.git`)
+6. Source Control URL: `https://github.com/cross-logic/aap-compliance-pipelines.git` (public) or `https://gitlab.cee.redhat.com/mferrari/aap-compliance-pipelines.git` (Red Hat internal)
 7. Source Control Branch: `main`
 8. Check **Update Revision on Launch**
 9. Save

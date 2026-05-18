@@ -15,7 +15,7 @@ Before you begin, confirm that you have the following:
 | **Admin access** | An account with Organization Admin or Superuser privileges on the automation controller |
 | **Target host** | A RHEL 9 system reachable via SSH from the automation controller execution environment |
 | **SSH credentials** | Username and password (or SSH key) with sudo privileges on the target host |
-| **Network access** | The automation controller must be able to reach `github.com` to sync the project repository |
+| **Network access** | The automation controller must be able to reach the Git host to sync the project repository (GitHub or GitLab) |
 
 ### Required Ansible Collections (for automated setup only)
 
@@ -193,7 +193,7 @@ password field shows `Encrypted` after saving.
    - **Description**: `Compliance pipeline collection and playbooks`
    - **Organization**: Select `compliance-prototype`
    - **Source Control Type**: Select **Git**
-   - **Source Control URL**: `https://github.com/cross-logic/aap-compliance-pipelines.git`
+   - **Source Control URL**: `https://github.com/cross-logic/aap-compliance-pipelines.git` (public) or `https://gitlab.cee.redhat.com/mferrari/aap-compliance-pipelines.git` (Red Hat internal)
    - **Source Control Branch/Tag/Commit**: `main`
 4. Under **Options**:
    - Check **Clean** (removes local modifications before updating)
@@ -367,9 +367,11 @@ After completing either automated or manual setup, verify that everything works:
 **Symptom**: The `compliance-content` project shows a red failure status after
 sync, with an error about authentication.
 
-**Resolution**: The repository at
+**Resolution**: The GitHub repository at
 `https://github.com/cross-logic/aap-compliance-pipelines.git` is public and does
-not require authentication. If your automation controller is behind a proxy, configure the
+not require authentication. The GitLab mirror at
+`https://gitlab.cee.redhat.com/mferrari/aap-compliance-pipelines.git` is internal
+and requires Red Hat network access. If your automation controller is behind a proxy, configure the
 proxy settings in **Settings** > **Jobs** > **Extra Environment Variables**:
 
 ```json

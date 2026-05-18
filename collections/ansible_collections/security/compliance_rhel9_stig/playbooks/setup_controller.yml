@@ -52,7 +52,8 @@
     compliance_org: compliance-prototype
     compliance_inventory: compliance-rhel9-inventory
     compliance_credential: compliance-lab-ssh
-    compliance_project: compliance-cartridge
+    compliance_project: compliance-profile
+    # GitHub (public) or GitLab (Red Hat internal) — override via -e compliance_scm_url=...
     compliance_scm_url: "https://github.com/cross-logic/aap-compliance-pipelines.git"
     compliance_scm_branch: main
 
