@@ -12,11 +12,9 @@ A Backstage-based compliance management prototype for Ansible Automation Platfor
 ## Quick Start
 
 ```bash
-# Clone the repository
-# From GitHub (public):
-git clone https://github.com/cross-logic/aap-compliance-pipelines.git
-# From GitLab (Red Hat internal):
-# git clone https://gitlab.cee.redhat.com/mferrari/aap-compliance-pipelines.git
+# Clone the repository (pick one)
+git clone https://github.com/cross-logic/aap-compliance-pipelines.git          # GitHub (public)
+git clone https://gitlab.cee.redhat.com/mferrari/aap-compliance-pipelines.git  # GitLab (Red Hat internal)
 cd aap-compliance-pipelines/backstage-app
 
 # Install dependencies and set up hooks
