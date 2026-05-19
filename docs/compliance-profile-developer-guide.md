@@ -1,0 +1,1153 @@
+# How to Build a Compliance Profile
+
+A practical, checklist-style guide for contributors who want to create a new compliance profile collection -- for a new platform (Windows, network devices), a new compliance framework (PCI-DSS, CIS Benchmark), or a new scanner integration (Qualys, Tenable).
+
+---
+
+## 1. What Is a Compliance Profile?
+
+A compliance profile is an Ansible collection that packages everything needed for a specific compliance standard + scanner combination. It follows the `security.compliance_<platform>_<framework>` naming convention and provides the complete pipeline: fact gathering, scanning, normalization, remediation, and reporting.
+
+**Key concept: The compliance profile is a scanner orchestrator, not a scanner.** Our value is the UX, orchestration, and remediation builder. The portal plugin never knows which scanner produced the findings -- it consumes a Common Findings Format (CFF) JSON document regardless of the underlying scanner.
+
+### Three Tiers
+
+| Tier | Model | What We Ship | What the Customer Provides |
+|------|-------|-------------|---------------------------|
+| **Tier 1: Fully Shippable** | We own the scanner | Scanner, content, normalizer, remediation, pipeline, EE | Nothing (optional: credentials for air-gap repos) |
+| **Tier 2: BYOS** | Customer provides the scanner | Adapter (API connector), normalizer, remediation, pipeline | Scanner deployment, credentials, licenses |
+| **Tier 3: Hybrid** | One scanner, many platforms | Multi-domain adapters + per-platform normalizers | Same as Tier 2, plus multi-domain scanner config |
+
+**Tier 1 examples:** OpenSCAP (RHEL/Linux), PowerSTIG (Windows), network CLI evaluation (Cisco IOS, NX-OS, Junos).
+
+**Tier 2 examples:** Qualys Policy Compliance, Tenable/Nessus, Red Hat Insights Compliance, Rapid7 InsightVM, CIS-CAT Pro.
+
+**Tier 3 examples:** A single Qualys or Tenable deployment covering RHEL, Windows, and network devices simultaneously.
+
+### Decision Flow
+
+```
+Does the customer already have a compliance scanner?
+  |
+  +-- No --> Tier 1 (we ship OpenSCAP / PowerSTIG / network eval)
+  |
+  +-- Yes --> Does the scanner cover one platform or multiple?
+                |
+                +-- One platform --> Tier 2 (BYOS adapter for that scanner)
+                |
+                +-- Multiple platforms --> Tier 3 (Hybrid multi-domain adapter)
+```
+
+---
+
+## 2. Collection Structure (Required Files)
+
+### Tier 1 Structure
+
+A Tier 1 compliance profile ships the scanner itself. This is the reference structure based on the existing `security.compliance_rhel9_stig` collection.
+
+```
+security.compliance_<platform>_<framework>/
+  galaxy.yml                            # Collection metadata, dependencies, version
+  meta/runtime.yml                      # Ansible version requirements
+
+  plugins/modules/                      # Custom Ansible modules
+    compliance_gather.py                # Agentless fact collection (single round-trip)
+    compliance_evaluate.py              # Centralized rule evaluation (runs on localhost)
+    normalize_<scanner>.py              # Scanner output --> Common Findings Format
+
+  playbooks/                            # Pipeline-stage playbooks
+    gather.yml                          # Collect facts from targets
+    scan.yml                            # Execute scanner (or evaluate rules)
+    normalize.yml                       # Transform results to CFF
+    remediate.yml                       # Apply selective remediation
+    report.yml                          # Generate reports
+    verify.yml                          # Re-scan after remediation
+    scanner/                            # Scanner lifecycle
+      install_scanner.yml               # Install scanner on targets
+      run_scan.yml                      # Execute the scan
+      fetch_results.yml                 # Retrieve scanner output
+      uninstall_scanner.yml             # Remove scanner (ephemeral mode)
+
+  ee/
+    execution-environment.yml           # EE Builder definition (ansible-builder v3)
+
+  extensions/patterns/                  # AAP Pattern metadata
+    metadata.yml                        # Discovery metadata
+    aap_config/                         # infra.aap_configuration YAML
+      workflow.yml                      # Workflow definition
+      job_templates.yml                 # Job template definitions
+      surveys.yml                       # Survey definitions
+    portal/                             # Backstage discovery
+      metadata.yml                      # Portal metadata
+      backstage_template.yml            # Software Template for one-click setup
+
+  files/
+    rules/                              # Track A evaluation rules (YAML)
+      <framework>_<platform>_<version>.yml
+    profiles/                           # Profile definitions (selected rules + refinements)
+      <framework>_<version>.yml
+    mappings/                           # Scanner rule ID mappings
+      xccdf_to_rule.yml                 # XCCDF rule ID --> our rule_id
+
+  tests/
+    unit/                               # Unit tests for custom modules
+    integration/                        # Integration test targets
+    sanity/                             # Ansible sanity test ignores
+```
+
+### Tier 2 Structure
+
+A Tier 2 compliance profile connects to an existing scanner the customer already operates. Replace scanner-specific modules with adapter modules.
+
+```
+security.compliance_<platform>_<scanner>/
+  galaxy.yml
+  meta/runtime.yml
+
+  plugins/modules/
+    <scanner>_adapter.py                # API connector module
+    normalize_<scanner>.py              # Scanner output normalizer --> CFF
+
+  playbooks/
+    fetch_<scanner>.yml                 # Pull results from scanner API (replaces scan.yml)
+    normalize.yml                       # Transform results to CFF
+    remediate.yml                       # Apply selective remediation (same roles as Tier 1)
+    report.yml                          # Generate reports
+    verify.yml                          # Re-scan after remediation
+
+  ee/
+    execution-environment.yml           # Standard EE (no scanner binaries needed)
+
+  extensions/patterns/
+    metadata.yml
+    aap_config/
+      workflow.yml
+      job_templates.yml
+      surveys.yml
+      credentials.yml                   # Scanner credential type definition
+    portal/
+      metadata.yml
+      backstage_template.yml
+
+  files/
+    mappings/
+      <scanner>_control_to_stig.yml     # Scanner control ID --> STIG rule ID
+    profiles/
+      <framework>_<version>.yml
+```
+
+**Key difference from Tier 1:** The `plugins/modules/` directory replaces `compliance_gather.py` and scanner-execution modules with an API adapter module. The `playbooks/scan.yml` is replaced by `playbooks/fetch_<scanner>.yml`. Remediation roles are identical -- the same role fixes the finding whether OpenSCAP or Qualys discovered it.
+
+### Tier 3 Structure
+
+A Tier 3 compliance profile is a meta-collection that wraps multiple Tier 2 adapters under one scanner.
+
+```
+security.compliance_enterprise_<scanner>/
+  galaxy.yml
+  meta/runtime.yml
+
+  adapters/
+    <platform_a>/                       # e.g., rhel/
+      fetch_results.yml
+      normalize_<scanner>_<platform>.py
+    <platform_b>/                       # e.g., windows/
+      fetch_results.yml
+      normalize_<scanner>_<platform>.py
+    common/
+      connect.yml                       # Shared API connection setup
+      trigger_scan.yml                  # Shared scan trigger
+
+  playbooks/
+    fetch_all.yml                       # Orchestrate multi-platform fetch
+    normalize.yml                       # Fan out to per-platform normalizers
+    remediate.yml
+    report.yml
+    verify.yml
+
+  ee/
+    execution-environment.yml
+
+  extensions/patterns/
+    metadata.yml
+    aap_config/
+      workflow.yml                      # Multi-branch workflow
+      job_templates.yml
+    portal/
+      metadata.yml
+
+  files/
+    mappings/
+      <scanner>_<platform_a>_control_to_stig.yml
+      <scanner>_<platform_b>_control_to_stig.yml
+```
+
+---
+
+## 3. Common Findings Format (CFF) v1.0.0
+
+This is THE contract. Every normalizer must produce output conforming to this schema. The Backstage plugin consumes ONLY this format. Scanners are opaque to the UI -- the CFF is the single integration surface.
+
+### JSON Schema
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ansible.com/schemas/compliance/findings/v1",
+  "title": "Compliance Findings Format v1",
+  "description": "Common format for compliance scan findings across all scanner tiers",
+  "type": "object",
+  "required": ["version", "scan_metadata", "findings", "summary"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version"
+    },
+    "scan_metadata": {
+      "type": "object",
+      "required": ["scan_id", "profile_id", "profile_name", "scanner", "timestamp", "host"],
+      "properties": {
+        "scan_id": {
+          "type": "string",
+          "description": "Unique identifier for this scan run (UUID)"
+        },
+        "profile_id": {
+          "type": "string",
+          "description": "Compliance profile identifier (e.g., stig_rhel9_v2r8, cis_rhel9_l1)"
+        },
+        "profile_name": {
+          "type": "string",
+          "description": "Human-readable profile name (e.g., DISA STIG for RHEL 9 V2R8)"
+        },
+        "framework": {
+          "type": "string",
+          "enum": ["DISA_STIG", "CIS_BENCHMARK", "NIST_800_53", "HIPAA", "PCI_DSS", "CUSTOM"],
+          "description": "Compliance framework"
+        },
+        "scanner": {
+          "type": "object",
+          "required": ["name", "tier"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "enum": ["openscap", "powerstig", "compliance_evaluate", "insights", "qualys", "tenable", "rapid7", "ciscat", "scap_workbench", "custom"],
+              "description": "Scanner identifier"
+            },
+            "version": {
+              "type": "string",
+              "description": "Scanner software version"
+            },
+            "tier": {
+              "type": "integer",
+              "enum": [1, 2, 3],
+              "description": "Scanner tier (1=shipped, 2=BYOS, 3=hybrid)"
+            }
+          }
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of scan completion"
+        },
+        "host": {
+          "type": "string",
+          "description": "FQDN or hostname this scan result is for"
+        },
+        "host_ip": {
+          "type": "string",
+          "description": "IP address of the scanned host"
+        },
+        "host_os": {
+          "type": "string",
+          "description": "Operating system of the scanned host"
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/finding"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "pass", "fail", "error", "not_applicable", "not_checked"],
+      "properties": {
+        "total": { "type": "integer" },
+        "pass": { "type": "integer" },
+        "fail": { "type": "integer" },
+        "error": { "type": "integer" },
+        "not_applicable": { "type": "integer" },
+        "not_checked": { "type": "integer" },
+        "compliance_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of applicable rules that passed"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "finding": {
+      "type": "object",
+      "required": ["rule_id", "title", "status", "severity"],
+      "properties": {
+        "rule_id": {
+          "type": "string",
+          "description": "Primary rule identifier within the collection (e.g., sshd_set_idle_timeout)"
+        },
+        "stig_id": {
+          "type": "string",
+          "description": "DISA STIG Vulnerability ID (e.g., V-257844). Empty if not STIG.",
+          "pattern": "^(V-[0-9]+)?$"
+        },
+        "cis_id": {
+          "type": "string",
+          "description": "CIS Benchmark recommendation ID (e.g., 1.1.1.1). Empty if not CIS."
+        },
+        "cce_id": {
+          "type": "string",
+          "description": "Common Configuration Enumeration ID (e.g., CCE-83600-3). Empty if not available.",
+          "pattern": "^(CCE-[0-9]+-[0-9]+)?$"
+        },
+        "cci_id": {
+          "type": "string",
+          "description": "Control Correlation Identifier (e.g., CCI-001133). Links to NIST 800-53."
+        },
+        "title": {
+          "type": "string",
+          "description": "Human-readable rule title"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the compliance requirement"
+        },
+        "check_text": {
+          "type": "string",
+          "description": "Instructions for manually verifying compliance"
+        },
+        "fix_text": {
+          "type": "string",
+          "description": "Instructions for manually fixing non-compliance"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "error", "not_applicable", "not_checked"],
+          "description": "Compliance status for this rule"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "Normalized severity. Maps to CAT_I/CAT_II/CAT_III for STIG, Level 1/2 for CIS."
+        },
+        "category": {
+          "type": "string",
+          "description": "Rule category (e.g., Access Control, Audit and Accountability)"
+        },
+        "evidence": {
+          "type": "object",
+          "properties": {
+            "actual_value": {
+              "type": "string",
+              "description": "What was found on the system"
+            },
+            "expected_value": {
+              "type": "string",
+              "description": "What was expected per the compliance rule"
+            },
+            "message": {
+              "type": "string",
+              "description": "Human-readable evidence summary"
+            },
+            "scanner_rule_id": {
+              "type": "string",
+              "description": "Original rule ID from the scanner (before normalization)"
+            },
+            "raw_output": {
+              "type": "string",
+              "description": "Raw scanner output snippet (for debugging)"
+            }
+          }
+        },
+        "parameters": {
+          "type": "array",
+          "description": "Tunable parameters for this rule's remediation",
+          "items": {
+            "type": "object",
+            "required": ["name", "label", "type", "default", "value"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Variable name (e.g., var_sshd_set_keepalive)"
+              },
+              "label": {
+                "type": "string",
+                "description": "Human-readable label"
+              },
+              "description": {
+                "type": "string",
+                "description": "What this parameter controls"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["string", "number", "boolean", "select"]
+              },
+              "default": {
+                "description": "Default value from the compliance profile"
+              },
+              "value": {
+                "description": "Current value (may differ from default if user customized)"
+              },
+              "options": {
+                "type": "array",
+                "description": "For select type: available choices",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": { "type": "string" },
+                    "value": {}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "remediation": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "description": "Collection role name for automated remediation"
+            },
+            "available": {
+              "type": "boolean",
+              "description": "Whether automated remediation is available for this rule"
+            },
+            "disruption": {
+              "type": "string",
+              "enum": ["low", "medium", "high"],
+              "description": "Expected disruption level if remediation is applied"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Severity Mapping Table
+
+All normalizers must map scanner-specific severity to the common format:
+
+| Scanner | Scanner Value | Common `severity` | STIG Category |
+|---------|-------------|-------------------|---------------|
+| OpenSCAP | `high` | `high` | CAT I |
+| OpenSCAP | `medium` | `medium` | CAT II |
+| OpenSCAP | `low` | `low` | CAT III |
+| PowerSTIG | (from STIG metadata) | Inherit from STIG | CAT I/II/III |
+| Qualys | `CRITICALITY=1` (Urgent) | `high` | CAT I |
+| Qualys | `CRITICALITY=2` (Critical) | `high` | CAT I |
+| Qualys | `CRITICALITY=3` (Serious) | `medium` | CAT II |
+| Qualys | `CRITICALITY=4` (Medium) | `medium` | CAT II |
+| Qualys | `CRITICALITY=5` (Minimal) | `low` | CAT III |
+| Tenable | `critical` / `high` | `high` | CAT I |
+| Tenable | `medium` | `medium` | CAT II |
+| Tenable | `low` / `info` | `low` | CAT III |
+| Rapid7 | 8-10 | `high` | CAT I |
+| Rapid7 | 4-7 | `medium` | CAT II |
+| Rapid7 | 1-3 | `low` | CAT III |
+| CIS-CAT | Level 1 | `medium` | CAT II |
+| CIS-CAT | Level 2 | `low` | CAT III |
+| Insights | `high` | `high` | CAT I |
+| Insights | `medium` | `medium` | CAT II |
+| Insights | `low` | `low` | CAT III |
+| compliance_evaluate | `high` / `medium` / `low` | passthrough | CAT I/II/III |
+
+### Status Mapping Table
+
+| Scanner | Scanner Value | Common `status` |
+|---------|-------------|----------------|
+| OpenSCAP | `pass` | `pass` |
+| OpenSCAP | `fail` | `fail` |
+| OpenSCAP | `error` | `error` |
+| OpenSCAP | `notapplicable` | `not_applicable` |
+| OpenSCAP | `notchecked` | `not_checked` |
+| OpenSCAP | `fixed` | `pass` |
+| OpenSCAP | `informational` | `not_applicable` |
+| PowerSTIG | `InDesiredState=true` | `pass` |
+| PowerSTIG | `InDesiredState=false` | `fail` |
+| Qualys | `PASS` / `FAIL` / `ERROR` | `pass` / `fail` / `error` |
+| Tenable | `PASSED` | `pass` |
+| Tenable | `FAILED` / `WARNING` | `fail` |
+| Tenable | `ERROR` | `error` |
+| Rapid7 | `Pass` / `Fail` / `Error` | `pass` / `fail` / `error` |
+| Rapid7 | `Unknown` | `not_checked` |
+| CIS-CAT | `Pass` / `Fail` / `Error` | `pass` / `fail` / `error` |
+| CIS-CAT | `Unknown` | `not_checked` |
+| CIS-CAT | `Not Applicable` | `not_applicable` |
+| Insights | `pass` / `fail` | `pass` / `fail` |
+| compliance_evaluate | `pass` / `fail` / `error` | passthrough |
+
+### Example: Complete Finding Object
+
+```json
+{
+  "rule_id": "sshd_set_idle_timeout",
+  "stig_id": "V-257844",
+  "cis_id": "",
+  "cce_id": "CCE-90270-6",
+  "cci_id": "CCI-001133",
+  "title": "Set SSH Client Alive Interval",
+  "description": "RHEL 9 must be configured so that all network connections associated with SSH traffic are terminated at the end of the session or after 10 minutes of inactivity.",
+  "check_text": "Verify the SSH daemon is configured to terminate idle sessions after 600 seconds.",
+  "fix_text": "Configure the SSH daemon to terminate idle sessions. Set 'ClientAliveInterval 600' in /etc/ssh/sshd_config and restart sshd.",
+  "status": "fail",
+  "severity": "high",
+  "category": "Access Control",
+  "evidence": {
+    "actual_value": "0",
+    "expected_value": "600",
+    "message": "ClientAliveInterval is set to 0. Expected 600.",
+    "scanner_rule_id": "xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout",
+    "raw_output": ""
+  },
+  "parameters": [
+    {
+      "name": "var_sshd_set_keepalive",
+      "label": "Client Alive Interval (seconds)",
+      "description": "Number of seconds before SSH session idle timeout",
+      "type": "number",
+      "default": 600,
+      "value": 600,
+      "options": []
+    }
+  ],
+  "remediation": {
+    "role": "remediate_sshd_idle_timeout",
+    "available": true,
+    "disruption": "low"
+  }
+}
+```
+
+---
+
+## 4. Normalizer Requirements
+
+Every compliance profile MUST include a normalizer module. The normalizer is the only scanner-specific code in the pipeline. Everything upstream (the scanner) and downstream (the Backstage plugin, remediation roles) is decoupled from the scanner.
+
+### What the Normalizer Must Do
+
+1. **Accept scanner-specific output** -- XCCDF XML, PowerSTIG JSON, Qualys XML, Tenable JSON, CIS-CAT JSON, etc.
+2. **Produce Common Findings Format JSON** conforming to the CFF v1.0.0 schema above
+3. **Map scanner severity** to normalized severity (`high` / `medium` / `low`)
+4. **Map scanner status** to normalized status (`pass` / `fail` / `error` / `not_applicable` / `not_checked`)
+5. **Preserve the original scanner rule ID** in `evidence.scanner_rule_id`
+6. **Populate `actual_value` and `expected_value`** in the evidence object
+7. **Support `check_mode`** (parse without writing output, for dry-run validation)
+
+### Implementation Pattern
+
+The normalizer is a custom Ansible module in `plugins/modules/`. It receives scanner output file paths as input and writes CFF JSON as output.
+
+```python
+#!/usr/bin/python
+# plugins/modules/normalize_<scanner>.py
+
+DOCUMENTATION = r'''
+---
+module: normalize_<scanner>
+short_description: Normalize <Scanner> results to Common Findings Format
+description:
+  - Parses <Scanner> output files.
+  - Transforms each result into CFF v1.0.0 JSON.
+options:
+  results_files:
+    description: List of result file paths to process
+    type: list
+    elements: str
+    required: true
+  output_file:
+    description: Path to write the normalized JSON output
+    type: str
+    required: true
+'''
+
+from ansible.module_utils.basic import AnsibleModule
+
+# Scanner-specific severity and status maps
+SEVERITY_MAP = {
+    # scanner_value: cff_value
+}
+
+STATUS_MAP = {
+    # scanner_value: cff_value
+}
+
+def parse_results(filepath):
+    """Parse a single scanner result file. Returns (hostname, findings_list)."""
+    # Scanner-specific parsing logic here
+    pass
+
+def main():
+    module = AnsibleModule(
+        argument_spec=dict(
+            results_files=dict(type='list', elements='str', required=True),
+            output_file=dict(type='str', required=True),
+        ),
+        supports_check_mode=True,
+    )
+    # Parse, normalize, write output
+    # ...
+
+if __name__ == '__main__':
+    main()
+```
+
+### Reference Implementation
+
+See the existing OpenSCAP normalizer at:
+`collections/ansible_collections/security/compliance_rhel9_stig/plugins/modules/normalize_xccdf.py`
+
+This module parses XCCDF 1.1 and 1.2 Results XML, extracts rule metadata from the Benchmark element, maps severity and status, and writes the CFF JSON output.
+
+### Tier 2 Adapter Considerations
+
+For Tier 2 compliance profiles, the normalizer may also need to:
+
+- **Map scanner-specific control IDs to STIG/CIS rule IDs** using a mapping file under `files/mappings/`. Qualys control IDs, for example, do not match STIG vulnerability IDs and require a lookup table.
+- **Handle API pagination** when fetching results in bulk from the scanner API.
+- **Convert between character encodings** (Qualys XML may use different encodings than XCCDF).
+
+---
+
+## 5. EE Profile Requirements
+
+Every compliance profile must include an Execution Environment definition at `ee/execution-environment.yml`. This file is consumed by `ansible-builder` to construct a container image with all required dependencies.
+
+### Base Image
+
+All compliance profile EEs must use the AAP 2.6 minimal base image:
+
+```yaml
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform-26/ee-minimal-rhel9:latest
+```
+
+### Required Dependencies
+
+The EE definition must declare three categories of dependencies:
+
+```yaml
+version: 3
+
+build_arg_defaults:
+  ANSIBLE_GALAXY_CLI_COLLECTION_OPTS: '--pre'
+
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform-26/ee-minimal-rhel9:latest
+
+dependencies:
+  # 1. Galaxy dependencies: the compliance profile collection itself + platform collections
+  galaxy:
+    collections:
+      - name: security.compliance_<platform>_<framework>  # This collection
+      - name: ansible.posix                               # Common POSIX utilities
+      # Platform-specific:
+      # - name: ansible.windows          # For Windows compliance profiles
+      # - name: cisco.ios               # For Cisco IOS network compliance profiles
+      # - name: redhat.rhel_system_roles # For RHEL compliance profiles
+
+  # 2. Python dependencies: scanner-specific libraries
+  python:
+    # - pywinrm             # Required for Windows compliance profiles
+    # - lxml                # Required for XCCDF XML parsing
+    # - requests            # Required for Tier 2 scanner API adapters
+
+  # 3. System dependencies: scanner binaries (Tier 1 only)
+  system:
+    # - openscap-scanner    # Tier 1 RHEL: ~5 MB installed
+    # - openscap-utils      # Tier 1 RHEL: ~200 KB installed
+    # - scap-security-guide # Tier 1 RHEL: ~80 MB installed (all platforms)
+```
+
+### Tier-Specific EE Patterns
+
+**Tier 1 (RHEL/OpenSCAP):**
+```yaml
+dependencies:
+  galaxy:
+    collections:
+      - name: ansible.posix
+      - name: redhat.rhel_system_roles
+  python: []
+  system:
+    - openscap-scanner
+    - openscap-utils
+    - scap-security-guide
+```
+
+**Tier 1 (Windows/PowerSTIG):**
+```yaml
+dependencies:
+  galaxy:
+    collections:
+      - name: ansible.windows
+      - name: community.windows
+  python:
+    - pywinrm
+  system: []
+```
+
+**Tier 2 (Qualys/Tenable/Insights):**
+```yaml
+dependencies:
+  galaxy:
+    collections:
+      - name: ansible.posix
+  python:
+    - lxml       # For Qualys XML parsing
+    - requests   # For scanner API calls
+  system: []
+```
+
+### Build and Verify
+
+Build the EE and verify critical dependencies are present:
+
+```yaml
+additional_build_steps:
+  append_final:
+    - RUN echo "=== Compliance EE Build Info ==="
+    # Tier 1 verification:
+    - RUN rpm -q openscap-scanner || echo "openscap-scanner: NOT INSTALLED"
+    - RUN rpm -q scap-security-guide || echo "scap-security-guide: NOT INSTALLED"
+    # Verify SCAP content is present:
+    - RUN ls /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml && echo "SCAP data stream: present" || echo "SCAP data stream: MISSING"
+    # Verify CaC remediation playbook is present:
+    - RUN ls /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml && echo "CaC remediation playbook: present" || echo "CaC remediation playbook: MISSING"
+```
+
+Build command:
+
+```bash
+cd ee/
+ansible-builder build -f execution-environment.yml -t compliance-<platform>-<framework>:latest -v3
+```
+
+---
+
+## 6. Pipeline Workflow
+
+The compliance profile must define a Controller workflow with these stages. Each stage maps to a job template. The workflow uses `infra.aap_configuration` YAML format for declarative setup.
+
+### Pipeline Stages
+
+```
+  +----------+     +---------+     +------------+     +----------+
+  |  Gather  |---->|  Scan   |---->| Normalize  |---->| Evaluate |
+  +----------+     +---------+     +------------+     +----------+
+                                                           |
+                                   (optional, Track A)     |
+                                                           v
+  +----------+     +----------+     +---------+
+  |  Verify  |<----|Remediate |<----|  Report  |
+  +----------+     +----------+     +---------+
+                   (approval gate)
+```
+
+| Stage | Purpose | Runs On | Playbook |
+|-------|---------|---------|----------|
+| **1. Gather** | Collect compliance facts from targets | Target hosts | `playbooks/gather.yml` |
+| **2. Scan** | Execute scanner or evaluate rules | Targets (Tier 1) or localhost (Tier 2) | `playbooks/scan.yml` or `playbooks/fetch_<scanner>.yml` |
+| **3. Normalize** | Transform scanner output to CFF JSON | localhost | `playbooks/normalize.yml` |
+| **4. Evaluate** | Apply policy rules to findings (optional, for Track A) | localhost | `playbooks/evaluate.yml` |
+| **5. Report** | Push results to Backstage backend or write to Controller artifacts | localhost | `playbooks/report.yml` |
+| **6. Remediate** | Execute approved remediations (behind approval gate) | Target hosts | `playbooks/remediate.yml` |
+| **7. Verify** | Re-scan to confirm remediation effectiveness | Target hosts | `playbooks/verify.yml` |
+
+### Workflow Definition
+
+The workflow goes in `extensions/patterns/aap_config/workflow.yml` using `infra.aap_configuration` format:
+
+```yaml
+---
+controller_workflows:
+  - name: compliance-pipeline-<platform>-<framework>
+    description: "<Platform> <Framework> Compliance Pipeline"
+    organization: compliance
+    survey_enabled: true
+    workflow_nodes:
+      - identifier: gather
+        unified_job_template:
+          name: compliance-gather-<platform>-<framework>
+          type: job_template
+        success_nodes:
+          - scan
+        failure_nodes: []
+
+      - identifier: scan
+        unified_job_template:
+          name: compliance-scan-<platform>-<framework>
+          type: job_template
+        success_nodes:
+          - normalize
+        failure_nodes: []
+
+      - identifier: normalize
+        unified_job_template:
+          name: compliance-normalize-<platform>-<framework>
+          type: job_template
+        success_nodes:
+          - report
+        failure_nodes: []
+
+      - identifier: report
+        unified_job_template:
+          name: compliance-report
+          type: job_template
+        success_nodes: []
+        failure_nodes: []
+```
+
+### Job Template Definitions
+
+Job templates go in `extensions/patterns/aap_config/job_templates.yml`:
+
+```yaml
+---
+controller_templates:
+  - name: compliance-scan-<platform>-<framework>
+    organization: compliance
+    description: "Scan <Platform> hosts against <Framework>"
+    job_type: check
+    inventory: compliance-<platform>-inventory
+    project: compliance-content
+    playbook: playbooks/scan.yml
+    ask_inventory_on_launch: true
+    ask_limit_on_launch: true
+    survey_enabled: true
+
+  - name: compliance-remediate-<platform>-<framework>
+    organization: compliance
+    description: "Remediate selected <Framework> findings on <Platform>"
+    job_type: run
+    inventory: compliance-<platform>-inventory
+    project: compliance-content
+    playbook: playbooks/remediate.yml
+    ask_inventory_on_launch: true
+    ask_limit_on_launch: true
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  - name: compliance-verify-<platform>-<framework>
+    organization: compliance
+    description: "Verification re-scan after remediation"
+    job_type: check
+    inventory: compliance-<platform>-inventory
+    project: compliance-content
+    playbook: playbooks/scan.yml
+    ask_inventory_on_launch: true
+```
+
+### Remediation Playbook Pattern
+
+The remediation playbook must support selective execution via `--tags`, `--extra-vars`, and `--limit`. This is how the portal translates user decisions from the Remediation Builder into Controller job parameters.
+
+For Tier 1 RHEL STIG, the remediation playbook imports the ComplianceAsCode (CaC) playbook from `scap-security-guide`:
+
+```yaml
+---
+# playbooks/remediate.yml
+#
+# Selective remediation via Controller:
+#   --tags:       comma-separated rule IDs from the Remediation Builder
+#   --extra-vars: parameter overrides (e.g., var_accounts_tmout: 900)
+#   --limit:      target hosts from the remediation scope selection
+#
+- name: "Compliance: Apply remediation"
+  ansible.builtin.import_playbook: /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml
+```
+
+For compliance profiles that cannot use CaC playbooks (Windows, network devices, custom frameworks), provide per-rule roles:
+
+```yaml
+---
+# playbooks/remediate.yml (custom remediation)
+- name: "Compliance: Apply selective remediation"
+  hosts: "{{ target_hosts | default('all') }}"
+  become: true
+  roles:
+    - role: remediate_sshd_idle_timeout
+      tags: [sshd_set_idle_timeout]
+    - role: remediate_accounts_tmout
+      tags: [accounts_tmout]
+    # ... one role per remediatable rule
+```
+
+---
+
+## 7. Portal/Backstage Metadata
+
+The compliance profile must include discovery metadata so the Backstage plugin can identify and present it.
+
+### Pattern Metadata
+
+The `extensions/patterns/metadata.yml` file provides high-level discovery information:
+
+```yaml
+name: compliance-<platform>-<framework>
+display_name: <Human Name> Compliance Pipeline
+version: <collection version, e.g., 0.1.0>
+description: >
+  End-to-end compliance pipeline for <Platform> systems against <Framework>.
+  Includes scan, report, remediation profile customization, and verification workflows.
+domain: security
+tags:
+  - compliance
+  - <framework>      # e.g., stig, cis, pci-dss
+  - <platform>       # e.g., rhel9, windows2022, cisco-ios
+  - security
+applicable_os:
+  - <OS list>         # e.g., RHEL 9, Windows Server 2022, Cisco IOS 15.x
+frameworks:
+  - <framework with version>  # e.g., DISA STIG V2R8, CIS Benchmark Level 1
+source: <collection namespace.name>  # e.g., security.compliance_rhel9_stig
+```
+
+### Portal Metadata
+
+The `extensions/patterns/portal/metadata.yml` file is consumed by the Backstage plugin for UI rendering:
+
+```yaml
+name: compliance-<platform>-<framework>
+display_name: <Human Name> Compliance Pipeline
+version: <collection version>
+domain: security
+tags:
+  - compliance
+  - <framework>
+  - <platform>
+  - security
+applicable_os:
+  - <OS list>
+frameworks:
+  - <framework with version>
+source: <collection namespace.name>
+```
+
+### Backstage Software Template (Optional)
+
+For one-click provisioning, include `extensions/patterns/portal/backstage_template.yml`:
+
+```yaml
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: compliance-<platform>-<framework>
+  title: <Human Name> Compliance Pipeline
+  description: Set up a compliance pipeline for <Platform> against <Framework>
+spec:
+  type: compliance-pipeline
+  parameters:
+    - title: Pipeline Configuration
+      properties:
+        inventory:
+          type: string
+          title: Target Inventory
+          description: AAP inventory containing the hosts to scan
+        scanner:
+          type: string
+          title: Compliance Scanner
+          enum:
+            - openscap
+            # Add Tier 2 options if applicable
+          default: openscap
+  steps:
+    - id: provision-pipeline
+      name: Provision Compliance Pipeline
+      action: aap:run-job-template
+      input:
+        jobTemplate: compliance-setup
+        extraVars:
+          scanner: ${{ parameters.scanner }}
+          inventory: ${{ parameters.inventory }}
+```
+
+---
+
+## 8. Compliance Profile Registration
+
+When a compliance profile collection is installed, an administrator registers it in the Backstage compliance plugin Settings page. This creates the mapping between the portal and the AAP resources.
+
+### Registration Fields
+
+| Field | Source | Description |
+|-------|--------|-------------|
+| **Display name** | Manual entry | Human-readable name (e.g., "RHEL 9 DISA STIG") |
+| **Compliance standard identifier** | Manual entry | Machine identifier (e.g., `rhel9-stig-v2r8`) |
+| **Execution Environment** | AAP Gateway API dropdown | The EE built from the compliance profile's `ee/execution-environment.yml` |
+| **Workflow job template** | AAP Gateway API dropdown | The workflow provisioned from `extensions/patterns/aap_config/workflow.yml` |
+| **Remediation playbook path** | From collection | Path to the remediation playbook inside the EE |
+| **Scanner tier** | Manual selection | 1 (built-in), 2 (BYOS), or 3 (hybrid) |
+| **Scan tags** | Optional | Tags for organizing compliance profiles in the UI |
+
+### Registration Flow
+
+1. Admin installs the collection to Automation Hub (or a local repo)
+2. Admin builds the EE from `ee/execution-environment.yml` using `ansible-builder` or the EE Builder Service
+3. Admin runs the setup playbook (`extensions/patterns/aap_config/`) to provision Controller resources (workflow, job templates, surveys)
+4. Admin navigates to Compliance > Settings in the portal
+5. Admin clicks "Add Compliance Profile" and maps the display name, EE, and workflow template
+6. The compliance profile appears in the profile browser and is available for scan launches
+
+### Validation
+
+The portal validates that the referenced EE and workflow template are accessible via the AAP Gateway API before accepting a registration. If either resource becomes unavailable later, the compliance profile status indicator shows the issue (e.g., "EE unavailable").
+
+---
+
+## 9. Scanner Swap Compatibility
+
+A well-built compliance profile must ensure that scanners are swappable without affecting the user experience. The CFF is the contract that makes this possible.
+
+### Compatibility Requirements
+
+1. **The Backstage plugin renders identically regardless of scanner.** The UI consumes CFF JSON -- it never inspects the scanner name for rendering decisions.
+
+2. **Remediation roles work regardless of which scanner discovered the finding.** The same `remediate_sshd_idle_timeout` role fixes the finding whether OpenSCAP or Qualys found it.
+
+3. **Multiple scanners can coexist for the same framework/platform.** A customer can run OpenSCAP daily for fast pre-assessment and Tenable monthly for audit-grade evidence. Both produce CFF JSON consumed by the same dashboard.
+
+4. **Switching scanners requires approximately 1 hour, no code changes.** The steps are:
+   - Install the new compliance profile collection
+   - Build the new EE (if scanner binaries differ)
+   - Add scanner credentials in Controller
+   - Run the setup playbook to provision the new workflow
+   - Update the compliance profile registration in the portal Settings page
+
+### What Changes vs. What Stays the Same
+
+| Component | Changes on Scanner Swap? |
+|-----------|--------------------------|
+| Backstage plugin | NO |
+| Common Findings JSON schema | NO (same schema) |
+| Remediation roles | NO |
+| Dashboard views and filters | NO |
+| Workflow (top-level) | YES -- different workflow per scanner |
+| Scan job template | YES -- different scan/fetch job |
+| Normalize job template | YES -- different normalizer |
+| Execution Environment | YES -- different dependencies |
+| Credentials | YES -- different credential type |
+| Remediate job template | NO |
+
+### Coexistence Patterns
+
+Multiple scanners for the same profile are useful for:
+
+- **Pre-assessment + Audit:** Run `compliance_evaluate` daily (fast, agentless) and OpenSCAP monthly (audit-grade XCCDF output for auditors).
+- **Scanner comparison:** Run two scanners against the same hosts to identify scanner-specific gaps.
+- **Migration:** Run both scanners in parallel during a transition until the new scanner is validated.
+
+Each scanner produces findings with its own `scan_metadata.scanner.name`. The portal can filter, compare, or merge results by scanner.
+
+---
+
+## 10. Checklist
+
+Use this checklist when building a new compliance profile. Every item must be satisfied before the compliance profile is considered shippable.
+
+### Collection Basics
+
+- [ ] Collection named `security.compliance_<platform>_<framework>` (or `security.compliance_<platform>_<scanner>` for Tier 2)
+- [ ] `galaxy.yml` with proper namespace (`security`), name, version, description, authors, tags, and dependencies
+- [ ] `meta/runtime.yml` with `requires_ansible: ">=2.18.0"`
+- [ ] `LICENSE` file present
+- [ ] `README.md` with overview, requirements, and usage instructions
+
+### Normalizer and CFF Compliance
+
+- [ ] Normalizer module at `plugins/modules/normalize_<scanner>.py`
+- [ ] Normalizer produces CFF v1.0.0 JSON (schema version field is `"1.0.0"`)
+- [ ] All findings include the four minimum required fields: `rule_id`, `title`, `status`, `severity`
+- [ ] Severity mapped to `high` / `medium` / `low` (never raw scanner values)
+- [ ] Status mapped to `pass` / `fail` / `error` / `not_applicable` / `not_checked`
+- [ ] Evidence includes `actual_value` and `expected_value` for every finding
+- [ ] Original scanner rule ID preserved in `evidence.scanner_rule_id`
+- [ ] `supports_check_mode=True` in the module's `AnsibleModule()` call
+- [ ] Unit tests for the normalizer covering pass, fail, error, not_applicable, and edge cases
+
+### Execution Environment
+
+- [ ] `ee/execution-environment.yml` defined with `version: 3`
+- [ ] Base image is `registry.redhat.io/ansible-automation-platform-26/ee-minimal-rhel9:latest`
+- [ ] Galaxy dependencies include the compliance profile collection itself
+- [ ] Python dependencies for scanner-specific libraries (if any)
+- [ ] System dependencies for scanner binaries (Tier 1 only)
+- [ ] EE builds successfully with `ansible-builder build`
+
+### Pipeline Playbooks
+
+- [ ] Pipeline playbooks for each workflow stage present under `playbooks/`
+- [ ] Gather playbook collects facts in a single round-trip per host
+- [ ] Scan playbook (Tier 1) or fetch playbook (Tier 2) retrieves scanner results
+- [ ] Normalize playbook transforms scanner output to CFF JSON
+- [ ] Remediate playbook supports `--tags`, `--extra-vars`, and `--limit` for selective execution
+- [ ] Check mode (audit-only) supported for drift detection without changes
+- [ ] Verify playbook re-runs the scan to confirm remediation effectiveness
+
+### Workflow and Controller Integration
+
+- [ ] `extensions/patterns/aap_config/workflow.yml` with `infra.aap_configuration` YAML
+- [ ] `extensions/patterns/aap_config/job_templates.yml` with template definitions
+- [ ] Job templates have `ask_inventory_on_launch: true` and `ask_limit_on_launch: true`
+- [ ] Remediation job template has `ask_variables_on_launch: true`
+- [ ] Scan results pushed to Backstage backend API or written to Controller artifacts
+
+### Portal / Backstage Integration
+
+- [ ] `extensions/patterns/metadata.yml` with discovery metadata (name, display_name, version, domain, tags, applicable_os, frameworks, source)
+- [ ] `extensions/patterns/portal/metadata.yml` with portal-specific metadata
+- [ ] `extensions/patterns/portal/backstage_template.yml` with Software Template (optional but recommended)
+
+### Remediation
+
+- [ ] Remediation uses `--tags` for rule selection, `--extra-vars` for parameter overrides, `--limit` for host targeting
+- [ ] Remediation roles are scanner-agnostic (same role regardless of which scanner found the issue)
+- [ ] Tunable parameters defined in rules YAML with `name`, `label`, `type`, `default` fields
+- [ ] Disruption level documented for each remediatable rule (`low` / `medium` / `high`)
+
+### Testing
+
+- [ ] Unit tests for all custom modules (`plugins/modules/`)
+- [ ] Integration test targets under `tests/integration/`
+- [ ] Sanity test ignore file at `tests/sanity/ignore-2.15.txt` (or current Ansible version)
+- [ ] Normalizer tested against real scanner output fixtures
+
+---
+
+## Appendix: Reference Implementation
+
+The `security.compliance_rhel9_stig` collection in this repository is the reference Tier 1 compliance profile. Key files to study:
+
+| File | Purpose |
+|------|---------|
+| `collections/ansible_collections/security/compliance_rhel9_stig/galaxy.yml` | Collection metadata |
+| `collections/ansible_collections/security/compliance_rhel9_stig/meta/runtime.yml` | Ansible version requirements |
+| `collections/ansible_collections/security/compliance_rhel9_stig/meta/ee_profile.yml` | EE Builder definition |
+| `collections/ansible_collections/security/compliance_rhel9_stig/plugins/modules/compliance_gather.py` | Agentless fact collection |
+| `collections/ansible_collections/security/compliance_rhel9_stig/plugins/modules/compliance_evaluate.py` | Centralized rule evaluation |
+| `collections/ansible_collections/security/compliance_rhel9_stig/plugins/modules/normalize_xccdf.py` | XCCDF normalizer to CFF |
+| `collections/ansible_collections/security/compliance_rhel9_stig/rules/stig_rhel9_v2r8.yml` | Rule definitions (20 rules) |
+| `collections/ansible_collections/security/compliance_rhel9_stig/playbooks/gather_facts.yml` | Gather stage playbook |
+| `collections/ansible_collections/security/compliance_rhel9_stig/playbooks/evaluate.yml` | Evaluate stage playbook |
+| `collections/ansible_collections/security/compliance_rhel9_stig/playbooks/remediate.yml` | Remediation (imports CaC) |
+| `content/extensions/patterns/compliance-rhel9-stig/metadata.yml` | Pattern discovery metadata |
+| `content/extensions/patterns/compliance-rhel9-stig/ee/execution-environment.yml` | EE definition |
+| `content/extensions/patterns/compliance-rhel9-stig/aap_config/controller_job_templates.yml` | Job template definitions |

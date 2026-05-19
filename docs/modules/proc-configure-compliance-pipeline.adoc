@@ -1,0 +1,321 @@
+:_mod-docs-content-type: PROCEDURE
+
+[id="proc-configure-compliance-pipeline_{context}"]
+
+= Configuring a compliance pipeline
+
+[role="_abstract"]
+
+Configure a compliance pipeline on your {PlatformNameShort} instance to enable automated compliance scanning, remediation, and verification of managed hosts. This procedure creates the required {ControllerName} resources and connects the Backstage compliance plugin to your {PlatformNameShort} deployment.
+
+.Prerequisites
+
+* {PlatformNameShort} {PlatformVers} or later is deployed and accessible.
+* You have administrator access to {ControllerName}.
+* Target hosts are running RHEL 9 and are registered in an inventory.
+* You have access to the compliance pipelines repository at `https://github.com/cross-logic/aap-compliance-pipelines.git`.
+* `ansible-builder` is installed if you need to build a custom {ExecEnvShort}.
+* `podman` or `docker` is available for building container images.
+* `Node.js` 18 or later and `yarn` are installed for the Backstage application.
+
+.Procedure
+
+. Create a dedicated organization in {ControllerName} for compliance resources.
++
+Log in to {ControllerName} and navigate to *Organizations* > *Add*.
++
+Set the following values:
++
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-prototype`
+
+|Description
+|Compliance pipeline prototype -- isolated from production resources
+|===
++
+Click *Save*.
+
+. Create a project that points to the compliance content repository.
++
+Navigate to *Projects* > *Add* and set the following values:
++
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-content`
+
+|Organization
+|`compliance-prototype`
+
+|Source Control Type
+|Git
+
+|Source Control URL
+|`https://github.com/cross-logic/aap-compliance-pipelines.git`
+
+|Source Control Branch
+|`main`
+
+|Update Revision on Launch
+|Enabled
+|===
++
+Click *Save*, then click *Sync* to pull the project content.
+
+. Register or build the compliance {ExecEnvShort}.
++
+The compliance {ExecEnvShort} packages OpenSCAP, SCAP Security Guide, and required Ansible collections into a container image.
++
+To build the {ExecEnvShort} from source, run the build script:
++
+[source,bash]
+----
+cd aap-compliance-pipelines
+./scripts/build-ee.sh compliance-stig-rhel9:latest
+----
++
+To push the image to a container registry accessible by your execution nodes:
++
+[source,bash]
+----
+podman push compliance-stig-rhel9:latest <your-registry>/compliance-stig-rhel9:latest
+----
++
+Register the {ExecEnvShort} in {ControllerName} by navigating to *Execution Environments* > *Add* and setting the following values:
++
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`Compliance STIG RHEL 9`
+
+|Image
+|`<your-registry>/compliance-stig-rhel9:latest`
+
+|Organization
+|`compliance-prototype`
+|===
+
+. Create an inventory for the target hosts.
++
+Navigate to *Inventories* > *Add* > *Add Inventory* and set the following values:
++
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-rhel9-inventory`
+
+|Organization
+|`compliance-prototype`
+|===
++
+After saving, navigate to the *Hosts* tab and add each RHEL 9 host that you want to scan.
+
+. Create the compliance job templates.
++
+Create the following three job templates by navigating to *Templates* > *Add* > *Add Job Template* for each:
++
+*Scan template:*
++
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-scan-rhel9-stig`
+
+|Job Type
+|Check
+
+|Inventory
+|`compliance-rhel9-inventory`
+
+|Project
+|`compliance-content`
+
+|Playbook
+|`playbooks/scan-rhel9-stig.yml`
+
+|Execution Environment
+|`Compliance STIG RHEL 9`
+
+|Prompt on Launch: Inventory
+|Enabled
+
+|Prompt on Launch: Limit
+|Enabled
+|===
++
+*Remediation template:*
++
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-remediate-rhel9-stig`
+
+|Job Type
+|Run
+
+|Inventory
+|`compliance-rhel9-inventory`
+
+|Project
+|`compliance-content`
+
+|Playbook
+|`playbooks/remediate-rhel9-stig.yml`
+
+|Execution Environment
+|`Compliance STIG RHEL 9`
+
+|Prompt on Launch: Inventory
+|Enabled
+
+|Prompt on Launch: Limit
+|Enabled
+
+|Prompt on Launch: Variables
+|Enabled
+|===
++
+*Verification template:*
++
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-verify-rhel9-stig`
+
+|Job Type
+|Check
+
+|Inventory
+|`compliance-rhel9-inventory`
+
+|Project
+|`compliance-content`
+
+|Playbook
+|`playbooks/scan-rhel9-stig.yml`
+
+|Execution Environment
+|`Compliance STIG RHEL 9`
+
+|Prompt on Launch: Inventory
+|Enabled
+|===
+
+. Create a workflow job template to chain the scan-remediate-verify cycle.
++
+Navigate to *Templates* > *Add* > *Add Workflow Job Template* and set the following values:
++
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-rhel9-stig-workflow`
+
+|Organization
+|`compliance-prototype`
+
+|Prompt on Launch: Inventory
+|Enabled
+
+|Prompt on Launch: Limit
+|Enabled
+
+|Prompt on Launch: Variables
+|Enabled
+|===
++
+Open the *Visualizer* and add the following nodes in sequence:
++
+.. *Node 1*: `compliance-scan-rhel9-stig` (always runs)
+.. *Node 2*: `compliance-remediate-rhel9-stig` (runs on success of Node 1)
+.. *Node 3*: `compliance-verify-rhel9-stig` (runs on success of Node 2)
+
+. Enable launch-time prompts on the workflow template.
++
+Ensure the following prompts are enabled on the workflow job template so that the Backstage plugin can pass parameters at launch time:
++
+* *Prompt on Launch: Variables* -- allows the plugin to pass rule selections and remediation parameters.
+* *Prompt on Launch: Limit* -- allows the plugin to scope scans to specific hosts.
+* *Prompt on Launch: Inventory* -- allows the plugin to target different inventories.
+
+. Create an API token for the Backstage plugin.
++
+Navigate to your user profile in {ControllerName} and select *Tokens* > *Add*.
++
+Set the *Scope* to *Write* and note the generated token value. The Backstage plugin uses this token to launch workflows and retrieve results.
++
+[IMPORTANT]
+====
+Store the API token securely. It provides write access to {ControllerName} resources within the scope of your user permissions.
+====
+
+. Configure the Backstage compliance plugin.
++
+Copy the example environment file and set your connection values:
++
+[source,bash]
+----
+cd aap-compliance-pipelines/backstage-app
+cp .env.example .env
+----
++
+Edit the `.env` file with your {PlatformNameShort} connection details:
++
+[source,bash]
+----
+# Required — AAP Connection
+AAP_HOST=https://<your-aap-gateway-hostname>
+AAP_API_TOKEN=<your-api-token>
+
+# Optional — auto-generated if empty
+BACKEND_SECRET=
+AUTH_SIGNING_KEY=
+----
+
+. Start the Backstage application in live mode:
++
+[source,bash]
+----
+./bin/start.sh live .env
+----
++
+The start script launches both the backend (port 7007) and frontend (port 3000) and connects to your {PlatformNameShort} instance using the credentials in the `.env` file.
+
+.Verification
+
+* Open `http://localhost:3000` in a web browser and navigate to the *Compliance* section.
+* Go to the *Settings* tab and register the RHEL 9 STIG compliance profile by selecting the workflow template and {ExecEnvShort} you created.
+* Go to the *New Scan* tab and launch a test scan against a single host.
+* Verify that the scan appears in the *Results* tab and that findings are displayed after the workflow completes.
+
+[role="_additional-resources"]
+.Additional resources
+
+* xref:con-about-compliance-pipelines_{context}[About compliance pipelines]
+* xref:ref-compliance-pipeline-resources_{context}[Compliance pipeline {ControllerName} resources]
+* xref:ref-compliance-pipeline-configuration_{context}[Compliance pipeline configuration reference]

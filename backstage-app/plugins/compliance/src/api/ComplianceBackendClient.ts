@@ -183,6 +183,17 @@ export class ComplianceBackendClient implements ComplianceApi {
     return this.request<RemediationProfile[]>('/remediation-profiles');
   }
 
+  async getRemediationProfile(id: string) {
+    try {
+      return await this.request<RemediationProfile>(
+        `/remediation-profiles/${encodeURIComponent(id)}`,
+      );
+    } catch (err) {
+      console.error(`Failed to load remediation profile ${id}:`, err);
+      return null;
+    }
+  }
+
   saveRemediationProfile(body: SaveRemediationProfileRequest) {
     return this.request<RemediationProfile>('/remediation-profiles', {
       method: 'POST',

@@ -131,8 +131,8 @@ export const CartridgeSettings = () => {
     try {
       const data = await api.getCartridges();
       setCartridges(data);
-    } catch {
-      // keep empty on error
+    } catch (err) {
+      console.error('Failed to load cartridges:', err);
     } finally {
       setLoading(false);
     }
@@ -146,8 +146,8 @@ export const CartridgeSettings = () => {
       ]);
       setWorkflowTemplates(wfts);
       setExecutionEnvironments(ees);
-    } catch {
-      // fallback: empty dropdowns
+    } catch (err) {
+      console.error('Failed to load controller resources:', err);
     }
   }, [api]);
 

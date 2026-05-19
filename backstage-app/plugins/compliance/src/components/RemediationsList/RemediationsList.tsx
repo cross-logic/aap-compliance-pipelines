@@ -57,7 +57,9 @@ export const RemediationsList = () => {
   useEffect(() => {
     api.getRemediationProfiles()
       .then(data => setRemediations(data))
-      .catch(() => {})
+      .catch(err => {
+        console.error('Failed to load remediation profiles:', err);
+      })
       .finally(() => setLoading(false));
   }, [api]);
 
@@ -145,15 +147,15 @@ export const RemediationsList = () => {
                     <div className={classes.actions}>
                       <IconButton
                         size="small"
-                        title="View details"
-                        onClick={() => {/* future: open detail view */}}
+                        title="Edit remediation selections"
+                        onClick={() => navigate(`/compliance/remediation-edit/${r.id}`)}
                       >
                         <VisibilityIcon fontSize="small" />
                       </IconButton>
                       <IconButton
                         size="small"
                         title="Apply this remediation"
-                        onClick={() => {/* future: re-apply flow */}}
+                        onClick={() => navigate(`/compliance/execute/${r.id}`)}
                       >
                         <PlayArrowIcon fontSize="small" />
                       </IconButton>

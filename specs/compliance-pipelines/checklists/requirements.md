@@ -35,7 +35,7 @@
 
 All quality criteria met:
 
-- 8 prioritized user stories (P1: cartridge registration, scan launch, findings review, profile builder; P2: remediation execution, profile reuse, export; P3: event-driven scanning)
+- 8 prioritized user stories (P1: compliance profile registration, scan launch, findings review, profile builder; P2: remediation execution, profile reuse, export; P3: event-driven scanning)
 - 32 functional requirements organized by category (compliance profile registration, scan execution, findings review, remediation builder, remediation execution, remediation management, export, event-driven integration, security/access control)
 - 8 edge cases identified with clear expected behaviors (deleted EE, empty inventory, partial host failures, concurrent scans, profile/standard mismatch, no-op remediation, large exports, event floods)
 - 10 measurable success criteria covering scan speed, host-level detail, profile builder capabilities, scalability, export formats, and security constraints

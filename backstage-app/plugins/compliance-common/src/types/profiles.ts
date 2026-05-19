@@ -16,6 +16,8 @@ export interface RemediationSelection {
   ruleId: string;
   enabled: boolean;
   parameters: Record<string, string | number | boolean>;
+  /** Scope of remediation: 'failed_only' (default) or 'standardize_all'. */
+  scope?: 'failed_only' | 'standardize_all';
 }
 
 export interface RemediationProfile {

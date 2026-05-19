@@ -12,6 +12,7 @@ async function createTables(database: Knex): Promise<void> {
     table.string('profile_id').notNullable();
     table.integer('inventory_id').notNullable();
     table.string('scanner').notNullable().defaultTo('oscap');
+    table.string('scan_type').notNullable().defaultTo('assessment');
     table.integer('workflow_job_id').nullable();
     table.string('status').notNullable().defaultTo('pending');
     table.timestamp('started_at').notNullable().defaultTo(database.fn.now());
@@ -124,6 +125,7 @@ describe('ComplianceDatabase', () => {
         profileId: 'rhel9-stig',
         inventoryId: 1,
         scanner: 'oscap',
+        scanType: 'assessment',
         workflowJobId: 42,
         status: 'pending',
         startedAt: '2026-04-30T10:00:00.000Z',
@@ -133,6 +135,7 @@ describe('ComplianceDatabase', () => {
       expect(scan.id).toBeDefined();
       expect(scan.profileId).toBe('rhel9-stig');
       expect(scan.workflowJobId).toBe(42);
+      expect(scan.scanType).toBe('assessment');
 
       const recent = await complianceDb.getRecentScans(10);
       expect(recent).toHaveLength(1);
@@ -147,6 +150,7 @@ describe('ComplianceDatabase', () => {
         profileId: 'rhel9-stig',
         inventoryId: 1,
         scanner: 'oscap',
+        scanType: 'assessment',
         workflowJobId: 1,
         status: 'completed',
         startedAt: '2026-04-29T10:00:00.000Z',
@@ -156,6 +160,7 @@ describe('ComplianceDatabase', () => {
         profileId: 'cis-rhel9',
         inventoryId: 2,
         scanner: 'oscap',
+        scanType: 'assessment',
         workflowJobId: 2,
         status: 'pending',
         startedAt: '2026-04-30T10:00:00.000Z',
@@ -175,6 +180,7 @@ describe('ComplianceDatabase', () => {
           profileId: `profile-${i}`,
           inventoryId: 1,
           scanner: 'oscap',
+          scanType: 'assessment',
           workflowJobId: i,
           status: 'completed',
           startedAt: `2026-04-${String(25 + i).padStart(2, '0')}T10:00:00.000Z`,
@@ -195,6 +201,7 @@ describe('ComplianceDatabase', () => {
         profileId: 'rhel9-stig',
         inventoryId: 1,
         scanner: 'oscap',
+        scanType: 'assessment',
         workflowJobId: 42,
         status: 'running',
         startedAt: '2026-04-30T10:00:00.000Z',
@@ -221,6 +228,7 @@ describe('ComplianceDatabase', () => {
         profileId: 'rhel9-stig',
         inventoryId: 1,
         scanner: 'oscap',
+        scanType: 'assessment',
         workflowJobId: 42,
         status: 'pending',
         startedAt: '2026-04-30T10:00:00.000Z',
@@ -270,6 +278,7 @@ describe('ComplianceDatabase', () => {
           profileId: 'rhel9-stig',
           inventoryId: 1,
           scanner: 'oscap',
+          scanType: 'assessment',
           workflowJobId: 42,
           status: 'completed',
           startedAt: '2026-04-30T10:00:00.000Z',
@@ -310,6 +319,7 @@ describe('ComplianceDatabase', () => {
           profileId: 'rhel9-stig',
           inventoryId: 1,
           scanner: 'oscap',
+          scanType: 'assessment',
           workflowJobId: 42,
           status: 'completed',
           startedAt: '2026-04-30T10:00:00.000Z',
@@ -340,6 +350,7 @@ describe('ComplianceDatabase', () => {
         profileId: 'rhel9-stig',
         inventoryId: 1,
         scanner: 'oscap',
+        scanType: 'assessment',
         workflowJobId: 42,
         status: 'completed',
         startedAt: '2026-04-30T10:00:00.000Z',
@@ -371,6 +382,7 @@ describe('ComplianceDatabase', () => {
         profileId: 'rhel9-stig',
         inventoryId: 1,
         scanner: 'oscap',
+        scanType: 'assessment',
         workflowJobId: 42,
         status: 'completed',
         startedAt: '2026-04-30T10:00:00.000Z',
@@ -615,6 +627,7 @@ describe('ComplianceDatabase', () => {
           profileId: 'rhel9-stig',
           inventoryId: 1,
           scanner: 'oscap',
+          scanType: 'assessment',
           workflowJobId: 1,
           status: 'completed',
           startedAt: '2026-04-29T10:00:00.000Z',
@@ -640,6 +653,7 @@ describe('ComplianceDatabase', () => {
           profileId: 'rhel9-stig',
           inventoryId: 1,
           scanner: 'oscap',
+          scanType: 'assessment',
           workflowJobId: 2,
           status: 'completed',
           startedAt: '2026-04-30T10:00:00.000Z',
@@ -665,12 +679,13 @@ describe('ComplianceDatabase', () => {
       expect(latest[0].scanId).toBe(newResult.scanId);
     });
 
-    it('returns empty array when no completed scans exist', async () => {
-      // Create a pending scan (not completed)
+    it('returns empty array when no scans have findings', async () => {
+      // Create a pending scan with no findings
       await complianceDb.createScan({
         profileId: 'rhel9-stig',
         inventoryId: 1,
         scanner: 'oscap',
+        scanType: 'assessment',
         workflowJobId: 1,
         status: 'pending',
         startedAt: '2026-04-30T10:00:00.000Z',
@@ -679,6 +694,38 @@ describe('ComplianceDatabase', () => {
 
       const latest = await complianceDb.getLatestFindings('rhel9-stig');
       expect(latest).toEqual([]);
+    });
+
+    it('returns findings from a pending scan that has stored findings', async () => {
+      // Simulate a scan that has findings but whose status has not yet
+      // been flipped to "completed" (the status update happens lazily).
+      const scan = await complianceDb.createScan({
+        profileId: 'rhel9-stig',
+        inventoryId: 1,
+        scanner: 'oscap',
+        scanType: 'assessment',
+        workflowJobId: 10,
+        status: 'pending',
+        startedAt: '2026-04-30T10:00:00.000Z',
+        completedAt: null,
+      });
+
+      await complianceDb.saveFindingsForScan(scan.id, [
+        {
+          ruleId: 'pending-rule',
+          stigId: 'RHEL-09-999',
+          host: 'host1',
+          status: 'fail',
+          severity: 'high',
+          actualValue: 'off',
+          expectedValue: 'on',
+          evidence: null,
+        },
+      ]);
+
+      const latest = await complianceDb.getLatestFindings('rhel9-stig');
+      expect(latest).toHaveLength(1);
+      expect(latest[0].ruleId).toBe('pending-rule');
     });
   });
 });

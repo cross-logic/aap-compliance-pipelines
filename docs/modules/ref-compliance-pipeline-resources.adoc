@@ -1,0 +1,244 @@
+:_mod-docs-content-type: REFERENCE
+
+[id="ref-compliance-pipeline-resources_{context}"]
+
+= Compliance pipeline {ControllerName} resources
+
+[role="_abstract"]
+The following tables describe the {ControllerName} resources required by the compliance pipelines plugin.
+
+== Organization
+
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-prototype`
+
+|Description
+|Compliance pipeline prototype -- isolated from production resources
+|===
+
+== Project
+
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-content`
+
+|Organization
+|`compliance-prototype`
+
+|Source Control Type
+|Git
+
+|Source Control URL
+|`https://github.com/cross-logic/aap-compliance-pipelines.git`
+
+|Source Control Branch
+|`main`
+
+|Update Revision on Launch
+|Enabled
+|===
+
+== Inventory
+
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-rhel9-inventory`
+
+|Organization
+|`compliance-prototype`
+
+|Description
+|RHEL 9 hosts targeted for compliance scanning
+|===
+
+Add target RHEL 9 hosts to this inventory. Each host must be accessible over the Receptor mesh.
+
+== Job templates
+
+[cols="1,1,1,1,1,1", options="header"]
+|===
+|Name
+|Job Type
+|Playbook
+|Execution Environment
+|Prompt: Inventory
+|Prompt: Variables
+
+|`compliance-scan-rhel9-stig`
+|Check
+|`playbooks/scan-rhel9-stig.yml`
+|`Compliance STIG RHEL 9`
+|Enabled
+|No
+
+|`compliance-remediate-rhel9-stig`
+|Run
+|`playbooks/remediate-rhel9-stig.yml`
+|`Compliance STIG RHEL 9`
+|Enabled
+|Enabled
+
+|`compliance-verify-rhel9-stig`
+|Check
+|`playbooks/scan-rhel9-stig.yml`
+|`Compliance STIG RHEL 9`
+|Enabled
+|No
+|===
+
+All job templates use the following common settings:
+
+* *Project*: `compliance-content`
+* *Inventory*: `compliance-rhel9-inventory` (default; overridable at launch)
+* *Organization*: `compliance-prototype`
+* *Prompt on Launch: Limit*: Enabled (allows scoping to specific hosts)
+
+== Workflow job template
+
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`compliance-rhel9-stig-workflow`
+
+|Organization
+|`compliance-prototype`
+
+|Prompt on Launch: Inventory
+|Enabled
+
+|Prompt on Launch: Limit
+|Enabled
+
+|Prompt on Launch: Variables
+|Enabled
+|===
+
+=== Workflow node chain
+
+[cols="1,2,2,2", options="header"]
+|===
+|Node
+|Job Template
+|Condition
+|Purpose
+
+|1
+|`compliance-scan-rhel9-stig`
+|Always
+|Run OpenSCAP evaluation against DISA STIG profile
+
+|2
+|`compliance-remediate-rhel9-stig`
+|On success of Node 1
+|Apply selected remediation rules
+
+|3
+|`compliance-verify-rhel9-stig`
+|On success of Node 2
+|Re-scan to verify remediation results
+|===
+
+== Execution environment
+
+[cols="1,2", options="header"]
+|===
+|Field
+|Value
+
+|Name
+|`Compliance STIG RHEL 9`
+
+|Base Image
+|`registry.redhat.io/ansible-automation-platform-26/ee-minimal-rhel9:latest`
+
+|Image Tag
+|`compliance-stig-rhel9:latest`
+|===
+
+=== Included dependencies
+
+[cols="1,2", options="header"]
+|===
+|Type
+|Packages
+
+|Ansible collections
+a|
+* `ansible.posix`
+* `community.general`
+* `redhat.rhel_system_roles`
+
+|Python packages
+a|
+* `lxml`
+* `openscap-daemon`
+
+|System packages
+a|
+* `openscap-scanner`
+* `openscap-utils`
+* `scap-security-guide`
+|===
+
+== API endpoints
+
+The compliance pipelines Backstage plugin communicates with {ControllerName} through the platform gateway. All endpoints use the `/api/controller/v2/` base path.
+
+[cols="2,1,3", options="header"]
+|===
+|Endpoint
+|Method
+|Purpose
+
+|`/api/controller/v2/workflow_job_templates/`
+|GET
+|List workflow job templates available for compliance scans
+
+|`/api/controller/v2/workflow_job_templates/<id>/launch/`
+|POST
+|Launch a compliance scan workflow with extra variables, limit, and job tags
+
+|`/api/controller/v2/workflow_jobs/<id>/`
+|GET
+|Check the status of a running or completed workflow job
+
+|`/api/controller/v2/workflow_jobs/<id>/workflow_nodes/`
+|GET
+|Retrieve the status of individual nodes in a workflow run
+
+|`/api/controller/v2/jobs/<id>/`
+|GET
+|Check the status of an individual job within a workflow
+
+|`/api/controller/v2/jobs/<id>/job_events/`
+|GET
+|Retrieve job events including scan findings parsed from runner output
+
+|`/api/controller/v2/jobs/<id>/stdout/`
+|GET
+|Retrieve raw job output for log display
+
+|`/api/controller/v2/inventories/`
+|GET
+|List inventories available for scan targeting
+
+|`/api/controller/v2/execution_environments/`
+|GET
+|List execution environments for compliance profile registration
+|===

@@ -26,8 +26,11 @@ import {
 } from '@material-ui/core';
 import PlayCircleFilledIcon from '@material-ui/icons/PlayCircleFilled';
 import SearchIcon from '@material-ui/icons/Search';
+import AssessmentIcon from '@material-ui/icons/Assessment';
+import VerifiedUserIcon from '@material-ui/icons/VerifiedUser';
 import { complianceApiRef } from '../../api';
-import type { ComplianceScan } from '@aap-compliance/common';
+import type { ComplianceScan, ComplianceCartridge } from '@aap-compliance/common';
+import { ScanProgress } from '../ScanProgress';
 
 const useStyles = makeStyles(theme => ({
   emptyState: {
@@ -84,14 +87,34 @@ export const ScanHistory = () => {
   const navigate = useNavigate();
   const api = useApi(complianceApiRef);
   const [scans, setScans] = useState<ComplianceScan[]>([]);
+  const [profileNames, setProfileNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
 
+  const refreshScans = () => api.getScans().then(data => setScans(data)).catch(err => {
+    console.error('Failed to refresh scans:', err);
+  });
+
   useEffect(() => {
-    api.getScans()
-      .then(data => setScans(data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      refreshScans(),
+      api.getCartridges().then(cs => {
+        setProfileNames(new Map(cs.map(c => [c.id, c.displayName])));
+      }).catch(err => {
+        console.error('Failed to load cartridges for profile names:', err);
+      }),
+    ]).finally(() => setLoading(false));
   }, [api]);
+
+  const oneHourAgo = new Date(Date.now() - 3600_000).toISOString();
+  const activeScans = scans.filter(
+    s => (s.status === 'pending' || s.status === 'running') && s.startedAt > oneHourAgo,
+  );
+
+  useEffect(() => {
+    if (activeScans.length === 0) return;
+    const interval = setInterval(refreshScans, 10_000);
+    return () => clearInterval(interval);
+  }, [activeScans.length]);
 
   if (loading) return <Progress />;
 
@@ -110,6 +133,19 @@ export const ScanHistory = () => {
           New Scan
         </Button>
       </div>
+
+      {activeScans.map(scan => scan.workflowJobId && (
+        <ScanProgress
+          key={scan.id}
+          workflowJobId={scan.workflowJobId}
+          profileName={profileNames.get(scan.profileId) || scan.profileId}
+          onComplete={() => {
+            // Delay refresh to allow the backend to mark the scan as completed
+            // before we fetch the updated list from the DB.
+            setTimeout(refreshScans, 2000);
+          }}
+        />
+      ))}
 
       {scans.length === 0 ? (
         <div className={classes.emptyState}>
@@ -136,6 +172,7 @@ export const ScanHistory = () => {
             <TableHead>
               <TableRow>
                 <TableCell>Status</TableCell>
+                <TableCell>Type</TableCell>
                 <TableCell>Profile</TableCell>
                 <TableCell>Scanner</TableCell>
                 <TableCell>Workflow Job</TableCell>
@@ -157,7 +194,7 @@ export const ScanHistory = () => {
                     <Box display="flex" alignItems="center" style={{ gap: 8 }}>
                       <StatusIcon status={scan.status} />
                       <Chip
-                        label={scan.status}
+                        label={scan.status.charAt(0).toUpperCase() + scan.status.slice(1)}
                         size="small"
                         color={statusColor[scan.status] ?? 'default'}
                         variant="outlined"
@@ -166,8 +203,20 @@ export const ScanHistory = () => {
                     </Box>
                   </TableCell>
                   <TableCell>
+                    <Chip
+                      icon={scan.scanType === 'verification' ? <VerifiedUserIcon /> : <AssessmentIcon />}
+                      label={scan.scanType === 'verification' ? 'Verification' : 'Assessment'}
+                      size="small"
+                      variant="outlined"
+                      style={{
+                        borderColor: scan.scanType === 'verification' ? '#0066CC' : undefined,
+                        color: scan.scanType === 'verification' ? '#0066CC' : undefined,
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>
                     <Typography variant="body2" style={{ fontWeight: 500 }}>
-                      {scan.profileId}
+                      {profileNames.get(scan.profileId) || scan.profileId}
                     </Typography>
                   </TableCell>
                   <TableCell>{scan.scanner}</TableCell>

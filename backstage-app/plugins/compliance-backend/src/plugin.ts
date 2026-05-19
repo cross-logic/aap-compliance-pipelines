@@ -90,6 +90,13 @@ export const complianceBackendPlugin = createBackendPlugin({
         httpRouter.addAuthPolicy({ path: '/cartridges', allow: 'unauthenticated' });
         httpRouter.addAuthPolicy({ path: '/inventories', allow: 'unauthenticated' });
         httpRouter.addAuthPolicy({ path: '/remediations', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/dashboard', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/posture', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/workflow-templates', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/workflow-status', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/workflow-nodes', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/job-events', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/controller', allow: 'unauthenticated' });
 
         // --- Mutating endpoints (TODO: gate behind permissions in production) ---
         httpRouter.addAuthPolicy({ path: '/scan', allow: 'unauthenticated' });

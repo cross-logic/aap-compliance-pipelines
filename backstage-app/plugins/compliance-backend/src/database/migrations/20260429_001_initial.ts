@@ -16,6 +16,7 @@ export async function up(knex: Knex): Promise<void> {
     table.string('profile_id').notNullable();
     table.integer('inventory_id').notNullable();
     table.string('scanner').notNullable().defaultTo('oscap');
+    table.string('scan_type').notNullable().defaultTo('assessment');
     table.integer('workflow_job_id').nullable();
     table
       .string('status')

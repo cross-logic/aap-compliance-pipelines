@@ -1,0 +1,70 @@
+:_mod-docs-content-type: CONCEPT
+
+[id="con-about-compliance-pipelines_{context}"]
+
+= About compliance pipelines
+
+[role="_abstract"]
+
+Compliance pipelines provide scanner orchestration for {PlatformNameShort}, enabling organizations to assess, report on, and remediate the compliance posture of their managed infrastructure. The compliance pipelines plugin integrates with {ControllerName} to execute scanning and remediation workflows, and surfaces results through a self-service interface built on {RHDH}.
+
+== Scanner model
+
+Compliance pipelines use a three-tier scanner model that accommodates different levels of scanner integration and organizational requirements:
+
+Tier 1 (Fully shippable)::
+Scanners that Red Hat can package and distribute as part of the compliance content. These scanners run entirely within an {ExecEnvShort} and require no external dependencies beyond what is included in the container image.
++
+Example: OpenSCAP with SCAP Security Guide content for RHEL DISA STIG assessments.
+
+Tier 2 (Bring Your Own Scanner)::
+Scanners where the customer provides their own licensed scanner software. The compliance pipeline provides the orchestration framework (job templates, workflow templates, and result parsing), but the scanner binary and license are supplied by the customer.
++
+Example: A commercial vulnerability scanner that requires a per-host license.
+
+Tier 3 (Hybrid)::
+Scanners that combine Red Hat-shipped components with customer-provided configuration or content. The compliance pipeline ships the orchestration and base scanner, while the customer supplies custom policies, benchmarks, or rule overlays.
++
+Example: OpenSCAP with a customer-authored XCCDF tailoring file.
+
+== Scanning tracks
+
+Compliance pipelines support two scanning tracks that serve different purposes in the compliance lifecycle:
+
+Track A (Pre-assessment)::
+Lightweight scans that provide a rapid compliance posture check. Pre-assessment scans are designed to run frequently (daily or on-demand) with minimal impact on target systems. Results are informational and help teams identify drift before a formal audit.
+
+Track B (Audit-grade)::
+Full-depth scans that produce evidence suitable for auditor review. Audit-grade scans generate detailed XCCDF results, HTML reports, and per-rule evidence artifacts. These scans are typically run on a scheduled basis aligned with audit cycles.
+
+== Integration with {PlatformNameShort}
+
+Compliance pipelines integrate with the following {PlatformNameShort} components:
+
+{ControllerName}::
+Workflow job templates orchestrate the scan-remediate-verify cycle. Each compliance profile maps to a set of job templates that run within a dedicated organization. Job templates support launch-time prompts for inventory scope, rule selections, and remediation parameters.
+
+Execution environments::
+Compliance scanners and their dependencies are packaged as {ExecEnvShort}s. This ensures that scanner binaries (such as `openscap-scanner`), SCAP content (such as `scap-security-guide`), and required Python libraries are available on execution nodes without modifying the node operating system.
+
+Platform gateway::
+The Backstage plugin communicates with {ControllerName} through the platform gateway API (`/api/controller/v2/`). Authentication uses per-user OAuth2 tokens or service account tokens, and all API calls are subject to {ControllerName} RBAC.
+
+== Compliance profiles
+
+A compliance profile is a registered standard that maps a compliance framework (such as DISA STIG or CIS Benchmark) to the {PlatformNameShort} resources required to assess it. Each profile specifies:
+
+* The workflow job template that orchestrates the scan
+* The {ExecEnvShort} containing the scanner and content
+* The inventory scope (which hosts to assess)
+* The compliance framework version and rule set
+
+Profiles are registered in the compliance plugin settings and can be shared across teams within an organization.
+
+== Plugin architecture
+
+The compliance pipelines plugin consists of three packages:
+
+* *Frontend plugin* (`@aap-compliance/plugin`): Provides the user interface with six tabs -- Overview, Profiles, New Scan, Results, Remediations, and Settings.
+* *Backend plugin* (`@aap-compliance/backend`): REST API that communicates with {ControllerName}, manages scan state, and stores remediation profiles in a local database.
+* *Common package* (`@aap-compliance/common`): Shared TypeScript types for profiles, findings, and API contracts.

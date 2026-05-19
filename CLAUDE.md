@@ -33,7 +33,6 @@ yarn build            # Build all packages
 
 - "Compliance profile" = registered standard mapped to workflow + EE (Settings tab)
 - "Remediation" = saved rule selections + parameter overrides (Remediations tab)
-- "Cartridge" = internal code only (types, DB tables, API routes) — never in UI
 - AAP 2.6 terms: "automation controller" (lowercase), "workflow job template", "platform gateway"
 
 ## Engineering Standards

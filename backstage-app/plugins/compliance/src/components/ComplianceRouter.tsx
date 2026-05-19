@@ -90,7 +90,7 @@ const ComplianceRouter = () => {
     if (path.startsWith('profiles')) return 1;
     if (path.startsWith('scan')) return 2;
     if (path.startsWith('results') || path.startsWith('remediation/') || path.startsWith('execute')) return 3;
-    if (path === 'remediations') return 4;
+    if (path === 'remediations' || path.startsWith('remediation-edit/')) return 4;
     if (path.startsWith('settings')) return 5;
     return 0;
   };
@@ -123,6 +123,7 @@ const ComplianceRouter = () => {
             <Route path="/results" element={<ScanHistory />} />
             <Route path="/results/:jobId" element={<ResultsViewer />} />
             <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
+            <Route path="/remediation-edit/:remediationId" element={<RemediationProfileBuilder />} />
             <Route path="/execute/:jobId" element={<RemediationExecution />} />
             <Route path="/remediations" element={<RemediationsList />} />
             <Route path="/settings" element={<CartridgeSettings />} />

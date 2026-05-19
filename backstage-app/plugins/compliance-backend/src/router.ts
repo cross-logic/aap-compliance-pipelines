@@ -148,6 +148,7 @@ export async function createRouter(
         profileId: scanRequest.profileId,
         inventoryId: scanRequest.inventoryId,
         scanner: 'oscap',
+        scanType: body.scanType || 'assessment',
         workflowJobId: result.workflowJobId,
         status: 'pending',
         startedAt: new Date().toISOString(),
@@ -172,22 +173,31 @@ export async function createRouter(
     if (scanId) {
       const dbFindings = await database.getFindingsByScanId(scanId);
       if (dbFindings.length > 0) {
-        res.json(dbFindings);
+        res.json(service.aggregateFindings(dbFindings));
         return;
       }
 
-      // 2. In live mode, if no DB findings exist, try to fetch and parse
-      //    from the Controller API. The scanId may be a workflowJobId (numeric).
+      // 2. In live mode, resolve workflowJobId to DB scan and check for existing findings
       if (service.getDataSource() === 'live') {
         const workflowJobIdMatch = scanId.match(/^(?:scan-)?(\d+)$/);
         if (workflowJobIdMatch) {
           const workflowJobId = Number(workflowJobIdMatch[1]);
+          const dbScan = await database.getScanByWorkflowJobId(workflowJobId);
+
+          // Check if this scan already has findings in the DB
+          if (dbScan) {
+            const existingFindings = await database.getFindingsByScanId(dbScan.id);
+            if (existingFindings.length > 0) {
+              res.json(service.aggregateFindings(existingFindings));
+              return;
+            }
+          }
+
+          // No findings yet — check if workflow is complete and fetch
           try {
             const status = await service.getWorkflowJobStatus(workflowJobId, userToken);
             const st = status.status.toLowerCase();
             if (st === 'successful' || st === 'failed') {
-              // Resolve the DB scan record from the workflowJobId
-              const dbScan = await database.getScanByWorkflowJobId(workflowJobId);
               const dbScanId = dbScan?.id ?? scanId;
 
               logger.info(
@@ -198,16 +208,22 @@ export async function createRouter(
                 dbScanId,
                 userToken,
               );
+
+              if (dbScan) {
+                await database.updateScanStatus(
+                  dbScan.id,
+                  parsed.length > 0 ? 'completed' : 'failed',
+                  new Date().toISOString(),
+                );
+              }
+
               if (parsed.length > 0) {
-                // Try DB first (cached), fall back to in-memory aggregation
                 const freshFindings = await database.getFindingsByScanId(dbScanId);
                 if (freshFindings.length > 0) {
-                  res.json(freshFindings);
+                  res.json(service.aggregateFindings(freshFindings));
                   return;
                 }
-                // DB persist may have failed — aggregate and return directly
-                const aggregated = service.aggregateFindings(parsed);
-                res.json(aggregated);
+                res.json(service.aggregateFindings(parsed));
                 return;
               }
             } else {
@@ -320,22 +336,30 @@ export async function createRouter(
       inventoryId: body.inventoryId,
       selections: body.selections,
       limit: body.limit,
+      scanId: body.scanId,
     };
 
-    logger.info(`Launching remediation for profile=${remediateRequest.profileId}`);
+    logger.info(
+      `Launching remediation for profile=${remediateRequest.profileId}` +
+      ` with ${body.selections.length} selections` +
+      (body.scanId ? ` (scan=${body.scanId})` : ''),
+    );
 
     try {
-      // Fetch the latest findings so the plan builder uses real scan data
-      // (not hardcoded mock data) regardless of data source mode.
+      // Fetch the latest findings so the plan builder uses real scan data.
+      // The service uses these to build the remediation plan internally,
+      // which determines job_tags and host limits.
       const findings = await service.getFindings(body.scanId);
 
-      // Build an optimized remediation plan from the selections
+      // Build the plan for the response (the service also builds it
+      // internally for the actual launch, so the plan in the response
+      // reflects what was actually executed).
       const plan = service.buildRemediationPlan(remediateRequest.selections, findings);
       logger.info(
         `Remediation plan: ${plan.groups.length} groups, ${plan.totalRules} rules, ${plan.totalHosts} hosts`,
       );
 
-      const result = await service.launchRemediation(remediateRequest, userToken);
+      const result = await service.launchRemediation(remediateRequest, findings, userToken);
       res.json({ ...result, plan });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -365,6 +389,22 @@ export async function createRouter(
   router.get('/remediation-profiles', async (_req, res) => {
     const profiles = await service.getRemediationProfiles();
     res.json(profiles);
+  });
+
+  router.get('/remediation-profiles/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      const profile = await service.getRemediationProfile(id);
+      if (!profile) {
+        res.status(404).json({ error: 'Remediation profile not found' });
+        return;
+      }
+      res.json(profile);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to get remediation profile: ${msg}`);
+      res.status(500).json({ error: msg });
+    }
   });
 
   router.post('/remediation-profiles', async (req, res) => {
@@ -401,7 +441,17 @@ export async function createRouter(
 
   router.get('/cartridges', async (_req, res) => {
     const cartridges = await database.listCartridges();
-    res.json(cartridges);
+
+    // Enrich each cartridge with rule count from latest scan findings
+    const enriched = await Promise.all(
+      cartridges.map(async c => {
+        const findings = await database.getLatestFindings(c.id);
+        const uniqueRules = new Set(findings.map(f => f.ruleId)).size;
+        return { ...c, ruleCount: uniqueRules };
+      }),
+    );
+
+    res.json(enriched);
   });
 
   router.post('/cartridges', async (req, res) => {

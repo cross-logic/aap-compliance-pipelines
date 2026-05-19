@@ -6,11 +6,15 @@ APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PID_DIR="$APP_DIR/.pids"
 
 MODE="${1:-mock}"
+ENV_FILE="${2:-.env}"
 
 if [[ "$MODE" != "mock" && "$MODE" != "live" ]]; then
-  echo "Usage: $0 [mock|live]"
+  echo "Usage: $0 [mock|live] [env-file]"
   echo "  mock  - Use sample data, no AAP connection needed (default)"
-  echo "  live  - Connect to real AAP Controller via .env credentials"
+  echo "  live  - Connect to real AAP Controller via env file credentials"
+  echo ""
+  echo "  env-file defaults to .env. Use .env.netrunner for the demo lab:"
+  echo "    $0 live .env.netrunner"
   exit 1
 fi
 
@@ -25,11 +29,14 @@ cd "$APP_DIR"
 sed -i '' "s/dataSource: .*/dataSource: $MODE/" app-config.yaml 2>/dev/null || \
   sed -i "s/dataSource: .*/dataSource: $MODE/" app-config.yaml
 
-# Load env vars from .env (needed for live mode)
-if [ -f .env ]; then
+# Load env vars from env file (needed for live mode)
+if [ -f "$ENV_FILE" ]; then
   set -a
-  source .env
+  source "$ENV_FILE"
   set +a
+  echo "  Env file: $ENV_FILE"
+elif [ "$MODE" = "live" ]; then
+  echo "WARNING: $ENV_FILE not found. Live mode requires AAP_HOST and AAP_API_TOKEN."
 fi
 
 echo "=== Starting Compliance Pipelines ($MODE mode) ==="

@@ -153,6 +153,27 @@ export class ControllerClient {
     return (await response.json()) as T;
   }
 
+  private async fetchAllPages<T>(
+    endpoint: string,
+    token?: string,
+  ): Promise<T[]> {
+    const first = await this.executeGetRequest<PaginatedResponse<T>>(endpoint, token);
+    const results = [...first.results];
+    let nextUrl = first.next;
+    while (nextUrl && results.length < first.count) {
+      const relative = nextUrl.replace(this.baseUrl, '').replace(/^\/+/, '');
+      const page = await this.executeGetRequest<PaginatedResponse<T>>(relative, token);
+      results.push(...page.results);
+      nextUrl = page.next;
+    }
+    if (first.count > results.length) {
+      this.logger.warn(
+        `[${ControllerClient.LOG_PREFIX}]: Pagination incomplete for ${endpoint}: got ${results.length}/${first.count} items`,
+      );
+    }
+    return results;
+  }
+
   // ─── Workflow Job Templates ─────────────────────────────────────────
 
   async listWorkflowJobTemplates(
@@ -160,7 +181,7 @@ export class ControllerClient {
     token?: string,
   ): Promise<PaginatedResponse<{ id: number; name: string; description: string }>> {
     const query = nameFilter
-      ? `?name__startswith=${encodeURIComponent(nameFilter)}`
+      ? `?name__icontains=${encodeURIComponent(nameFilter)}`
       : '';
     return this.executeGetRequest(
       `api/controller/v2/workflow_job_templates/${query}`,
@@ -173,6 +194,7 @@ export class ControllerClient {
     extraVars?: Record<string, unknown>,
     token?: string,
     limit?: string,
+    jobTags?: string,
   ): Promise<{ id: number; workflow_job: number; status: string }> {
     const body: Record<string, unknown> = {};
     if (extraVars) {
@@ -180,6 +202,9 @@ export class ControllerClient {
     }
     if (limit) {
       body.limit = limit;
+    }
+    if (jobTags) {
+      body.job_tags = jobTags;
     }
     return this.executePostRequest(
       `api/controller/v2/workflow_job_templates/${workflowId}/launch/`,
@@ -220,25 +245,22 @@ export class ControllerClient {
     jobId: number,
     token?: string,
   ): Promise<PaginatedResponse<JobEvent>> {
-    return this.executeGetRequest(
+    const results = await this.fetchAllPages<JobEvent>(
       `api/controller/v2/jobs/${jobId}/job_events/?page_size=200`,
       token,
     );
+    return { count: results.length, next: null, previous: null, results };
   }
 
-  /**
-   * Fetch job events filtered to runner_on_ok — these contain task results.
-   * The evaluate module's findings live in event_data.res.ansible_facts
-   * or event_data.res within these events.
-   */
   async getRunnerOkEvents(
     jobId: number,
     token?: string,
   ): Promise<PaginatedResponse<JobEvent>> {
-    return this.executeGetRequest(
+    const results = await this.fetchAllPages<JobEvent>(
       `api/controller/v2/jobs/${jobId}/job_events/?event=runner_on_ok&page_size=200`,
       token,
     );
+    return { count: results.length, next: null, previous: null, results };
   }
 
   async getJobStdout(jobId: number, token?: string): Promise<{ content: string }> {

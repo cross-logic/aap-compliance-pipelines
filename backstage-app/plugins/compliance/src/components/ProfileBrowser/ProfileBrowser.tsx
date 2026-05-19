@@ -71,7 +71,7 @@ function cartridgeToDisplayProfile(c: ComplianceCartridge): DisplayProfile {
     version: c.version,
     description: c.description,
     applicableOs: c.platform ? [c.platform] : [],
-    ruleCount: 0,
+    ruleCount: c.ruleCount ?? 0,
     lastUpdated: c.updatedAt ?? c.createdAt ?? '',
     source: 'Compliance Profile Registry',
     categories: [],
@@ -181,8 +181,14 @@ export const ProfileBrowser = () => {
     let cancelled = false;
 
     Promise.all([
-      api.getCartridges().catch(() => [] as ComplianceCartridge[]),
-      api.getProfiles().catch(() => []),
+      api.getCartridges().catch(err => {
+        console.error('Failed to load cartridges:', err);
+        return [] as ComplianceCartridge[];
+      }),
+      api.getProfiles().catch(err => {
+        console.error('Failed to load profiles:', err);
+        return [];
+      }),
     ]).then(([cartridges, backendProfiles]) => {
       if (cancelled) return;
 

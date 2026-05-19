@@ -98,6 +98,7 @@ export const ScanLauncher = () => {
 
   const [searchParams] = useSearchParams();
   const preselectedProfile = searchParams.get('profile') ?? '';
+  const scanTypeParam = searchParams.get('scanType') as 'assessment' | 'verification' | null;
   const [activeStep, setActiveStep] = useState(preselectedProfile ? 1 : 0);
   const [selectedProfile, setSelectedProfile] = useState(preselectedProfile);
   const [selectedInventory, setSelectedInventory] = useState('');
@@ -115,9 +116,18 @@ export const ScanLauncher = () => {
 
   useEffect(() => {
     Promise.all([
-      api.getCartridges().catch(() => [] as ComplianceCartridge[]),
-      api.getProfiles().catch(() => []),
-      api.getInventories().catch(() => [] as Array<{ id: number; name: string; hostCount: number }>),
+      api.getCartridges().catch(err => {
+        console.error('Failed to load cartridges:', err);
+        return [] as ComplianceCartridge[];
+      }),
+      api.getProfiles().catch(err => {
+        console.error('Failed to load profiles:', err);
+        return [];
+      }),
+      api.getInventories().catch(err => {
+        console.error('Failed to load inventories:', err);
+        return [] as Array<{ id: number; name: string; hostCount: number }>;
+      }),
     ]).then(([cartridgeData, profileData, inventoryData]) => {
       setCartridges(cartridgeData);
       if (cartridgeData.length > 0) {
@@ -125,7 +135,7 @@ export const ScanLauncher = () => {
           id: c.id,
           name: c.displayName,
           version: c.version || '',
-          rules: 0,
+          rules: c.ruleCount || 0,
         })));
       } else if (profileData.length > 0) {
         setProfiles(profileData.map(p => ({
@@ -135,11 +145,7 @@ export const ScanLauncher = () => {
           rules: p.ruleCount,
         })));
       }
-      if (inventoryData.length > 0) {
-        setInventories(inventoryData);
-      } else {
-        setInventories(FALLBACK_INVENTORIES);
-      }
+      setInventories(inventoryData);
       setDataLoaded(true);
     });
   }, [api]);
@@ -158,13 +164,10 @@ export const ScanLauncher = () => {
         profileId: selectedProfile,
         inventoryId: inventory?.id ?? 0,
         evaluateOnly,
+        scanType: scanTypeParam || 'assessment',
         limit: limit || undefined,
+        workflowTemplateId: cartridge?.workflowTemplateId ?? undefined,
       };
-      // If the cartridge has a mapped workflow template, pass it as a hint
-      if (cartridge?.workflowTemplateId) {
-        (scanRequest as Record<string, unknown>).workflowTemplateId =
-          cartridge.workflowTemplateId;
-      }
       const result = await api.launchScan(scanRequest);
       // Navigate to results view with the returned workflow job ID
       navigate(`/compliance/results/${result.workflowJobId}`);
@@ -411,7 +414,7 @@ export const ScanLauncher = () => {
           >
             Compliance
           </Typography>
-          <Typography>New Scan</Typography>
+          <Typography>{scanTypeParam === 'verification' ? 'Verification Scan' : 'New Scan'}</Typography>
         </Breadcrumbs>
 
         <Box mt={3} />

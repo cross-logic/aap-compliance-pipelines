@@ -1,6 +1,6 @@
 # Ansible Collection: security.compliance_rhel9_stig
 
-DISA STIG V2R8 compliance cartridge for RHEL 9.
+DISA STIG V2R8 compliance profile for RHEL 9.
 
 Agentless fact gathering, centralized evaluation, and selective remediation.
 No tools installed on target hosts.

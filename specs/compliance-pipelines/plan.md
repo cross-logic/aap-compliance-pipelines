@@ -13,7 +13,7 @@ Regulated enterprises managing DISA STIG and CIS compliance with Ansible Automat
 **Key Architecture Decisions**:
 
 1. Scanner orchestrator, not scanner — our value is UX, orchestration, and the remediation builder
-2. Cartridge model (maps to "compliance profile" in the UI) — pluggable scanner registration (Tier 1: OpenSCAP/PowerSTIG, Tier 2: BYOS Qualys/Tenable, Tier 3: hybrid)
+2. Compliance profile model — pluggable scanner registration (Tier 1: OpenSCAP/PowerSTIG, Tier 2: BYOS Qualys/Tenable, Tier 3: hybrid)
 3. CaC content consumption — selective remediation via Ansible `--tags` + `--extra-vars` + `--limit`
 4. Controller workflow as pipeline — uses AAP's existing workflow engine (gather, evaluate, remediate nodes), not a new pipeline runtime
 5. All API calls through Gateway — no direct Controller access (aligns with AAP 2.7+ architecture)
@@ -143,7 +143,7 @@ Track B: Audit-Grade Scanning (full OpenSCAP)
 └──────────────────────────────────────────────┘
 ```
 
-### Cartridge Model (user-facing: "Compliance Profile")
+### Compliance Profile Model
 
 ```
 ┌─────────────────────────────────────┐
@@ -273,7 +273,7 @@ plugins/compliance-common/
 ## Database Schema
 
 ```sql
--- Compliance profile registry (internal table name: compliance_cartridges)
+-- Compliance profile registry
 CREATE TABLE compliance_cartridges (
   id TEXT PRIMARY KEY,                    -- UUID
   display_name TEXT NOT NULL,
@@ -360,7 +360,7 @@ CREATE INDEX idx_posture_created ON compliance_posture(created_at);
 
 ## API Design
 
-### Compliance Profile Management (API path: `/cartridges`)
+### Compliance Profile Management
 
 ```
 POST /api/compliance/cartridges          # Add compliance profile
@@ -530,8 +530,8 @@ Browser → Portal Frontend → Portal Backend → AAP Gateway
 - Write Knex database migrations for all compliance tables
 - Implement `DatabaseHandler` with CRUD operations for all entities
 - Implement `AapGatewayClient` for AAP Gateway API communication
-- Implement `CartridgeService` (internally: cartridge) with EE/workflow validation via Gateway API
-- Implement compliance profile REST API endpoints (path: `/cartridges`)
+- Implement `CartridgeService` for compliance profile CRUD with EE/workflow validation via Gateway API
+- Implement compliance profile REST API endpoints (`/cartridges`)
 - Package compliance Ansible collection with EE profile definition
 - Unit tests for all services (>80% coverage target)
 

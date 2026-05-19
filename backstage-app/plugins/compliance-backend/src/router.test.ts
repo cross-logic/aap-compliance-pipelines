@@ -102,6 +102,7 @@ function createMockService() {
     }),
     getPostureHistory: jest.fn().mockResolvedValue([]),
     getRemediationProfiles: jest.fn().mockResolvedValue([]),
+    getRemediationProfile: jest.fn().mockResolvedValue(null),
     saveRemediationProfile: jest.fn().mockResolvedValue({ id: 'rp-1' }),
     buildRemediationPlan: jest
       .fn()
@@ -118,6 +119,7 @@ function createMockDatabase() {
       profileId: 'rhel9-stig',
       inventoryId: 1,
       scanner: 'oscap',
+      scanType: 'assessment',
       workflowJobId: 42,
       status: 'pending',
       startedAt: '2026-04-30T00:00:00.000Z',
@@ -129,6 +131,7 @@ function createMockDatabase() {
         profileId: 'rhel9-stig',
         inventoryId: 1,
         scanner: 'oscap',
+        scanType: 'assessment',
         workflowJobId: 42,
         status: 'completed',
         startedAt: '2026-04-30T00:00:00.000Z',
@@ -155,6 +158,7 @@ function createMockDatabase() {
     deleteCartridge: jest.fn().mockResolvedValue(true),
     getPostureSnapshots: jest.fn().mockResolvedValue([]),
     listRemediationProfiles: jest.fn().mockResolvedValue([]),
+    getRemediationProfile: jest.fn().mockResolvedValue(null),
     saveRemediationProfile: jest.fn().mockResolvedValue({ id: 'rp-1' }),
   } as any;
 }
@@ -843,17 +847,19 @@ describe('compliance backend router', () => {
           evidence: null,
         },
       ];
-      const { app, database, service } = await createApp(undefined, {
-        getFindingsByScanId: jest.fn().mockResolvedValue(storedFindings),
-      });
+      const aggregated = [{ ruleId: 'rule-1', hosts: [{ host: 'host1', status: 'fail' }] }];
+      const { app, database, service } = await createApp(
+        { aggregateFindings: jest.fn().mockReturnValue(aggregated) },
+        { getFindingsByScanId: jest.fn().mockResolvedValue(storedFindings) },
+      );
       const res = await testRequest(app, {
         path: '/findings?scanId=scan-1',
       });
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual(storedFindings);
+      expect(res.body).toEqual(aggregated);
       expect(database.getFindingsByScanId).toHaveBeenCalledWith('scan-1');
-      // Should not fall through to service.getFindings
+      expect(service.aggregateFindings).toHaveBeenCalledWith(storedFindings);
       expect(service.getFindings).not.toHaveBeenCalled();
     });
   });

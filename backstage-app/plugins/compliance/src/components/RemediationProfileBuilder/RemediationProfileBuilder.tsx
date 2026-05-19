@@ -37,7 +37,7 @@ import SaveIcon from '@material-ui/icons/Save';
 import PlayArrowIcon from '@material-ui/icons/PlayArrow';
 import WarningIcon from '@material-ui/icons/Warning';
 import InfoIcon from '@material-ui/icons/Info';
-import type { FindingSeverity, MultiHostFinding } from '@aap-compliance/common';
+import type { FindingSeverity, MultiHostFinding, RemediationProfile } from '@aap-compliance/common';
 import { complianceApiRef } from '../../api';
 
 const useStyles = makeStyles(theme => ({
@@ -126,7 +126,11 @@ export const RemediationProfileBuilder = () => {
   const classes = useStyles();
   const navigate = useNavigate();
   const api = useApi(complianceApiRef);
-  const { jobId } = useParams<{ jobId: string }>();
+  const { jobId, remediationId } = useParams<{ jobId?: string; remediationId?: string }>();
+
+  // Edit mode: when navigated via /remediation-edit/:remediationId
+  const isEditMode = !!remediationId;
+  const [editProfile, setEditProfile] = useState<RemediationProfile | null>(null);
 
   // Permission check: reuse catalogEntityCreatePermission following
   // the upstream Ansible Portal pattern. Controls the Apply Remediation
@@ -140,25 +144,57 @@ export const RemediationProfileBuilder = () => {
   const [profileDescription, setProfileDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [launching, setLaunching] = useState(false);
 
   // Fetch findings from the backend (S2: no frontend mock data)
   const [allFindings, setAllFindings] = useState<MultiHostFinding[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // In edit mode, first load the remediation profile, then load findings
   useEffect(() => {
+    if (!isEditMode || !remediationId) return;
+    let cancelled = false;
+
+    api.getRemediationProfile(remediationId)
+      .then(profile => {
+        if (cancelled || !profile) {
+          if (!cancelled) setLoading(false);
+          return undefined;
+        }
+        setEditProfile(profile);
+        setProfileName(profile.name);
+        setProfileDescription(profile.description);
+        return api.getFindings(profile.complianceProfileId);
+      })
+      .then(data => {
+        if (!cancelled && data) setAllFindings(data);
+      })
+      .catch(err => {
+        console.error('Failed to load remediation profile for editing:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [api, isEditMode, remediationId]);
+
+  // In non-edit mode, load findings by jobId
+  useEffect(() => {
+    if (isEditMode) return;
     let cancelled = false;
     api.getFindings(jobId)
       .then(data => {
         if (!cancelled) setAllFindings(data);
       })
-      .catch(() => {
-        // Keep empty on error
+      .catch(err => {
+        console.error('Failed to load findings for remediation builder:', err);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [api, jobId]);
+  }, [api, jobId, isEditMode]);
 
   const failedFindings = useMemo(
     () => allFindings.filter(f => f.failCount > 0),
@@ -173,20 +209,26 @@ export const RemediationProfileBuilder = () => {
     setSelections(prev => {
       // Only initialize if empty (avoid resetting user changes)
       if (Object.keys(prev).length > 0) return prev;
+
+      // In edit mode, apply saved selections from the remediation profile
+      const savedSelections = editProfile?.selections ?? [];
+      const savedMap = new Map(savedSelections.map(s => [s.ruleId, s]));
+
       const initial: Record<string, RuleSelection> = {};
       failedFindings.forEach(f => {
+        const saved = savedMap.get(f.ruleId);
         initial[f.ruleId] = {
-          enabled: f.disruption !== 'high',
+          enabled: saved ? saved.enabled : (isEditMode ? false : f.disruption !== 'high'),
           expanded: false,
           scope: 'failed_only',
-          parameters: Object.fromEntries(
-            f.parameters.map(p => [p.name, p.default]),
-          ),
+          parameters: saved?.parameters
+            ? { ...Object.fromEntries(f.parameters.map(p => [p.name, p.default])), ...saved.parameters }
+            : Object.fromEntries(f.parameters.map(p => [p.name, p.default])),
         };
       });
       return initial;
     });
-  }, [failedFindings]);
+  }, [failedFindings, editProfile, isEditMode]);
 
   const toggleFinding = (ruleId: string) => {
     setSelections(prev => ({
@@ -326,11 +368,59 @@ export const RemediationProfileBuilder = () => {
           </IconButton>
         </div>
 
-        {/* Expanded: scope selection, parameters, host detail */}
+        {/* Expanded: rule details, scope selection, parameters, host detail */}
         <Collapse in={sel.expanded}>
           <div className={classes.detailPanel}>
-            {/* Homogeneity advice */}
-            {showHomogeneityAdvice && (
+            {/* Rule description and details */}
+            {finding.description && (
+              <Box mb={2}>
+                <Typography variant="body2">{finding.description}</Typography>
+              </Box>
+            )}
+
+            {(finding.checkText || finding.fixText) && (
+              <Box mb={2} display="flex" flexDirection="column" style={{ gap: 12 }}>
+                {finding.checkText && (
+                  <div>
+                    <Typography variant="caption" color="textSecondary" style={{ fontWeight: 600 }}>
+                      Check
+                    </Typography>
+                    <Typography variant="body2" style={{ fontFamily: 'monospace', fontSize: '0.8rem', marginTop: 2 }}>
+                      {finding.checkText}
+                    </Typography>
+                  </div>
+                )}
+                {finding.fixText && (
+                  <div>
+                    <Typography variant="caption" color="textSecondary" style={{ fontWeight: 600 }}>
+                      Fix
+                    </Typography>
+                    <Typography variant="body2" style={{ fontFamily: 'monospace', fontSize: '0.8rem', marginTop: 2 }}>
+                      {finding.fixText}
+                    </Typography>
+                  </div>
+                )}
+              </Box>
+            )}
+
+            {finding.disruption && (
+              <Box mb={2}>
+                <Chip
+                  size="small"
+                  label={`Disruption: ${finding.disruption}`}
+                  style={{
+                    backgroundColor: finding.disruption === 'high' ? '#C9190B'
+                      : finding.disruption === 'medium' ? '#F0AB00'
+                      : '#3E8635',
+                    color: '#fff',
+                    fontWeight: 600,
+                  }}
+                />
+              </Box>
+            )}
+
+            {/* Homogeneity advice — only when some pass and some fail */}
+            {finding.passCount > 0 && finding.failCount > 0 && (
               <div className={classes.adviceBanner}>
                 <InfoIcon className={classes.adviceIcon} fontSize="small" />
                 <div>
@@ -351,6 +441,12 @@ export const RemediationProfileBuilder = () => {
               <Typography variant="caption" color="textSecondary" gutterBottom>
                 Remediation Scope
               </Typography>
+              {finding.failCount === finding.totalCount ? (
+                /* All hosts failed — no "standardize" option, just apply to all */
+                <Typography variant="body2" color="textSecondary" style={{ marginTop: 4 }}>
+                  All {finding.totalCount} hosts failed — remediation will apply to all hosts.
+                </Typography>
+              ) : (
               <RadioGroup
                 value={sel.scope}
                 onChange={e => setScope(finding.ruleId, e.target.value as RemediationScope)}
@@ -374,6 +470,7 @@ export const RemediationProfileBuilder = () => {
                   }
                 />
               </RadioGroup>
+              )}
             </div>
 
             {/* Parameters */}
@@ -466,13 +563,45 @@ export const RemediationProfileBuilder = () => {
         <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance')}>
           Compliance
         </Typography>
-        <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate(`/compliance/results/${jobId}`)}>
-          Scan Results
-        </Typography>
-        <Typography>Remediation</Typography>
+        {isEditMode ? (
+          <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance/remediations')}>
+            Remediations
+          </Typography>
+        ) : (
+          <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate(`/compliance/results/${jobId}`)}>
+            Scan Results
+          </Typography>
+        )}
+        <Typography>{isEditMode ? 'Edit Remediation' : 'Remediation'}</Typography>
       </Breadcrumbs>
 
       <Box mt={2} />
+
+      {/* Edit mode banner */}
+      {isEditMode && editProfile && (
+        <Box
+          mb={2}
+          p={2}
+          bgcolor="#E7F1FA"
+          borderRadius={4}
+          border="1px solid #0066CC"
+          display="flex"
+          alignItems="center"
+          style={{ gap: 12 }}
+        >
+          <InfoIcon style={{ color: '#0066CC' }} />
+          <div>
+            <Typography variant="subtitle2" style={{ color: '#0066CC' }}>
+              Editing: {editProfile.name}
+            </Typography>
+            {editProfile.description && (
+              <Typography variant="caption" color="textSecondary">
+                {editProfile.description}
+              </Typography>
+            )}
+          </div>
+        </Box>
+      )}
 
       {/* Summary Bar */}
       <div className={classes.summaryBar}>
@@ -517,32 +646,70 @@ export const RemediationProfileBuilder = () => {
 
       <Divider style={{ margin: '24px 0' }} />
 
+      {/* Error display for launch failures */}
+      {saveError && !saveDialogOpen && (
+        <Box mb={2}>
+          <Typography color="error" variant="body2">{saveError}</Typography>
+        </Box>
+      )}
+
       {/* Action Buttons */}
       <Box display="flex" justifyContent="flex-end" style={{ gap: 16 }}>
         <Button variant="outlined" startIcon={<SaveIcon />} onClick={() => { setSaveError(null); setSaveDialogOpen(true); }}>
-          Save Remediation
+          {isEditMode ? 'Update Remediation' : 'Save Remediation'}
         </Button>
         <Button
           variant="contained"
           color="primary"
           size="large"
           startIcon={<PlayArrowIcon />}
-          onClick={() => navigate(`/compliance/execute/${jobId}`)}
-          disabled={enabledCount === 0 || !canRemediate}
+          disabled={enabledCount === 0 || !canRemediate || launching}
           title={!canRemediate ? 'You do not have permission to apply remediations' : undefined}
+          onClick={async () => {
+            setLaunching(true);
+            try {
+              // Build selections with scope included
+              const enabledSelections = failedFindings
+                .filter(f => selections[f.ruleId]?.enabled)
+                .map(f => ({
+                  ruleId: f.ruleId,
+                  enabled: true,
+                  scope: selections[f.ruleId].scope ?? 'failed_only' as const,
+                  parameters: selections[f.ruleId].parameters,
+                }));
+
+              // Save as a transient remediation profile so the execution
+              // page can load the full selections
+              const saved = await api.saveRemediationProfile({
+                name: `remediation-${jobId}-${Date.now()}`,
+                description: 'Auto-saved for immediate execution',
+                complianceProfileId: 'rhel9-stig',
+                selections: enabledSelections,
+              });
+
+              // Navigate to execution with the profile ID and scan context
+              const params = new URLSearchParams();
+              params.set('profileId', saved.id);
+              params.set('scanId', jobId ?? '');
+              navigate(`/compliance/execute/${jobId}?${params.toString()}`);
+            } catch (err) {
+              setSaveError(err instanceof Error ? err.message : 'Failed to prepare remediation');
+              setLaunching(false);
+            }
+          }}
         >
-          Apply Remediation ({enabledCount} rules, {totalAffectedHosts} hosts)
+          {launching ? 'Preparing...' : `Apply Remediation (${enabledCount} rules, ${totalAffectedHosts} hosts)`}
         </Button>
       </Box>
 
       {/* Save Remediation Dialog */}
       <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Save Remediation</DialogTitle>
+        <DialogTitle>{isEditMode ? 'Update Remediation' : 'Save Remediation'}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="textSecondary" paragraph>
-            Save your rule selections, scope choices, and parameter overrides as a
-            reusable remediation. You can find and re-apply saved remediations from the
-            Remediations tab.
+            {isEditMode
+              ? 'Update the rule selections, scope choices, and parameter overrides for this remediation.'
+              : 'Save your rule selections, scope choices, and parameter overrides as a reusable remediation. You can find and re-apply saved remediations from the Remediations tab.'}
           </Typography>
           <TextField
             label="Name"
@@ -587,6 +754,7 @@ export const RemediationProfileBuilder = () => {
                   .map(f => ({
                     ruleId: f.ruleId,
                     enabled: true,
+                    scope: selections[f.ruleId].scope ?? 'failed_only' as const,
                     parameters: selections[f.ruleId].parameters,
                   }));
 
@@ -607,7 +775,7 @@ export const RemediationProfileBuilder = () => {
               }
             }}
           >
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? 'Saving...' : (isEditMode ? 'Update' : 'Save')}
           </Button>
         </DialogActions>
       </Dialog>

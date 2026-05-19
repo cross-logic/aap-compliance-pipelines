@@ -20,7 +20,7 @@ Before compliance scanning can begin, a platform administrator must add a compli
 **Acceptance Scenarios**:
 
 1. **Given** a portal with the compliance plugin installed but no compliance profiles registered, **When** an admin navigates to Compliance > Settings, **Then** they see an empty state with instructions to add a compliance profile and an "Add Compliance Profile" button
-2. **Given** the compliance profile registration form, **When** the admin selects an Execution Environment from a dropdown populated via the AAP Gateway API, maps it to a workflow template, and provides a display name and compliance standard identifier (e.g., `rhel9-stig-v2r8`), **Then** the compliance profile is persisted to the compliance database (internally: `compliance_cartridges` table) and appears in the compliance profile list
+2. **Given** the compliance profile registration form, **When** the admin selects an Execution Environment from a dropdown populated via the AAP Gateway API, maps it to a workflow template, and provides a display name and compliance standard identifier (e.g., `rhel9-stig-v2r8`), **Then** the compliance profile is persisted to the compliance database and appears in the compliance profile list
 3. **Given** a registered compliance profile, **When** the admin views the compliance profile details, **Then** they see the EE name, workflow template name, compliance standard, creation date, and a status indicator showing whether the EE and workflow template are still accessible via the AAP Gateway
 4. **Given** one or more registered compliance profiles, **When** any user navigates to the compliance profile browser, **Then** the registered profiles appear as selectable options for launching scans
 
@@ -165,7 +165,7 @@ Automation architects need infrastructure changes (new host provisioned, configu
 
 #### Compliance Profile Registration
 
-- **FR-001**: System MUST provide a compliance profile registration interface where administrators map a compliance standard name, an Execution Environment, and an AAP workflow template into a reusable scanning configuration (internally: cartridge)
+- **FR-001**: System MUST provide a compliance profile registration interface where administrators map a compliance standard name, an Execution Environment, and an AAP workflow template into a reusable scanning configuration
 - **FR-002**: System MUST validate that the referenced EE and workflow template are accessible via the AAP Gateway API before accepting a compliance profile registration
 - **FR-003**: System MUST display registered compliance profiles with status indicators reflecting the current accessibility of the mapped EE and workflow template
 - **FR-004**: System MUST allow administrators to update or delete compliance profile registrations
@@ -224,7 +224,7 @@ Automation architects need infrastructure changes (new host provisioned, configu
 
 ### Key Entities _(include if feature involves data)_
 
-- **Compliance Profile** (internally: `ComplianceCartridge`): A registered mapping between a compliance standard, an Execution Environment, and an AAP workflow template. Attributes: display name, compliance standard identifier (e.g., `rhel9-stig-v2r8`), EE reference (id, name), workflow template reference (id, name), status (active, ee-unavailable, workflow-unavailable), created/updated timestamps
+- **Compliance Profile**: A registered mapping between a compliance standard, an Execution Environment, and an AAP workflow template. Attributes: display name, compliance standard identifier (e.g., `rhel9-stig-v2r8`), EE reference (id, name), workflow template reference (id, name), status (active, ee-unavailable, workflow-unavailable), created/updated timestamps
 - **Compliance Scan**: A single execution of a compliance assessment against target hosts. Attributes: scan ID, compliance profile reference, target inventory/host pattern, trigger source (manual, event-driven), AAP workflow job ID, status (pending, running, completed, failed, completed-with-warnings), start/end timestamps
 - **Compliance Finding**: A single rule evaluation result for a specific host. Attributes: scan reference, rule ID, rule title, description, severity (CAT I/II/III), host, compliance status (pass, fail, error, not-applicable), actual value, expected value, check type
 - **Remediation**: A saved set of remediation decisions. Attributes: name, description, tags, compliance standard, rule selections (per-rule: included/excluded, scope, parameter override, justification), creation date, last used date, associated scan IDs
@@ -250,7 +250,7 @@ Automation architects need infrastructure changes (new host provisioned, configu
 - AAP 2.6+ is deployed and accessible via the AAP Gateway URL with OAuth2 authentication configured
 - The Ansible Portal (RHDH/Backstage) is the frontend hosting environment with the compliance plugin installed as a dynamic plugin
 - ComplianceAsCode remediation content (`scap-security-guide` RPM) is available in the Execution Environment and provides the remediation playbooks — the compliance plugin does not author remediation content
-- Compliance profiles use the collection + EE packaging model (internally: cartridge model): an Ansible collection (e.g., `security.compliance_rhel9_stig`) ships an EE profile definition, and the EE Builder constructs the EE from it
+- Compliance profiles use the collection + EE packaging model: an Ansible collection (e.g., `security.compliance_rhel9_stig`) ships an EE profile definition, and the EE Builder constructs the EE from it
 - AAP workflow templates for compliance pipelines (gather, evaluate, remediate nodes) are pre-created in the Controller before compliance profile registration
 - The AAP Gateway is the sole API entry point — direct Controller API access is not used (aligns with AAP 2.7+ architecture)
 - Backstage PostgreSQL is available for compliance data persistence (findings, remediations, posture history, compliance profile registry)

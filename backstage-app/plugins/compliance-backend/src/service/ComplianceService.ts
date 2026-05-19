@@ -7,6 +7,9 @@
  */
 import { Config } from '@backstage/config';
 import { LoggerService } from '@backstage/backend-plugin-api';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'yaml';
 
 import type {
   ComplianceProfile,
@@ -40,6 +43,60 @@ const SEVERITY_MAP: Record<string, string> = {
   low: 'CAT_III',
 };
 
+interface RuleMetadata {
+  title: string;
+  description: string;
+  check_text: string;
+  fix_text: string;
+  category: string;
+  disruption: string;
+  parameters: Array<{
+    name: string;
+    label: string;
+    type: string;
+    default: unknown;
+    options?: Array<{ value: unknown; label: string }>;
+  }>;
+}
+
+function loadRulesMetadata(): Map<string, RuleMetadata> {
+  const map = new Map<string, RuleMetadata>();
+  const rulesDir = path.resolve(
+    __dirname, '..', '..', '..', '..', '..',
+    'collections', 'ansible_collections', 'security', 'compliance_rhel9_stig', 'rules',
+  );
+  try {
+    const files = fs.readdirSync(rulesDir).filter(f => f.endsWith('.yml') || f.endsWith('.yaml'));
+    for (const file of files) {
+      const content = yaml.parse(fs.readFileSync(path.join(rulesDir, file), 'utf-8'));
+      for (const rule of content?.rules ?? []) {
+        map.set(rule.id, {
+          title: rule.title ?? rule.id,
+          description: rule.description ?? '',
+          check_text: rule.check_text ?? '',
+          fix_text: rule.fix_text ?? '',
+          category: rule.category ?? '',
+          disruption: rule.disruption ?? 'low',
+          parameters: (rule.parameters ?? []).map((p: Record<string, unknown>) => ({
+            name: p.name as string,
+            label: (p.label as string) ?? (p.name as string),
+            type: (p.type as string) ?? 'text',
+            default: p.default ?? '',
+            options: p.options as Array<{ value: unknown; label: string }> | undefined,
+          })),
+        });
+      }
+    }
+  } catch (err) {
+    // Rules files not found — enrichment will be skipped.
+    // This is expected when running without the collections directory.
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('Rules metadata not loaded (collections directory not found):', err);
+    }
+  }
+  return map;
+}
+
 /**
  * Shape of a single finding from the compliance_evaluate Ansible module.
  * This is what appears in event_data.res.findings[] (Track A)
@@ -70,6 +127,7 @@ export class ComplianceService {
   private readonly controllerClient: ControllerClient | null;
   private readonly logger: LoggerService;
   private database: ComplianceDatabase | null = null;
+  private rulesMetadata: Map<string, RuleMetadata> | null = null;
 
   constructor(config: Config, logger: LoggerService) {
     this.logger = logger;
@@ -114,6 +172,14 @@ export class ComplianceService {
    */
   setDatabase(db: ComplianceDatabase): void {
     this.database = db;
+  }
+
+  private getRulesMetadata(): Map<string, RuleMetadata> {
+    if (!this.rulesMetadata) {
+      this.rulesMetadata = loadRulesMetadata();
+      this.logger.info(`Loaded ${this.rulesMetadata.size} rule metadata entries`);
+    }
+    return this.rulesMetadata;
   }
 
   // ─── Profiles ───────────────────────────────────────────────────────
@@ -275,6 +341,7 @@ export class ComplianceService {
 
   async launchRemediation(
     request: LaunchRemediationRequest,
+    findings: MultiHostFinding[],
     token?: string,
   ): Promise<LaunchRemediationResponse> {
     if (this.dataSource === 'mock') {
@@ -290,21 +357,46 @@ export class ComplianceService {
       throw new Error('No compliance remediation workflow job template found');
     }
 
+    // Build the optimized remediation plan from selections + findings
+    const plan = this.buildRemediationPlan(request.selections, findings);
+
+    // Collect all rule IDs (tags) and host limits from the plan groups
+    const allTags = plan.groups.flatMap(g => g.tags);
+    const allHosts = new Set<string>();
+    const mergedExtraVars: Record<string, unknown> = {};
+    for (const group of plan.groups) {
+      group.limit.split(',').filter(Boolean).forEach(h => allHosts.add(h));
+      Object.assign(mergedExtraVars, group.extraVars);
+    }
+
     const extraVars: Record<string, unknown> = {
       compliance_profile: request.profileId,
       remediation_selections: request.selections,
+      ...mergedExtraVars,
     };
+
+    // Build the limit string: use plan-derived hosts, or fall back to request.limit
+    const limit = allHosts.size > 0
+      ? Array.from(allHosts).join(',')
+      : request.limit;
+
+    // Build job_tags from the selected rule IDs so the CaC playbook
+    // only runs the tasks tagged with these rules (not all 300+).
+    const jobTags = allTags.length > 0 ? allTags.join(',') : undefined;
 
     this.logger.info(
       `Launching remediation workflow template ${template.id} for profile=${request.profileId}` +
-      (request.limit ? ` limit=${request.limit}` : ''),
+      ` (${allTags.length} rules, ${allHosts.size} hosts)` +
+      (limit ? ` limit=${limit}` : '') +
+      (jobTags ? ` job_tags=${jobTags}` : ''),
     );
 
     const launch = await this.controllerClient!.launchWorkflow(
       template.id,
       extraVars,
       token,
-      request.limit,
+      limit,
+      jobTags,
     );
 
     const workflowJobId = launch.workflow_job ?? launch.id;
@@ -323,8 +415,15 @@ export class ComplianceService {
       return MockDataProvider.getFindings();
     }
 
-    // In live mode, check DB for stored findings first
-    if (scanId && this.database) {
+    if (!scanId) {
+      if (this.database) {
+        const latest = await this.database.getLatestFindings();
+        if (latest.length > 0) return this.storedFindingsToMultiHost(latest);
+      }
+      return [];
+    }
+
+    if (this.database) {
       const dbFindings = await this.database.getFindingsByScanId(scanId);
       if (dbFindings.length > 0) {
         return this.storedFindingsToMultiHost(dbFindings);
@@ -578,22 +677,31 @@ export class ComplianceService {
       });
     }
 
+    const rules = this.getRulesMetadata();
     const results: MultiHostFinding[] = [];
     for (const [ruleId, entry] of byRule) {
       const passCount = entry.hosts.filter(h => h.status === 'pass').length;
       const failCount = entry.hosts.filter(h => h.status === 'fail').length;
+      const meta = rules.get(ruleId);
 
       results.push({
         ruleId,
         stigId: entry.finding.stigId,
-        title: ruleId,
-        description: '',
-        fixText: '',
-        checkText: '',
+        title: meta?.title ?? ruleId,
+        description: meta?.description ?? '',
+        fixText: meta?.fix_text ?? '',
+        checkText: meta?.check_text ?? '',
         severity: (entry.finding.severity as 'CAT_I' | 'CAT_II' | 'CAT_III') || 'CAT_II',
-        category: '',
-        disruption: 'low',
-        parameters: [],
+        category: meta?.category ?? '',
+        disruption: (meta?.disruption as 'low' | 'medium' | 'high') ?? 'low',
+        parameters: (meta?.parameters ?? []).map(p => ({
+          name: p.name,
+          label: p.label,
+          type: p.type,
+          default: p.default,
+          value: p.default,
+          options: p.options,
+        })),
         hosts: entry.hosts,
         passCount,
         failCount,
@@ -678,8 +786,10 @@ export class ComplianceService {
       const finding = findingsMap.get(sel.ruleId);
       if (!finding) continue;
 
-      // Determine target hosts based on scope (default: failed_only)
-      const scope = (sel.parameters?.scope as string) ?? 'failed_only';
+      // Determine target hosts based on scope (default: failed_only).
+      // Check the selection-level scope field first, then fall back to
+      // the legacy parameters.scope for backward compatibility.
+      const scope = sel.scope ?? (sel.parameters?.scope as string) ?? 'failed_only';
       let targetHosts: string[];
 
       if (scope === 'standardize_all') {
@@ -768,7 +878,8 @@ export class ComplianceService {
     if (this.dataSource === 'mock') {
       return MockDataProvider.getDashboardStats();
     }
-    return {
+
+    const empty: DashboardStats = {
       hostsScanned: 0,
       criticalFindings: 0,
       pendingRemediation: 0,
@@ -776,6 +887,85 @@ export class ComplianceService {
       recentScans: [],
       frameworkScores: [],
     };
+
+    if (!this.database) return empty;
+
+    try {
+      const scans = await this.database.getRecentScans(10);
+      const profiles = await this.database.listCartridges();
+      const completedScans = scans.filter(s => s.status === 'completed');
+
+      const hostsSet = new Set<string>();
+      let criticalFindings = 0;
+      let pendingRemediation = 0;
+      const profileStats = new Map<string, { pass: number; fail: number; rules: number; lastScan: string }>();
+
+      // Use only the latest completed scan per profile
+      const latestByProfile = new Map<string, typeof completedScans[0]>();
+      for (const scan of completedScans) {
+        const existing = latestByProfile.get(scan.profileId);
+        if (!existing || (scan.completedAt && scan.completedAt > (existing.completedAt || ''))) {
+          latestByProfile.set(scan.profileId, scan);
+        }
+      }
+
+      for (const scan of latestByProfile.values()) {
+        const findings = await this.database.getFindingsByScanId(scan.id);
+        const uniqueRules = new Set(findings.map(f => f.ruleId));
+        for (const f of findings) {
+          hostsSet.add(f.host);
+          if (f.status === 'fail') {
+            pendingRemediation++;
+            if (f.severity === 'CAT_I') criticalFindings++;
+          }
+        }
+
+        const pass = findings.filter(f => f.status === 'pass').length;
+        const fail = findings.filter(f => f.status === 'fail').length;
+        profileStats.set(scan.profileId, {
+          pass, fail, rules: uniqueRules.size,
+          lastScan: scan.completedAt || scan.startedAt,
+        });
+      }
+
+      const profileNameMap = new Map(profiles.map(p => [p.id, p.displayName]));
+
+      const recentScans = completedScans.slice(0, 5).map(scan => {
+        const stats = profileStats.get(scan.profileId);
+        const total = stats ? stats.pass + stats.fail : 0;
+        return {
+          id: scan.id,
+          profileName: profileNameMap.get(scan.profileId) || scan.profileId,
+          inventoryName: `Inventory ${scan.inventoryId}`,
+          passRate: total > 0 ? Math.round((stats!.pass / total) * 100) : 0,
+          timestamp: scan.completedAt || scan.startedAt,
+          status: scan.status,
+        };
+      });
+
+      const frameworkScores = Array.from(profileStats.entries()).map(([pid, stats]) => {
+        const total = stats.pass + stats.fail;
+        return {
+          name: profileNameMap.get(pid) || pid,
+          target: 'RHEL 9',
+          rules: stats.rules,
+          rate: total > 0 ? Math.round((stats.pass / total) * 100) : 0,
+          lastScan: stats.lastScan,
+        };
+      });
+
+      return {
+        hostsScanned: hostsSet.size,
+        criticalFindings,
+        pendingRemediation,
+        activeProfiles: profiles.length,
+        recentScans,
+        frameworkScores,
+      };
+    } catch (error) {
+      this.logger.warn(`Dashboard stats aggregation failed: ${error}`);
+      return empty;
+    }
   }
 
   // ─── Posture history ────────────────────────────────────────────────
@@ -787,7 +977,8 @@ export class ComplianceService {
     if (this.dataSource === 'mock') {
       return MockDataProvider.getPostureHistory(profileId, days);
     }
-    return [];
+    if (!this.database) return [];
+    return this.database.getPostureHistory(profileId, days);
   }
 
   // ─── Remediations (saved rule selections) ──────────────────────────
@@ -796,12 +987,43 @@ export class ComplianceService {
     if (this.dataSource === 'mock') {
       return MockDataProvider.getRemediationProfiles();
     }
-    return [];
+    if (!this.database) return [];
+    return this.database.listRemediationProfiles();
+  }
+
+  async getRemediationProfile(id: string): Promise<RemediationProfile | null> {
+    if (this.dataSource === 'mock') {
+      const profiles = await MockDataProvider.getRemediationProfiles();
+      return profiles.find(p => p.id === id) ?? null;
+    }
+    if (!this.database) return null;
+    return this.database.getRemediationProfile(id);
   }
 
   async saveRemediationProfile(
     request: SaveRemediationProfileRequest,
   ): Promise<RemediationProfile> {
+    // In live mode with a database, persist to the DB
+    if (this.dataSource === 'live' && this.database) {
+      const saved = await this.database.saveRemediationProfile({
+        name: request.name,
+        description: request.description,
+        profileId: request.complianceProfileId,
+        selections: request.selections,
+      });
+      return {
+        id: saved.id,
+        name: request.name,
+        description: request.description,
+        complianceProfileId: request.complianceProfileId,
+        targetInventory: '',
+        selections: request.selections,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    // In mock mode (or live mode without DB), use the in-memory mock store
     const profile: RemediationProfile = {
       id: '',
       name: request.name,

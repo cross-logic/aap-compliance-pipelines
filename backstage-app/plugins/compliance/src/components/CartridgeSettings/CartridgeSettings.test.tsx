@@ -30,6 +30,7 @@ function createMockApi(overrides: Partial<Record<string, jest.Mock>> = {}) {
     getDashboardStats: jest.fn().mockResolvedValue({ hostsScanned: 0, criticalFindings: 0, pendingRemediation: 0, activeProfiles: 0, recentScans: [], frameworkScores: [] }),
     getPostureHistory: jest.fn().mockResolvedValue([]),
     getRemediationProfiles: jest.fn().mockResolvedValue([]),
+    getRemediationProfile: jest.fn().mockResolvedValue(null),
     saveRemediationProfile: jest.fn().mockResolvedValue({ id: '1', name: 'test', description: '', complianceProfileId: '', targetInventory: '', selections: [], createdAt: '', updatedAt: '' }),
     saveCartridge: jest.fn().mockResolvedValue({}),
     deleteCartridge: jest.fn().mockResolvedValue(undefined),

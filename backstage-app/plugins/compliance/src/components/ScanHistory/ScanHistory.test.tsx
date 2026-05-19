@@ -22,6 +22,7 @@ function createMockApi(overrides: Partial<Record<string, jest.Mock>> = {}) {
     getDashboardStats: jest.fn().mockResolvedValue({ hostsScanned: 0, criticalFindings: 0, pendingRemediation: 0, activeProfiles: 0, recentScans: [], frameworkScores: [] }),
     getPostureHistory: jest.fn().mockResolvedValue([]),
     getRemediationProfiles: jest.fn().mockResolvedValue([]),
+    getRemediationProfile: jest.fn().mockResolvedValue(null),
     saveRemediationProfile: jest.fn().mockResolvedValue({ id: '1', name: 'test', description: '', complianceProfileId: '', targetInventory: '', selections: [], createdAt: '', updatedAt: '' }),
     saveCartridge: jest.fn().mockResolvedValue({}),
     deleteCartridge: jest.fn().mockResolvedValue(undefined),
@@ -75,6 +76,7 @@ describe('ScanHistory', () => {
           profileId: 'rhel9-stig',
           status: 'completed',
           scanner: 'oscap',
+          scanType: 'assessment',
           workflowJobId: 42,
           startedAt: '2025-10-01T10:00:00Z',
           completedAt: '2025-10-01T10:15:00Z',
@@ -86,6 +88,7 @@ describe('ScanHistory', () => {
           profileId: 'rhel9-cis-l1',
           status: 'failed',
           scanner: 'oscap',
+          scanType: 'verification',
           workflowJobId: 43,
           startedAt: '2025-10-02T08:00:00Z',
           completedAt: '2025-10-02T08:05:00Z',
@@ -113,6 +116,7 @@ describe('ScanHistory', () => {
           profileId: 'rhel9-stig',
           status: 'completed',
           scanner: 'oscap',
+          scanType: 'assessment',
           workflowJobId: 42,
           startedAt: '2025-10-01T10:00:00Z',
           completedAt: '2025-10-01T10:15:00Z',
@@ -125,7 +129,12 @@ describe('ScanHistory', () => {
     await renderWithApi(mockApi);
 
     await waitFor(() => {
-      expect(screen.getByText('completed')).toBeInTheDocument();
+      // "Completed" appears both as a column header and as the chip label.
+      // Use getAllByText and verify the chip instance exists.
+      const matches = screen.getAllByText('Completed');
+      // At least one should be inside a MUI Chip (the status label)
+      const chipLabel = matches.find(el => el.classList.contains('MuiChip-label'));
+      expect(chipLabel).toBeTruthy();
     });
   });
 
@@ -137,6 +146,7 @@ describe('ScanHistory', () => {
           profileId: 'rhel9-stig',
           status: 'completed',
           scanner: 'oscap',
+          scanType: 'assessment',
           workflowJobId: 42,
           startedAt: '2025-10-01T10:00:00Z',
           completedAt: '2025-10-01T10:15:00Z',

@@ -88,9 +88,12 @@ const useStyles = makeStyles(theme => ({
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: theme.spacing(1.5, 0),
+    padding: theme.spacing(1.5, 1),
     borderBottom: `1px solid ${theme.palette.divider}`,
+    borderRadius: theme.shape.borderRadius,
     '&:last-child': { borderBottom: 'none' },
+    '&:hover': { backgroundColor: theme.palette.action.hover },
+    transition: 'background-color 0.15s ease',
   },
   frameworkCard: {
     height: '100%',
@@ -130,8 +133,9 @@ export const ComplianceDashboard = () => {
   useEffect(() => {
     api.getDashboardStats()
       .then(data => setStats(data))
-      .catch(() => {
+      .catch(err => {
         // Keep null stats on error -- will show welcome state
+        console.error('Failed to load dashboard stats:', err);
       })
       .finally(() => setLoading(false));
   }, [api]);
@@ -334,7 +338,15 @@ export const ComplianceDashboard = () => {
               }
             >
               {stats.recentScans.map(scan => (
-                <div key={scan.id} className={classes.scanRow}>
+                <div
+                  key={scan.id}
+                  className={classes.scanRow}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => navigate(`results/${scan.id}`)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter') navigate(`results/${scan.id}`); }}
+                >
                   <div>
                     <Typography variant="subtitle2">{scan.profileName}</Typography>
                     <Typography variant="body2" color="textSecondary">

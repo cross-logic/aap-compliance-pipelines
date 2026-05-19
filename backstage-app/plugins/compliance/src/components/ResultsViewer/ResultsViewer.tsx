@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   InfoCard,
@@ -6,6 +6,7 @@ import {
   Progress,
 } from '@backstage/core-components';
 import { useApi } from '@backstage/core-plugin-api';
+import { ScanProgress } from '../ScanProgress';
 import {
   Typography,
   Button,
@@ -35,7 +36,7 @@ import BuildIcon from '@material-ui/icons/Build';
 import CheckCircleIcon from '@material-ui/icons/CheckCircle';
 import ErrorIcon from '@material-ui/icons/Error';
 import AssessmentIcon from '@material-ui/icons/Assessment';
-import type { FindingSeverity, MultiHostFinding } from '@aap-compliance/common';
+import type { FindingSeverity, MultiHostFinding, ComplianceScan } from '@aap-compliance/common';
 import { complianceApiRef } from '../../api';
 import { ExportButton } from './ExportButton';
 
@@ -147,26 +148,55 @@ export const ResultsViewer = () => {
   const [findings, setFindings] = useState<MultiHostFinding[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [scanType, setScanType] = useState<'assessment' | 'verification'>('assessment');
+
+  // Determine scan type from scan history
+  useEffect(() => {
+    if (!jobId) return;
+    api.getScans().then(scans => {
+      const match = scans.find(
+        s => s.id === jobId || String(s.workflowJobId) === jobId,
+      );
+      if (match?.scanType) setScanType(match.scanType);
+    }).catch(err => {
+      console.error('Failed to load scan metadata for scan type:', err);
+    });
+  }, [api, jobId]);
+
+  const isWorkflowPoll = jobId ? /^\d+$/.test(jobId) : false;
 
   useEffect(() => {
     let cancelled = false;
+    let retries = 0;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const maxRetries = 30;
+    const pollInterval = 10_000;
 
-    api.getFindings(jobId)
-      .then(data => {
-        if (!cancelled) {
-          setFindings(data);
-        }
-      })
-      .catch(err => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    const fetchFindings = () => {
+      api.getFindings(jobId)
+        .then(data => {
+          if (cancelled) return;
+          if (data.length > 0) {
+            setFindings(data);
+            setLoading(false);
+          } else if (isWorkflowPoll && retries < maxRetries) {
+            retries++;
+            timeoutId = setTimeout(fetchFindings, pollInterval);
+          } else {
+            setLoading(false);
+          }
+        })
+        .catch(err => {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : String(err));
+            setLoading(false);
+          }
+        });
+    };
 
-    return () => { cancelled = true; };
+    fetchFindings();
+
+    return () => { cancelled = true; clearTimeout(timeoutId); };
   }, [api, jobId]);
 
   const totalHosts = findings[0]?.totalCount || 0;
@@ -216,7 +246,39 @@ export const ResultsViewer = () => {
     }
   };
 
+  const [showProgress, setShowProgress] = useState(false);
+
+  useEffect(() => {
+    if (!loading || !isWorkflowPoll) return;
+    const t = setTimeout(() => setShowProgress(true), 1500);
+    return () => clearTimeout(t);
+  }, [loading, isWorkflowPoll]);
+
+  const triggerFetch = useCallback(() => {
+    api.getFindings(jobId).then(data => {
+      if (data.length > 0) {
+        setFindings(data);
+        setLoading(false);
+      }
+    }).catch(err => {
+      console.error('Failed to fetch findings after scan completion:', err);
+    });
+  }, [api, jobId]);
+
   if (loading) {
+    if (showProgress && isWorkflowPoll && jobId) {
+      return (
+        <Box p={4}>
+          <ScanProgress
+            workflowJobId={Number(jobId)}
+            onComplete={triggerFetch}
+          />
+          <Typography variant="body2" align="center" color="textSecondary">
+            Scan is running — results will appear automatically when complete.
+          </Typography>
+        </Box>
+      );
+    }
     return (
       <Box p={4}>
         <Progress />
@@ -235,7 +297,7 @@ export const ResultsViewer = () => {
           <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance')}>
             Compliance
           </Typography>
-          <Typography>Scan Results</Typography>
+          <Typography>{scanType === 'verification' ? 'Verification Results' : 'Assessment Results'}</Typography>
         </Breadcrumbs>
 
         <Box mt={2} />
@@ -269,7 +331,7 @@ export const ResultsViewer = () => {
           <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance')}>
             Compliance
           </Typography>
-          <Typography>Scan Results</Typography>
+          <Typography>{scanType === 'verification' ? 'Verification Results' : 'Assessment Results'}</Typography>
         </Breadcrumbs>
 
         <Box mt={2} />
@@ -294,7 +356,7 @@ export const ResultsViewer = () => {
         <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance')}>
           Compliance
         </Typography>
-        <Typography>Scan Results</Typography>
+        <Typography>{scanType === 'verification' ? 'Verification Results' : 'Assessment Results'}</Typography>
       </Breadcrumbs>
 
       <Box mt={2} />

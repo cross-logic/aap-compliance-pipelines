@@ -137,6 +137,7 @@ def gather_files(module):
         '/etc/crypto-policies/config', '/etc/fstab', '/etc/audit/auditd.conf',
         '/etc/audit/audit.rules', '/boot/grub2/grub.cfg', '/boot/grub2/user.cfg',
     ]
+    sensitive_files = {'/etc/shadow', '/etc/gshadow'}
     files = {}
     for path in critical_files:
         info = {'exists': os.path.exists(path)}
@@ -147,7 +148,7 @@ def gather_files(module):
                 info['uid'] = stat.st_uid
                 info['gid'] = stat.st_gid
                 info['size'] = stat.st_size
-                if os.path.isfile(path) and stat.st_size < 65536:
+                if path not in sensitive_files and os.path.isfile(path) and stat.st_size < 65536:
                     with open(path, 'r', errors='replace') as f:
                         info['content'] = f.read()
             except (OSError, IOError):

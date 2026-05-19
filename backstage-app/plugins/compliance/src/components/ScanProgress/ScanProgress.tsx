@@ -1,0 +1,253 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  StatusOK,
+  StatusError,
+  StatusRunning,
+  StatusPending,
+} from '@backstage/core-components';
+import {
+  Box,
+  Typography,
+  LinearProgress,
+  Stepper,
+  Step,
+  StepLabel,
+  Paper,
+  Chip,
+  makeStyles,
+} from '@material-ui/core';
+import { useApi } from '@backstage/core-plugin-api';
+import { complianceApiRef } from '../../api';
+
+const useStyles = makeStyles(theme => ({
+  root: {
+    marginBottom: theme.spacing(3),
+  },
+  paper: {
+    padding: theme.spacing(2, 3),
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing(1),
+  },
+  progressBar: {
+    marginTop: theme.spacing(2),
+    marginBottom: theme.spacing(1),
+    height: 8,
+    borderRadius: 4,
+  },
+  footer: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: theme.spacing(1),
+  },
+  elapsed: {
+    fontFamily: 'monospace',
+    color: theme.palette.text.secondary,
+  },
+}));
+
+const WORKFLOW_STEPS = ['Gather Facts', 'Evaluate', 'Remediate'];
+
+const NODE_IDENTIFIERS = ['gather-facts', 'evaluate', 'remediate'];
+
+interface NodeStatus {
+  identifier: string;
+  status: string;
+  jobId?: number;
+}
+
+function nodeStatusIcon(status: string) {
+  switch (status) {
+    case 'successful': return <StatusOK />;
+    case 'failed': case 'error': return <StatusError />;
+    case 'running': case 'waiting': return <StatusRunning />;
+    default: return <StatusPending />;
+  }
+}
+
+function computeProgress(nodes: NodeStatus[]): number {
+  if (nodes.length === 0) return 0;
+  let pct = 0;
+  const step = 100 / nodes.length;
+  for (const n of nodes) {
+    if (n.status === 'successful') pct += step;
+    else if (n.status === 'running' || n.status === 'waiting') pct += step * 0.5;
+    else if (n.status === 'failed' || n.status === 'error') pct += step;
+  }
+  return Math.round(pct);
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}m ${s}s`;
+}
+
+export interface ScanProgressProps {
+  workflowJobId: number;
+  profileName?: string;
+  onComplete?: () => void;
+}
+
+export const ScanProgress = ({
+  workflowJobId,
+  profileName,
+  onComplete,
+}: ScanProgressProps) => {
+  const classes = useStyles();
+  const api = useApi(complianceApiRef);
+  const [nodes, setNodes] = useState<NodeStatus[]>([]);
+  const [overallStatus, setOverallStatus] = useState('pending');
+  const [serverElapsed, setServerElapsed] = useState(0);
+  const [localElapsed, setLocalElapsed] = useState(0);
+  const [hostProgress, setHostProgress] = useState('');
+  const completeFired = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
+  // Independent 1s tick for smooth elapsed display
+  const isTerminal = ['successful', 'failed', 'error', 'canceled'].includes(overallStatus);
+  useEffect(() => {
+    if (isTerminal) return;
+    const tick = setInterval(() => setLocalElapsed(prev => prev + 1), 1000);
+    return () => clearInterval(tick);
+  }, [isTerminal]);
+
+  // Sync local elapsed with server on each poll
+  useEffect(() => {
+    setLocalElapsed(serverElapsed);
+  }, [serverElapsed]);
+
+  // Pause polling when tab is hidden
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const handler = () => setVisible(!document.hidden);
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, []);
+
+  useEffect(() => {
+    if (!visible || isTerminal) return;
+    let cancelled = false;
+
+    const pollStatus = async () => {
+      try {
+        const [status, wfNodes] = await Promise.all([
+          api.getWorkflowStatus(workflowJobId),
+          api.getWorkflowNodes(workflowJobId),
+        ]);
+
+        if (cancelled) return;
+
+        setOverallStatus(status.status);
+        setServerElapsed(status.elapsed);
+
+        const mapped: NodeStatus[] = NODE_IDENTIFIERS.map(id => {
+          const node = wfNodes.find(
+            n => n.identifier === id || n.summary_fields?.unified_job_template?.name?.toLowerCase().includes(id.replace('-', ' ')),
+          );
+          const job = node?.summary_fields?.job;
+          return {
+            identifier: id,
+            status: job?.status ?? 'pending',
+            jobId: job?.id,
+          };
+        });
+        setNodes(mapped);
+
+        const runningNode = mapped.find(n => n.status === 'running' || n.status === 'waiting');
+        if (runningNode?.jobId) {
+          try {
+            const events = await api.getJobEvents(runningNode.jobId);
+            if (!cancelled) {
+              const hosts = new Set(events.filter(e => e.host_name).map(e => e.host_name));
+              if (hosts.size > 0) {
+                const stepLabel = WORKFLOW_STEPS[NODE_IDENTIFIERS.indexOf(runningNode.identifier)] || runningNode.identifier;
+                setHostProgress(`${stepLabel}: ${hosts.size} host${hosts.size !== 1 ? 's' : ''} processed`);
+              }
+            }
+          } catch {
+            // Job events may not be available yet — expected during startup
+          }
+        }
+
+        const terminal = ['successful', 'failed', 'error', 'canceled'];
+        if (terminal.includes(status.status) && !completeFired.current) {
+          completeFired.current = true;
+          onCompleteRef.current?.();
+        }
+      } catch {
+        // API not available — will retry on next poll interval
+      }
+    };
+
+    pollStatus();
+    const interval = setInterval(pollStatus, 5_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [api, workflowJobId, visible, isTerminal]);
+
+  const terminal = ['successful', 'failed', 'error', 'canceled'];
+  if (terminal.includes(overallStatus) && nodes.every(n => terminal.includes(n.status))) {
+    return null;
+  }
+
+  const progress = computeProgress(nodes);
+  const activeStep = nodes.filter(n => n.status === 'successful' || n.status === 'failed' || n.status === 'error').length;
+
+  return (
+    <Box className={classes.root}>
+      <Paper className={classes.paper} variant="outlined">
+        <Box className={classes.header}>
+          <Typography variant="subtitle1">
+            <StatusRunning /> Active Scan{profileName ? `: ${profileName}` : ''}
+          </Typography>
+          <Chip
+            size="small"
+            label={overallStatus}
+            color={overallStatus === 'running' ? 'primary' : 'default'}
+          />
+        </Box>
+
+        <Stepper activeStep={activeStep} alternativeLabel>
+          {WORKFLOW_STEPS.map((label, i) => {
+            const node = nodes[i];
+            return (
+              <Step key={label} completed={node?.status === 'successful'}>
+                <StepLabel
+                  error={node?.status === 'failed' || node?.status === 'error'}
+                  icon={node ? nodeStatusIcon(node.status) : <StatusPending />}
+                >
+                  {label}
+                </StepLabel>
+              </Step>
+            );
+          })}
+        </Stepper>
+
+        <LinearProgress
+          variant="determinate"
+          value={progress}
+          className={classes.progressBar}
+        />
+
+        <Box className={classes.footer}>
+          <Typography variant="body2" color="textSecondary">
+            {hostProgress || `${progress}% complete`}
+          </Typography>
+          <Typography variant="body2" className={classes.elapsed}>
+            Elapsed: {formatElapsed(localElapsed)}
+          </Typography>
+        </Box>
+      </Paper>
+    </Box>
+  );
+};

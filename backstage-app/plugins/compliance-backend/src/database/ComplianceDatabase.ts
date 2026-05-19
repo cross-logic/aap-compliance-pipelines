@@ -27,6 +27,7 @@ export class ComplianceDatabase {
       profile_id: row.profileId,
       inventory_id: row.inventoryId,
       scanner: row.scanner,
+      scan_type: row.scanType || 'assessment',
       workflow_job_id: row.workflowJobId,
       status: row.status,
       started_at: row.startedAt,
@@ -100,6 +101,7 @@ export class ComplianceDatabase {
       profileId: row.profile_id as string,
       inventoryId: row.inventory_id as number,
       scanner: row.scanner as string,
+      scanType: (row.scan_type as ComplianceScan['scanType']) || 'assessment',
       workflowJobId: row.workflow_job_id as number | null,
       status: row.status as ComplianceScan['status'],
       startedAt: String(row.started_at),
@@ -140,10 +142,18 @@ export class ComplianceDatabase {
   }
 
   async getLatestFindings(profileId?: string): Promise<StoredFinding[]> {
-    // Find the most recent completed scan (optionally filtered by profile)
+    // Find the most recent scan that has findings (any status).
+    // Previously this only searched completed scans, but scans may have
+    // findings stored before their status is flipped to "completed"
+    // (the status update happens in the /findings route). This caused
+    // rule counts to show 0 until a user manually viewed the results.
     let scanQuery = this.db('compliance_scans')
-      .where('status', 'completed')
-      .orderBy('completed_at', 'desc')
+      .whereExists(
+        this.db('compliance_findings')
+          .whereRaw('compliance_findings.scan_id = compliance_scans.id')
+          .select(this.db.raw('1')),
+      )
+      .orderBy('started_at', 'desc')
       .first();
 
     if (profileId) {

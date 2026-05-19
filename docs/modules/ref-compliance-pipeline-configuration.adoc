@@ -1,0 +1,249 @@
+:_mod-docs-content-type: REFERENCE
+
+[id="ref-compliance-pipeline-configuration_{context}"]
+
+= Compliance pipeline configuration reference
+
+[role="_abstract"]
+The following tables describe the configuration settings for the compliance pipelines Backstage plugin, including `app-config.yaml` settings, environment variables, and startup options.
+
+== app-config.yaml settings
+
+The compliance plugin reads its configuration from the Backstage `app-config.yaml` file. The following settings control how the plugin connects to {PlatformNameShort} and operates.
+
+=== {PlatformNameShort} connection
+
+[cols="2,3,1,1", options="header"]
+|===
+|Setting
+|Description
+|Required or optional
+|Default
+
+|`ansible.rhaap.baseUrl`
+|The base URL of the {PlatformNameShort} gateway. All API requests to {ControllerName} are routed through this URL. Set via the `AAP_HOST` environment variable.
+|Required
+|None
+
+|`ansible.rhaap.token`
+|The API token used to authenticate with {ControllerName}. This token determines the RBAC permissions available to the plugin. Set via the `AAP_API_TOKEN` environment variable.
+|Required
+|None
+
+|`ansible.rhaap.checkSSL`
+|Whether to validate SSL/TLS certificates when connecting to {PlatformNameShort}. Set to `false` for environments with self-signed certificates.
+|Optional
+|`false`
+|===
+
+=== Compliance plugin
+
+[cols="2,3,1,1", options="header"]
+|===
+|Setting
+|Description
+|Required or optional
+|Default
+
+|`compliance.dataSource`
+|Determines the data source mode for the compliance plugin. Set to `live` to connect to a real {PlatformNameShort} instance, or `mock` to use sample data without an {PlatformNameShort} connection.
+|Optional
+|`live`
+|===
+
+=== Backend
+
+[cols="2,3,1,1", options="header"]
+|===
+|Setting
+|Description
+|Required or optional
+|Default
+
+|`backend.baseUrl`
+|The URL where the Backstage backend is accessible.
+|Required
+|`http://localhost:7007`
+
+|`backend.listen.port`
+|The port on which the Backstage backend listens.
+|Required
+|`7007`
+
+|`backend.database.client`
+|The database client used by the backend. The compliance plugin uses SQLite by default for local development.
+|Required
+|`better-sqlite3`
+
+|`backend.auth.keys[].secret`
+|A secret key used to sign backend authentication tokens. Set via the `BACKEND_SECRET` environment variable. Auto-generated if empty.
+|Required
+|None (auto-generated)
+|===
+
+=== Authentication
+
+[cols="2,3,1,1", options="header"]
+|===
+|Setting
+|Description
+|Required or optional
+|Default
+
+|`auth.signingKey`
+|Key used for signing authentication tokens. Set via the `AUTH_SIGNING_KEY` environment variable. Auto-generated if empty.
+|Optional
+|None (auto-generated)
+
+|`auth.providers.guest.dangerouslyAllowOutsideDevelopment`
+|Enables guest authentication outside of development mode. Set to `true` only for prototyping and demo environments.
+|Optional
+|`true`
+|===
+
+== Environment variables
+
+The following environment variables are used to configure the compliance pipelines plugin. Set these in a `.env` file or export them in your shell before starting the application.
+
+[cols="2,3,1,1", options="header"]
+|===
+|Variable
+|Description
+|Required or optional
+|Default
+
+|`AAP_HOST`
+|The base URL of the {PlatformNameShort} gateway (for example, `\https://aap.example.com`). Maps to `ansible.rhaap.baseUrl` in `app-config.yaml`.
+|Required for live mode
+|None
+
+|`AAP_API_TOKEN`
+|The API token for authenticating with {ControllerName}. Maps to `ansible.rhaap.token` in `app-config.yaml`.
+|Required for live mode
+|None
+
+|`AAP_AUTH_CLIENT_ID`
+|OAuth2 client ID for {PlatformNameShort} authentication. Used when configuring OAuth2 authentication instead of static tokens.
+|Optional
+|None
+
+|`AAP_AUTH_CLIENT_SECRET`
+|OAuth2 client secret for {PlatformNameShort} authentication.
+|Optional
+|None
+
+|`BACKEND_SECRET`
+|Secret key for Backstage backend authentication. Auto-generated if not set.
+|Optional
+|Auto-generated
+
+|`AUTH_SIGNING_KEY`
+|Key for signing authentication tokens. Auto-generated if not set.
+|Optional
+|Auto-generated
+
+|`GITHUB_INTEGRATION_TOKEN`
+|GitHub personal access token for Backstage GitHub integration (source control, catalog discovery).
+|Optional
+|None
+|===
+
+== .env file format
+
+Create a `.env` file in the `backstage-app/` directory to store environment-specific configuration. Use the provided `.env.example` as a starting point.
+
+[source,bash]
+----
+# Required — AAP Connection
+AAP_HOST=https://aap.example.com
+AAP_API_TOKEN=your-api-token-here
+
+# Optional — Auto-generated if empty
+BACKEND_SECRET=
+AUTH_SIGNING_KEY=
+
+# Optional — GitHub Integration
+GITHUB_INTEGRATION_TOKEN=
+----
+
+To maintain separate configurations for different environments, create multiple `.env` files (for example, `.env.lab`, `.env.production`) and specify the file when starting the application.
+
+== start.sh usage
+
+The `start.sh` script manages the Backstage application lifecycle, including starting the frontend and backend processes.
+
+[source,bash]
+----
+./bin/start.sh [mode] [env-file]
+----
+
+[cols="1,2,1", options="header"]
+|===
+|Argument
+|Description
+|Default
+
+|`mode`
+|The data source mode. Set to `live` to connect to {PlatformNameShort}, or `mock` to use sample data without an {PlatformNameShort} connection.
+|`mock`
+
+|`env-file`
+|Path to the environment file containing connection credentials.
+|`.env`
+|===
+
+=== Examples
+
+Start in mock mode with sample data (no {PlatformNameShort} connection required):
+
+[source,bash]
+----
+./bin/start.sh mock
+----
+
+Start in live mode connected to {PlatformNameShort} using the default `.env` file:
+
+[source,bash]
+----
+./bin/start.sh live
+----
+
+Start in live mode using a specific environment file:
+
+[source,bash]
+----
+./bin/start.sh live .env.lab
+----
+
+=== Additional scripts
+
+[cols="1,2", options="header"]
+|===
+|Script
+|Description
+
+|`./bin/stop.sh`
+|Stops both frontend and backend processes.
+
+|`./bin/restart.sh [mode]`
+|Restarts the application in the specified mode.
+|===
+
+=== Port assignments
+
+[cols="1,1,2", options="header"]
+|===
+|Service
+|Port
+|Description
+
+|Frontend
+|3000
+|Backstage web application
+
+|Backend
+|7007
+|Backstage backend API and compliance REST API
+|===
+
+The backend exposes the compliance API at `http://localhost:7007/api/compliance/`. The health check endpoint is available at `http://localhost:7007/api/compliance/health`.

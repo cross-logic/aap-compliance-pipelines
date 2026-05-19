@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   InfoCard,
   Breadcrumbs,
@@ -28,9 +28,9 @@ import {
 } from '@material-ui/core';
 import CheckCircleIcon from '@material-ui/icons/CheckCircle';
 import RefreshIcon from '@material-ui/icons/Refresh';
-import CompareArrowsIcon from '@material-ui/icons/CompareArrows';
 import { useApi } from '@backstage/core-plugin-api';
 import { complianceApiRef } from '../../api';
+import type { WorkflowNode, JobEvent, RemediationSelection } from '@aap-compliance/common';
 
 const useStyles = makeStyles(theme => ({
   progressSection: {
@@ -42,144 +42,317 @@ const useStyles = makeStyles(theme => ({
       borderBottom: 'none',
     },
   },
-  deltaImproved: {
-    color: theme.palette.success?.main ?? '#4caf50',
-    fontWeight: 600,
-  },
-  deltaUnchanged: {
+  elapsed: {
+    fontFamily: 'monospace',
     color: theme.palette.text.secondary,
-  },
-  comparisonCard: {
-    textAlign: 'center',
-    padding: theme.spacing(2),
-  },
-  bigNumber: {
-    fontSize: '2.5rem',
-    fontWeight: 700,
-  },
-  arrow: {
-    fontSize: '2rem',
-    color: theme.palette.text.secondary,
-    margin: theme.spacing(0, 2),
+    marginTop: theme.spacing(1),
   },
 }));
 
-type ExecutionPhase = 'preparing' | 'running' | 'verifying' | 'complete' | 'failed';
+type ExecutionPhase = 'launching' | 'preparing' | 'running' | 'verifying' | 'complete' | 'failed';
 
 const PHASES = ['Preparing', 'Remediating', 'Verifying', 'Complete'];
 
-type TaskStatus = 'pending' | 'running' | 'completed';
+/** Workflow node identifiers matching the compliance pipeline template. */
+const NODE_IDENTIFIERS = ['gather-facts', 'evaluate', 'remediate'];
+
+type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 interface RemediationTask {
   name: string;
   stigId: string;
   status: TaskStatus;
+  hosts: Array<{ host: string; status: TaskStatus }>;
 }
 
-const INITIAL_TASKS: RemediationTask[] = [
-  { name: 'Set SSH Client Alive Interval', stigId: 'V-257844', status: 'pending' },
-  { name: 'Disable SSH Root Login', stigId: 'V-257846', status: 'pending' },
-  { name: 'Set Account Session Timeout', stigId: 'V-257893', status: 'pending' },
-  { name: 'Audit DAC Permission Changes — chmod', stigId: 'V-257910', status: 'pending' },
-  { name: 'Configure System Cryptography Policy', stigId: 'V-257778', status: 'pending' },
-  { name: 'Install AIDE', stigId: 'V-257780', status: 'pending' },
-  { name: 'Set GRUB2 Boot Loader Password', stigId: 'V-257785', status: 'pending' },
-  { name: 'Disable Ctrl-Alt-Del Reboot', stigId: 'V-257790', status: 'pending' },
-  { name: 'Mount /tmp with noexec', stigId: 'V-257793', status: 'pending' },
-  { name: 'Configure Login Banner', stigId: 'V-257795', status: 'pending' },
-];
+/** Terminal statuses where the workflow will not change further. */
+const TERMINAL_STATUSES = ['successful', 'failed', 'error', 'canceled'];
+
+/**
+ * Compute overall progress percentage from workflow nodes.
+ * Each node contributes equally to the total.
+ */
+function computeProgress(nodes: Array<{ status: string }>): number {
+  if (nodes.length === 0) return 0;
+  let pct = 0;
+  const step = 100 / nodes.length;
+  for (const n of nodes) {
+    if (n.status === 'successful') pct += step;
+    else if (n.status === 'running' || n.status === 'waiting') pct += step * 0.5;
+    else if (n.status === 'failed' || n.status === 'error') pct += step;
+  }
+  return Math.round(pct);
+}
+
+/** Format seconds into human-readable elapsed time. */
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}m ${s}s`;
+}
+
+/**
+ * Extract remediation tasks from Controller job events.
+ *
+ * Maps runner events (runner_on_ok, runner_on_failed, runner_on_start, etc.)
+ * into task entries for the progress table.
+ */
+function extractTasksFromEvents(events: JobEvent[]): RemediationTask[] {
+  const taskMap = new Map<string, RemediationTask>();
+
+  for (const event of events) {
+    const taskName = (event.event_data?.task as string) || '';
+    if (!taskName) continue;
+    if (taskName.toLowerCase() === 'gathering facts') continue;
+    if (taskName.toLowerCase() === 'gather the package facts') continue;
+
+    const stigMatch = taskName.match(/V-\d+/);
+    const stigId = stigMatch ? stigMatch[0] : '';
+    const hostName = event.host_name || (event.event_data?.host as string) || '';
+
+    let hostStatus: TaskStatus = 'pending';
+    if (event.event === 'runner_on_ok' || event.event === 'runner_on_skipped') {
+      hostStatus = 'completed';
+    } else if (event.event === 'runner_on_failed' || event.event === 'runner_on_unreachable') {
+      hostStatus = 'failed';
+    } else if (event.event === 'runner_on_start') {
+      hostStatus = 'running';
+    }
+
+    const existing = taskMap.get(taskName);
+    if (!existing) {
+      taskMap.set(taskName, {
+        name: taskName,
+        stigId,
+        status: hostStatus,
+        hosts: hostName ? [{ host: hostName, status: hostStatus }] : [],
+      });
+    } else {
+      if (hostName) {
+        const existingHost = existing.hosts.find(h => h.host === hostName);
+        if (existingHost) {
+          if (existingHost.status !== 'completed' && existingHost.status !== 'failed') {
+            existingHost.status = hostStatus;
+          }
+        } else {
+          existing.hosts.push({ host: hostName, status: hostStatus });
+        }
+      }
+      const hasFailure = existing.hosts.some(h => h.status === 'failed');
+      const allDone = existing.hosts.every(h => h.status === 'completed' || h.status === 'failed');
+      if (hasFailure) existing.status = 'failed';
+      else if (allDone && existing.hosts.length > 0) existing.status = 'completed';
+      else if (existing.hosts.some(h => h.status === 'running')) existing.status = 'running';
+    }
+  }
+
+  return Array.from(taskMap.values());
+}
+
+/**
+ * Derive the execution phase from workflow status and node data.
+ */
+function derivePhase(
+  overallStatus: string,
+  nodes: Array<{ identifier: string; status: string }>,
+): ExecutionPhase {
+  if (overallStatus === 'failed' || overallStatus === 'error' || overallStatus === 'canceled') {
+    return 'failed';
+  }
+  if (overallStatus === 'successful') {
+    return 'complete';
+  }
+
+  // Check which nodes are running to determine the phase
+  const remediateNode = nodes.find(n => n.identifier === 'remediate');
+  const evaluateNode = nodes.find(n => n.identifier === 'evaluate');
+
+  if (remediateNode && (remediateNode.status === 'running' || remediateNode.status === 'successful')) {
+    return 'running';
+  }
+  if (evaluateNode && (evaluateNode.status === 'running' || evaluateNode.status === 'successful')) {
+    return 'running';
+  }
+
+  return 'preparing';
+}
 
 export const RemediationExecution = () => {
   const classes = useStyles();
   const navigate = useNavigate();
   const api = useApi(complianceApiRef);
   const { jobId } = useParams<{ jobId: string }>();
-  const [phase, setPhase] = useState<ExecutionPhase>('preparing');
+  const [searchParams] = useSearchParams();
+  const [phase, setPhase] = useState<ExecutionPhase>('launching');
   const [progress, setProgress] = useState(0);
-  const [tasks, setTasks] = useState(INITIAL_TASKS);
+  const [tasks, setTasks] = useState<RemediationTask[]>([]);
   const [workflowJobId, setWorkflowJobId] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [overallStatus, setOverallStatus] = useState('pending');
+  const completeFired = useRef(false);
 
-  // Try to launch the remediation via the backend
+  // Extract the remediation profile ID and scan ID from query params
+  // (set by the RemediationProfileBuilder when "Apply Remediation" is clicked)
+  const remediationProfileId = searchParams.get('profileId');
+  const scanId = searchParams.get('scanId') ?? jobId;
+
+  // Launch the remediation via the backend
   const launchRemediation = useCallback(async () => {
     try {
+      // Load selections from the saved remediation profile
+      let selections: RemediationSelection[] = [];
+
+      if (remediationProfileId) {
+        const profile = await api.getRemediationProfile(remediationProfileId);
+        if (profile && profile.selections.length > 0) {
+          selections = profile.selections;
+        }
+      }
+
+      if (selections.length === 0) {
+        setPhase('failed');
+        setErrorMessage(
+          'No rule selections found. Go back to the Remediation Profile Builder and select rules before applying.',
+        );
+        return;
+      }
+
       const result = await api.launchRemediation({
         profileId: 'rhel9-stig',
         inventoryId: 1,
-        selections: [],
+        selections,
+        scanId,
       });
       setWorkflowJobId(result.workflowJobId);
-    } catch {
-      // In mock mode or on error, proceed with simulated execution
+      setPhase('preparing');
+    } catch (err) {
+      setPhase('failed');
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Failed to launch remediation workflow',
+      );
     }
-  }, []);
+  }, [api, remediationProfileId, scanId]);
 
   useEffect(() => {
     launchRemediation();
   }, [launchRemediation]);
 
-  // Simulated progress animation (works in both mock and live mode as visual feedback)
+  // Poll the Controller API for real workflow progress
   useEffect(() => {
-    const timer1 = setTimeout(() => setPhase('running'), 1500);
-    const timer2 = setTimeout(() => {
-      setPhase('running');
-      setProgress(40);
-      setTasks(prev =>
-        prev.map((t, i) =>
-          i < 5
-            ? { ...t, status: 'completed' as const }
-            : i === 5
-              ? { ...t, status: 'running' as const }
-              : t,
-        ),
-      );
-    }, 3000);
-    const timer3 = setTimeout(() => {
-      setProgress(80);
-      setTasks(prev =>
-        prev.map((t, i) =>
-          i < 8
-            ? { ...t, status: 'completed' as const }
-            : i === 8
-              ? { ...t, status: 'running' as const }
-              : t,
-        ),
-      );
-    }, 5000);
-    const timer4 = setTimeout(() => {
-      setProgress(100);
-      setTasks(prev => prev.map(t => ({ ...t, status: 'completed' as const })));
-      setPhase('verifying');
-    }, 7000);
-    const timer5 = setTimeout(() => setPhase('complete'), 10000);
+    if (!workflowJobId) return undefined;
+
+    let cancelled = false;
+
+    const pollStatus = async () => {
+      try {
+        const [status, wfNodes] = await Promise.all([
+          api.getWorkflowStatus(workflowJobId),
+          api.getWorkflowNodes(workflowJobId),
+        ]);
+
+        if (cancelled) return;
+
+        setOverallStatus(status.status);
+        setElapsed(status.elapsed);
+
+        // Map workflow nodes to our tracked format
+        const mapped = NODE_IDENTIFIERS.map(id => {
+          const node = wfNodes.find(
+            (n: WorkflowNode) =>
+              n.identifier === id ||
+              n.summary_fields?.unified_job_template?.name
+                ?.toLowerCase()
+                .includes(id.replace('-', ' ')),
+          );
+          const job = node?.summary_fields?.job;
+          return {
+            identifier: id,
+            status: job?.status ?? 'pending',
+            jobId: job?.id,
+          };
+        });
+
+        // Update progress percentage
+        setProgress(computeProgress(mapped));
+
+        // Derive phase from real status
+        const derivedPhase = derivePhase(status.status, mapped);
+        setPhase(derivedPhase);
+
+        if (status.failed) {
+          setErrorMessage(`Workflow "${status.name}" failed after ${formatElapsed(status.elapsed)}`);
+        }
+
+        // Fetch task-level events from the remediate node (or any running node)
+        const remediateNode = mapped.find(n => n.identifier === 'remediate');
+        const activeNode = mapped.find(
+          n => n.status === 'running' || n.status === 'waiting',
+        );
+        const nodeForEvents = remediateNode?.jobId
+          ? remediateNode
+          : activeNode;
+
+        if (nodeForEvents?.jobId) {
+          try {
+            const events = await api.getJobEvents(nodeForEvents.jobId);
+            if (!cancelled) {
+              const extracted = extractTasksFromEvents(events);
+              if (extracted.length > 0) {
+                setTasks(extracted);
+              }
+            }
+          } catch {
+            // Job events may not be available yet
+          }
+        }
+
+        // Fire completion callback
+        if (TERMINAL_STATUSES.includes(status.status) && !completeFired.current) {
+          completeFired.current = true;
+        }
+      } catch {
+        // API not available yet -- will retry on next poll
+      }
+    };
+
+    pollStatus();
+    const interval = setInterval(pollStatus, 5_000);
 
     return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-      clearTimeout(timer4);
-      clearTimeout(timer5);
+      cancelled = true;
+      clearInterval(interval);
     };
-  }, []);
+  }, [api, workflowJobId]);
 
   const activeStep =
-    phase === 'preparing'
+    phase === 'launching' || phase === 'preparing'
       ? 0
       : phase === 'running'
         ? 1
         : phase === 'verifying'
           ? 2
-          : 3;
+          : phase === 'complete'
+            ? 3
+            : // failed -- stay at whichever step was active
+              progress < 33 ? 0 : progress < 66 ? 1 : 2;
 
-  const statusIcon = (status: 'completed' | 'running' | 'pending') => {
+  const statusIcon = (status: TaskStatus) => {
     switch (status) {
       case 'completed':
         return <StatusOK />;
+      case 'failed':
+        return <StatusError />;
       case 'running':
         return <StatusRunning />;
       case 'pending':
         return <StatusPending />;
     }
   };
+
+  const completedCount = tasks.filter(t => t.status === 'completed').length;
+  const failedCount = tasks.filter(t => t.status === 'failed').length;
 
   return (
     <>
@@ -207,9 +380,13 @@ export const RemediationExecution = () => {
           {/* Progress Stepper */}
           <Grid item xs={12}>
             <Stepper activeStep={activeStep} alternativeLabel>
-              {PHASES.map(label => (
-                <Step key={label}>
-                  <StepLabel>{label}</StepLabel>
+              {PHASES.map((label, i) => (
+                <Step key={label} completed={activeStep > i}>
+                  <StepLabel
+                    error={phase === 'failed' && activeStep === i}
+                  >
+                    {label}
+                  </StepLabel>
                 </Step>
               ))}
             </Stepper>
@@ -220,12 +397,25 @@ export const RemediationExecution = () => {
             <Grid item xs={12}>
               <InfoCard>
                 <div className={classes.progressSection}>
+                  {phase === 'launching' && (
+                    <>
+                      <Progress />
+                      <Typography variant="body1" style={{ marginTop: 16 }}>
+                        Launching remediation workflow...
+                      </Typography>
+                    </>
+                  )}
                   {phase === 'preparing' && (
                     <>
                       <Progress />
                       <Typography variant="body1" style={{ marginTop: 16 }}>
                         Preparing remediation workflow...
                       </Typography>
+                      {elapsed > 0 && (
+                        <Typography variant="body2" className={classes.elapsed}>
+                          Elapsed: {formatElapsed(elapsed)}
+                        </Typography>
+                      )}
                     </>
                   )}
                   {phase === 'running' && (
@@ -243,32 +433,31 @@ export const RemediationExecution = () => {
                         color="textSecondary"
                         style={{ marginTop: 8 }}
                       >
-                        {tasks.filter(t => t.status === 'completed').length}/
-                        {tasks.length} rules applied
+                        {tasks.length > 0
+                          ? `${completedCount}/${tasks.length} tasks complete${failedCount > 0 ? ` (${failedCount} failed)` : ''}`
+                          : `${progress}% complete`}
                       </Typography>
-                      <Box mt={2}>
-                        <Button
-                          variant="outlined"
-                          color="secondary"
-                          onClick={() => {
-                            setPhase('failed');
-                          }}
-                        >
-                          Cancel Remediation
-                        </Button>
-                      </Box>
+                      <Typography variant="body2" className={classes.elapsed}>
+                        Elapsed: {formatElapsed(elapsed)}
+                      </Typography>
                     </>
                   )}
                   {phase === 'failed' && (
                     <>
                       <Typography variant="h6" color="error" gutterBottom>
-                        Remediation Cancelled
+                        Remediation {overallStatus === 'canceled' ? 'Cancelled' : 'Failed'}
                       </Typography>
                       <Typography variant="body2" color="textSecondary">
-                        {tasks.filter(t => t.status === 'completed').length} of{' '}
-                        {tasks.length} rules were applied before cancellation.
-                        Remaining rules were not executed.
+                        {errorMessage ||
+                          (overallStatus === 'canceled'
+                            ? `${completedCount} of ${tasks.length || '?'} tasks were applied before cancellation.`
+                            : 'The remediation workflow encountered an error.')}
                       </Typography>
+                      {elapsed > 0 && (
+                        <Typography variant="body2" className={classes.elapsed}>
+                          Elapsed: {formatElapsed(elapsed)}
+                        </Typography>
+                      )}
                       <Box mt={2} display="flex" style={{ gap: 16 }} justifyContent="center">
                         <Button
                           variant="outlined"
@@ -279,7 +468,7 @@ export const RemediationExecution = () => {
                         <Button
                           variant="contained"
                           color="primary"
-                          onClick={() => navigate('/compliance/scan')}
+                          onClick={() => navigate('/compliance/scan?scanType=verification')}
                         >
                           Run Verification Scan
                         </Button>
@@ -299,7 +488,7 @@ export const RemediationExecution = () => {
             </Grid>
           )}
 
-          {/* Completion: Before/After Comparison */}
+          {/* Completion Summary */}
           {phase === 'complete' && (
             <>
               <Grid item xs={12}>
@@ -308,48 +497,27 @@ export const RemediationExecution = () => {
                   action={
                     <Chip
                       icon={<CheckCircleIcon />}
-                      label="Verified"
-                      style={{ backgroundColor: '#4caf50', color: '#fff' }}
+                      label={failedCount > 0 ? 'Completed with errors' : 'Successful'}
+                      style={{
+                        backgroundColor: failedCount > 0 ? '#ff9800' : '#4caf50',
+                        color: '#fff',
+                      }}
                     />
                   }
                 >
-                  <Grid container spacing={3} alignItems="center" justifyContent="center">
-                    <Grid item>
-                      <div className={classes.comparisonCard}>
-                        <Typography variant="caption" color="textSecondary">
-                          Before
-                        </Typography>
-                        <Typography
-                          className={classes.bigNumber}
-                          style={{ color: '#f44336' }}
-                        >
-                          73%
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          11 of 15 rules failing
-                        </Typography>
-                      </div>
-                    </Grid>
-                    <Grid item>
-                      <CompareArrowsIcon className={classes.arrow} />
-                    </Grid>
-                    <Grid item>
-                      <div className={classes.comparisonCard}>
-                        <Typography variant="caption" color="textSecondary">
-                          After
-                        </Typography>
-                        <Typography
-                          className={classes.bigNumber}
-                          style={{ color: '#4caf50' }}
-                        >
-                          93%
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          1 of 15 rules failing
-                        </Typography>
-                      </div>
-                    </Grid>
-                  </Grid>
+                  <Box textAlign="center" py={2}>
+                    <Typography variant="h6" gutterBottom>
+                      {completedCount} of {tasks.length || '?'} tasks completed successfully
+                      {failedCount > 0 && ` (${failedCount} failed)`}
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      Total elapsed time: {formatElapsed(elapsed)}
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary" style={{ marginTop: 8 }}>
+                      Run a verification scan to confirm the remediation results and
+                      see updated compliance scores.
+                    </Typography>
+                  </Box>
                 </InfoCard>
               </Grid>
 
@@ -358,9 +526,9 @@ export const RemediationExecution = () => {
                   <Button
                     variant="outlined"
                     startIcon={<RefreshIcon />}
-                    onClick={() => navigate('/compliance/scan')}
+                    onClick={() => navigate('/compliance/scan?scanType=verification')}
                   >
-                    Run Another Scan
+                    Run Verification Scan
                   </Button>
                   <Button
                     variant="contained"
@@ -375,35 +543,87 @@ export const RemediationExecution = () => {
           )}
 
           {/* Task List */}
-          <Grid item xs={12}>
-            <InfoCard title="Remediation Tasks">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Status</TableCell>
-                    <TableCell>STIG ID</TableCell>
-                    <TableCell>Rule</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {tasks.map(task => (
-                    <TableRow key={task.stigId} className={classes.taskRow}>
-                      <TableCell>{statusIcon(task.status)}</TableCell>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          style={{ fontFamily: 'monospace' }}
-                        >
-                          {task.stigId}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{task.name}</TableCell>
+          {tasks.length > 0 && (
+            <Grid item xs={12}>
+              <InfoCard title="Remediation Tasks">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell width={40}>Status</TableCell>
+                      <TableCell>Rule</TableCell>
+                      <TableCell>Hosts</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </InfoCard>
-          </Grid>
+                  </TableHead>
+                  <TableBody>
+                    {tasks.map((task, idx) => (
+                      <TableRow key={`${task.name}-${idx}`} className={classes.taskRow}>
+                        <TableCell>{statusIcon(task.status)}</TableCell>
+                        <TableCell>
+                          <Typography variant="body2" style={{ fontWeight: 500 }}>
+                            {task.name}
+                          </Typography>
+                          {task.stigId && (
+                            <Typography variant="caption" color="textSecondary" style={{ fontFamily: 'monospace' }}>
+                              {task.stigId}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {task.hosts.length > 0 ? (
+                            <Box display="flex" flexWrap="wrap" style={{ gap: 4 }}>
+                              {task.hosts.map(h => (
+                                <Chip
+                                  key={h.host}
+                                  size="small"
+                                  label={h.host}
+                                  variant="outlined"
+                                  style={{
+                                    borderColor: h.status === 'failed' ? '#C9190B'
+                                      : h.status === 'completed' ? '#3E8635'
+                                      : undefined,
+                                    color: h.status === 'failed' ? '#C9190B'
+                                      : h.status === 'completed' ? '#3E8635'
+                                      : undefined,
+                                  }}
+                                />
+                              ))}
+                            </Box>
+                          ) : (
+                            <Typography variant="body2" color="textSecondary">—</Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </InfoCard>
+            </Grid>
+          )}
+
+          {/* Empty task list placeholder while waiting for events */}
+          {tasks.length === 0 && (phase === 'preparing' || phase === 'launching') && (
+            <Grid item xs={12}>
+              <InfoCard title="Remediation Tasks">
+                <Box p={3} textAlign="center">
+                  <Typography variant="body2" color="textSecondary">
+                    Waiting for workflow to start...
+                  </Typography>
+                </Box>
+              </InfoCard>
+            </Grid>
+          )}
+
+          {tasks.length === 0 && phase === 'running' && (
+            <Grid item xs={12}>
+              <InfoCard title="Remediation Tasks">
+                <Box p={3} textAlign="center">
+                  <Typography variant="body2" color="textSecondary">
+                    Collecting task events from the automation controller...
+                  </Typography>
+                </Box>
+              </InfoCard>
+            </Grid>
+          )}
         </Grid>
     </>
   );

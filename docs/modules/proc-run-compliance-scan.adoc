@@ -1,0 +1,127 @@
+:_mod-docs-content-type: PROCEDURE
+
+[id="proc-run-compliance-scan_{context}"]
+
+= Running a compliance scan
+
+[role="_abstract"]
+
+Use the compliance pipelines plugin to scan managed hosts against a compliance standard, review findings, build a remediation profile, and apply remediations through {ControllerName} workflows.
+
+.Prerequisites
+
+* A compliance pipeline is configured on your {PlatformNameShort} instance. For more information, see xref:proc-configure-compliance-pipeline_{context}[Configuring a compliance pipeline].
+* At least one compliance profile is registered in the plugin *Settings* tab.
+* Target hosts are added to an inventory in {ControllerName} and are accessible over the Receptor mesh.
+* The compliance {ExecEnvShort} is registered and available on your execution nodes.
+
+.Procedure
+
+. Register a compliance profile.
++
+If you have not already registered a compliance profile, navigate to the *Settings* tab in the compliance plugin.
++
+Click *Add Profile* and configure the following:
++
+[cols="1,2", options="header"]
+|===
+|Field
+|Description
+
+|Profile Name
+|A descriptive name for the compliance standard (for example, `RHEL 9 DISA STIG V2R8`).
+
+|Workflow Template
+|The workflow job template in {ControllerName} that orchestrates the scan-remediate-verify cycle.
+
+|Execution Environment
+|The {ExecEnvShort} containing the scanner and compliance content.
+
+|Framework
+|The compliance framework identifier (for example, `DISA STIG`, `CIS Benchmark`).
+|===
++
+Click *Save*. The profile appears in the *Profiles* tab.
+
+. Launch an assessment scan.
++
+Navigate to the *New Scan* tab.
++
+Configure the scan parameters:
++
+.. Select the compliance profile to scan against.
+.. Select or confirm the target inventory.
+.. Optionally, set a host limit to scope the scan to specific hosts.
+.. Click *Launch Scan*.
++
+The plugin submits a workflow launch request to {ControllerName}. You are redirected to the scan progress view.
+
+. Monitor the scan progress.
++
+The scan progress view displays the status of each workflow node (scan, remediate, verify) in real time. The plugin polls the {ControllerName} API for status updates.
++
+Wait for the scan workflow to reach a terminal state (*Successful*, *Failed*, or *Canceled*).
+
+. View scan results.
++
+After the scan completes, navigate to the *Results* tab.
++
+The results list shows all completed scans with the following information:
++
+* Scan date and duration
+* Compliance profile used
+* Overall pass/fail ratio
+* Number of hosts scanned
++
+Click a scan result to open the detailed results viewer. The results viewer displays:
++
+* Per-rule findings organized by severity (High, Medium, Low)
+* Pass, fail, error, and not-applicable counts
+* Per-host breakdown of findings
+* Links to the full XCCDF report
+
+. Build a remediation profile.
++
+From the results viewer, click *Build Remediation*.
++
+The remediation profile builder displays all failed rules from the scan. For each rule, you can:
++
+.. *Toggle rules on or off* -- Select which rules to include in the remediation. Rules that may cause service disruption are flagged with a warning.
+.. *Customize parameters* -- Override default remediation parameters for specific rules (for example, password length, audit log retention period).
+.. *Set scope* -- Choose which hosts to remediate (all hosts from the scan, or a subset).
+
+. Save the remediation profile.
++
+After configuring your rule selections and parameters, enter a name and description for the remediation profile.
++
+Click *Save Remediation*. The saved remediation appears in the *Remediations* tab and can be reused for future remediation runs.
+
+. Apply the remediation.
++
+From the *Remediations* tab, select the remediation profile you saved and click *Execute*.
++
+Alternatively, from the results viewer, click *Execute Remediation* to launch the remediation immediately without saving a profile.
++
+The plugin launches the remediation workflow in {ControllerName}, passing the selected rules and custom parameters as extra variables.
++
+[IMPORTANT]
+====
+Remediation modifies the configuration of target hosts. Review the selected rules and parameters before executing. Ensure you have a rollback plan for production systems.
+====
+
+. Run a verification scan.
++
+After the remediation completes, return to the *New Scan* tab and launch a verification scan against the same hosts and compliance profile.
++
+Compare the verification scan results with the original scan to confirm that the remediated rules now pass.
+
+.Verification
+
+* In the *Results* tab, confirm that the verification scan shows an improved pass rate compared to the initial assessment scan.
+* For each rule that was remediated, verify that the finding status changed from *fail* to *pass* in the verification scan results.
+
+[role="_additional-resources"]
+.Additional resources
+
+* xref:con-about-compliance-pipelines_{context}[About compliance pipelines]
+* xref:ref-compliance-pipeline-resources_{context}[Compliance pipeline {ControllerName} resources]

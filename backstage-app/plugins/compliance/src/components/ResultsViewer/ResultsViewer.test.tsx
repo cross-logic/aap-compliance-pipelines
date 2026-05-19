@@ -68,7 +68,7 @@ describe('ResultsViewer', () => {
   it('displays scan results title', async () => {
     await renderResults();
     await waitFor(() => {
-      expect(screen.getByText('Scan Results')).toBeInTheDocument();
+      expect(screen.getByText('Assessment Results')).toBeInTheDocument();
     });
   });
 
@@ -90,11 +90,18 @@ describe('ResultsViewer', () => {
   });
 
   it('shows empty state when there are no findings', async () => {
+    jest.useFakeTimers();
     mockApi.getFindings.mockResolvedValue([]);
     await renderResults();
+    // Advance past the polling retries
+    for (let i = 0; i < 31; i++) {
+      jest.advanceTimersByTime(10_000);
+      await Promise.resolve();
+    }
     await waitFor(() => {
       expect(screen.getByText('No scan results yet')).toBeInTheDocument();
     });
+    jest.useRealTimers();
   });
 
   it('shows error state when API fails', async () => {

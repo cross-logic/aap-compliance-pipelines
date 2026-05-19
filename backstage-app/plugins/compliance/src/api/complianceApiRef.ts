@@ -42,6 +42,7 @@ export interface ComplianceApi {
   getDashboardStats(): Promise<DashboardStats>;
   getPostureHistory(profileId?: string, days?: number): Promise<PostureSnapshot[]>;
   getRemediationProfiles(): Promise<RemediationProfile[]>;
+  getRemediationProfile(id: string): Promise<RemediationProfile | null>;
   saveRemediationProfile(body: SaveRemediationProfileRequest): Promise<RemediationProfile>;
   getCartridges(): Promise<ComplianceCartridge[]>;
   saveCartridge(body: SaveCartridgeRequest): Promise<ComplianceCartridge>;

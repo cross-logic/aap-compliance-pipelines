@@ -10,6 +10,7 @@ export interface LaunchScanRequest {
   profileId: string;
   inventoryId: number;
   evaluateOnly: boolean;
+  scanType?: 'assessment' | 'verification';
   limit?: string;
   workflowTemplateId?: number;
 }
@@ -27,6 +28,8 @@ export interface LaunchRemediationRequest {
   inventoryId: number;
   selections: RemediationSelection[];
   limit?: string;
+  /** Scan ID to load findings from, used to build the remediation plan. */
+  scanId?: string;
 }
 
 /** Response from launching remediation. */
@@ -54,6 +57,7 @@ export interface ComplianceScan {
   profileId: string;
   inventoryId: number;
   scanner: string;
+  scanType: 'assessment' | 'verification';
   workflowJobId: number | null;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   startedAt: string;
@@ -125,6 +129,11 @@ export interface WorkflowNode {
       status: string;
       type: string;
     };
+    unified_job_template?: {
+      id: number;
+      name: string;
+      unified_job_type: string;
+    };
   };
   identifier: string;
 }
@@ -184,6 +193,7 @@ export interface ComplianceCartridge {
   eeId: number | null;
   remediationPlaybookPath: string;
   scanTags: string;
+  ruleCount?: number;
   createdAt: string;
   updatedAt: string;
 }
