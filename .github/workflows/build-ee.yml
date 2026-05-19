@@ -46,11 +46,13 @@ jobs:
 
       - name: Build EE
         run: |
-          mkdir -p $COLLECTION_DIR/_build/collections/ansible_collections/security
-          rsync -a --exclude='_build' $COLLECTION_DIR/ $COLLECTION_DIR/_build/collections/ansible_collections/security/compliance_rhel9_stig/
-          cd $COLLECTION_DIR
+          BUILD_DIR=$(mktemp -d)
+          mkdir -p $BUILD_DIR/_build/collections/ansible_collections/security
+          cp -r $COLLECTION_DIR $BUILD_DIR/_build/collections/ansible_collections/security/compliance_rhel9_stig
+          cp $COLLECTION_DIR/meta/ee_profile.yml $BUILD_DIR/execution-environment.yml
+          cd $BUILD_DIR
           ansible-builder build \
-            -f meta/ee_profile.yml \
+            -f execution-environment.yml \
             -t $IMAGE_NAME:latest \
             --container-runtime docker \
             -v 3
