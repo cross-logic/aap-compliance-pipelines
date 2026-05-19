@@ -221,7 +221,10 @@ def gather_mounts(module):
 
 def gather_audit_rules(module):
     """Gather active audit rules from auditctl."""
-    rc, stdout, stderr = module.run_command(['auditctl', '-l'])
+    auditctl = module.get_bin_path('auditctl')
+    if not auditctl:
+        return []
+    rc, stdout, stderr = module.run_command([auditctl, '-l'])
     rules = []
     if rc == 0:
         rules = [line.strip() for line in stdout.strip().split('\n') if line.strip()]
@@ -274,14 +277,21 @@ def gather_pam_config(module):
 
 def gather_crypto_policy(module):
     """Gather current system-wide cryptographic policy."""
-    rc, stdout, stderr = module.run_command(['update-crypto-policies', '--show'])
+    bin_path = module.get_bin_path('update-crypto-policies')
+    if not bin_path:
+        return {'current': 'unknown'}
+    rc, stdout, stderr = module.run_command([bin_path, '--show'])
     return {'current': stdout.strip() if rc == 0 else 'unknown'}
 
 
 def gather_selinux(module):
     """Gather SELinux enforcement mode and configuration."""
-    rc, stdout, stderr = module.run_command(['getenforce'])
-    mode = stdout.strip() if rc == 0 else 'unknown'
+    getenforce = module.get_bin_path('getenforce')
+    if getenforce:
+        rc, stdout, stderr = module.run_command([getenforce])
+        mode = stdout.strip() if rc == 0 else 'unknown'
+    else:
+        mode = 'unknown'
     config = {}
     try:
         with open('/etc/selinux/config', 'r') as f:
@@ -296,8 +306,11 @@ def gather_selinux(module):
 
 def gather_firewall(module):
     """Gather firewalld public zone configuration."""
-    rc, stdout, stderr = module.run_command(['firewall-cmd', '--list-all', '--zone=public'])
-    return {'public_zone': stdout.strip() if rc == 0 else 'unavailable'}
+    firewall_cmd = module.get_bin_path('firewall-cmd')
+    if not firewall_cmd:
+        return {'public_zone': 'unavailable', 'installed': False}
+    rc, stdout, stderr = module.run_command([firewall_cmd, '--list-all', '--zone=public'])
+    return {'public_zone': stdout.strip() if rc == 0 else 'unavailable', 'installed': True}
 
 
 def gather_grub(module):
