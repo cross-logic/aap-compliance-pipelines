@@ -34,14 +34,14 @@ dependencies:
     collections:
       - name: ansible.posix
   python: []
-  system:
-    - scap-security-guide
-    - openscap-scanner
+  system: []
 
 additional_build_steps:
   prepend_galaxy:
     - COPY _build/collections/ /usr/share/ansible/collections/
+  prepend_system:
+    - RUN microdnf install -y --enablerepo=ubi-9-appstream-rpms --enablerepo=ubi-9-baseos-rpms scap-security-guide openscap-scanner && microdnf clean all
   append_final:
-    - RUN rpm -q scap-security-guide openscap-scanner openscap-utils
+    - RUN rpm -q scap-security-guide openscap-scanner
     - RUN test -f /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml
     - RUN test -f /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
