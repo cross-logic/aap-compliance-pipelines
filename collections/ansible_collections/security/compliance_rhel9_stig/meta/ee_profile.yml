@@ -39,7 +39,7 @@ dependencies:
 additional_build_steps:
   prepend_galaxy:
     - COPY _build/collections/ /usr/share/ansible/collections/
-  prepend_system:
+  prepend_final:
     - RUN microdnf install -y --enablerepo=ubi-9-appstream-rpms --enablerepo=ubi-9-baseos-rpms scap-security-guide openscap-scanner && microdnf clean all
   append_final:
     - RUN rpm -q scap-security-guide openscap-scanner
