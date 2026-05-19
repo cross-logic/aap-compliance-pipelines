@@ -39,12 +39,8 @@ dependencies:
 
 additional_build_steps:
   prepend_galaxy:
-    # Install the compliance collection from the local source
-    # (not published to Galaxy/Hub yet)
     - COPY _build/collections/ /usr/share/ansible/collections/
   append_final:
-    - RUN echo "=== Compliance EE Build Info ==="
-    - RUN echo "scap-security-guide: $(rpm -q scap-security-guide)"
-    - RUN echo "openscap-scanner: $(rpm -q openscap-scanner)"
-    - RUN ls /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml && echo "CaC remediation playbook: present" || echo "CaC remediation playbook: MISSING"
-    - RUN ls /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml && echo "SCAP data stream: present" || echo "SCAP data stream: MISSING"
+    - RUN rpm -q scap-security-guide openscap-scanner openscap-utils
+    - RUN test -f /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml
+    - RUN test -f /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
