@@ -54,8 +54,8 @@ jobs:
             -v 3
           mkdir -p context/_build/collections/ansible_collections/security
           cp -r $GITHUB_WORKSPACE/$COLLECTION_DIR context/_build/collections/ansible_collections/security/compliance_rhel9_stig
-          cd context
-          docker build -f Dockerfile -t $IMAGE_NAME:latest .
+          ls context/  # debug: show what ansible-builder generated
+          docker build -t $IMAGE_NAME:latest context
 
       - name: Tag with SHA
         run: docker tag $IMAGE_NAME:latest $IMAGE_NAME:${{ github.sha }}
