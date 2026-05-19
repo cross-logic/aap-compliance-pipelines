@@ -46,9 +46,9 @@ jobs:
 
       - name: Build EE
         run: |
+          mkdir -p $COLLECTION_DIR/_build/collections/ansible_collections/security
+          rsync -a --exclude='_build' $COLLECTION_DIR/ $COLLECTION_DIR/_build/collections/ansible_collections/security/compliance_rhel9_stig/
           cd $COLLECTION_DIR
-          mkdir -p _build/collections/ansible_collections/security
-          cp -r . _build/collections/ansible_collections/security/compliance_rhel9_stig
           ansible-builder build \
             -f meta/ee_profile.yml \
             -t $IMAGE_NAME:latest \
