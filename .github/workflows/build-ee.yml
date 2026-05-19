@@ -47,15 +47,15 @@ jobs:
       - name: Build EE
         run: |
           BUILD_DIR=$(mktemp -d)
-          mkdir -p $BUILD_DIR/_build/collections/ansible_collections/security
-          cp -r $COLLECTION_DIR $BUILD_DIR/_build/collections/ansible_collections/security/compliance_rhel9_stig
           cp $COLLECTION_DIR/meta/ee_profile.yml $BUILD_DIR/execution-environment.yml
           cd $BUILD_DIR
-          ansible-builder build \
+          ansible-builder create \
             -f execution-environment.yml \
-            -t $IMAGE_NAME:latest \
-            --container-runtime docker \
             -v 3
+          mkdir -p context/_build/collections/ansible_collections/security
+          cp -r $GITHUB_WORKSPACE/$COLLECTION_DIR context/_build/collections/ansible_collections/security/compliance_rhel9_stig
+          cd context
+          docker build -f Dockerfile -t $IMAGE_NAME:latest .
 
       - name: Tag with SHA
         run: docker tag $IMAGE_NAME:latest $IMAGE_NAME:${{ github.sha }}
