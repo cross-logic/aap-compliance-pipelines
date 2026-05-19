@@ -37,7 +37,6 @@ dependencies:
   system:
     - scap-security-guide
     - openscap-scanner
-    - openscap-utils
 
 additional_build_steps:
   prepend_galaxy:
