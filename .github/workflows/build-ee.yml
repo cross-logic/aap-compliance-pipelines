@@ -67,8 +67,8 @@ jobs:
       - name: Verify scap-security-guide
         run: |
           docker run --rm $IMAGE_NAME:latest \
-            rpm -q scap-security-guide openscap-scanner openscap-utils
+            rpm -q scap-security-guide openscap-scanner
           docker run --rm $IMAGE_NAME:latest \
-            ls /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml
+            test -f /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml
           docker run --rm $IMAGE_NAME:latest \
             ansible-galaxy collection list security.compliance_rhel9_stig
