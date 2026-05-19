@@ -44,17 +44,13 @@ jobs:
           username: ${{ secrets.REDHAT_REGISTRY_USER }}
           password: ${{ secrets.REDHAT_REGISTRY_TOKEN }}
 
-      - name: Prepare build context
-        run: |
-          mkdir -p build/ee/_build/collections/ansible_collections/security
-          cp -r $COLLECTION_DIR build/ee/_build/collections/ansible_collections/security/compliance_rhel9_stig
-          cp $COLLECTION_DIR/meta/ee_profile.yml build/ee/execution-environment.yml
-
       - name: Build EE
         run: |
-          cd build/ee
+          cd $COLLECTION_DIR
+          mkdir -p _build/collections/ansible_collections/security
+          cp -r . _build/collections/ansible_collections/security/compliance_rhel9_stig
           ansible-builder build \
-            -f execution-environment.yml \
+            -f meta/ee_profile.yml \
             -t $IMAGE_NAME:latest \
             --container-runtime docker \
             -v 3
