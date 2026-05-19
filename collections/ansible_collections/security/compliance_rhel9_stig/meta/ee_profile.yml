@@ -20,7 +20,7 @@
 version: 3
 
 build_arg_defaults:
-  ANSIBLE_GALAXY_CLI_COLLECTION_OPTS: ''
+  ANSIBLE_GALAXY_CLI_COLLECTION_OPTS: '--pre'
 
 images:
   base_image:
@@ -30,7 +30,6 @@ dependencies:
   galaxy:
     collections:
       - name: ansible.posix
-      - name: redhat.rhel_system_roles
   python: []
   system:
     - scap-security-guide
