@@ -33,6 +33,7 @@ dependencies:
   galaxy:
     collections:
       - name: ansible.posix
+      - name: community.general
   python: []
   system: []
 
