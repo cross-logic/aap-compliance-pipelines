@@ -24,7 +24,7 @@ build_arg_defaults:
 
 images:
   base_image:
-    name: registry.redhat.io/ansible-automation-platform-26/ee-minimal-rhel9:latest
+    name: registry.redhat.io/ansible-automation-platform-26/ee-supported-rhel9:latest
 
 dependencies:
   galaxy:
