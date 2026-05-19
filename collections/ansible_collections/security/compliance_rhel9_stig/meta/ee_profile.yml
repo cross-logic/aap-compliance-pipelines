@@ -21,7 +21,9 @@ version: 3
 
 build_arg_defaults:
   ANSIBLE_GALAXY_CLI_COLLECTION_OPTS: '--pre'
-  PKGMGR: /usr/bin/microdnf
+
+options:
+  package_manager_path: /usr/bin/microdnf
 
 images:
   base_image:
