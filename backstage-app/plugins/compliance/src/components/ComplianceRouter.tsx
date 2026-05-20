@@ -17,6 +17,7 @@ import { RemediationExecution } from './RemediationExecution';
 import { CartridgeSettings } from './CartridgeSettings';
 import { RemediationsList } from './RemediationsList';
 import { ScanHistory } from './ScanHistory';
+import { ActiveJobsBanner } from './ActiveJobsBanner';
 
 /**
  * Error boundary for the Compliance tab.
@@ -114,6 +115,7 @@ const ComplianceRouter = () => {
         onChange={handleTabChange}
         tabs={TABS}
       />
+      <ActiveJobsBanner />
       <Content>
         <ComplianceErrorBoundary>
           <Routes>

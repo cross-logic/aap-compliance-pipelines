@@ -1,23 +1,49 @@
 ---
 # Compliance: Apply CaC STIG remediation
 #
-# This playbook imports the ComplianceAsCode (CaC) remediation playbook
+# This playbook wraps the ComplianceAsCode (CaC) remediation playbook
 # that ships with the scap-security-guide RPM inside the Execution
-# Environment. It replaces the previous hand-written task list.
+# Environment.
 #
-# How selective remediation works in Controller:
-#   --tags:       comma-separated rule IDs from the Remediation Profile Builder
-#   --extra-vars: parameter overrides (e.g., var_accounts_tmout: 900)
-#   --limit:      target hosts from the remediation scope selection
+# It accepts `remediation_rules` as an extra_var (comma-separated rule
+# IDs) so that the compliance workflow can pass scoped tags without
+# relying on workflow-level job_tags, which don't propagate to child
+# job templates in AAP.
+#
+# Variables (passed via extra_vars from the workflow):
+#   remediation_rules:      comma-separated CaC rule IDs (tags)
+#                            e.g. "sshd_set_idle_timeout,accounts_tmout"
+#                            When empty or undefined, full remediation runs.
+#   remediation_extra_vars: dict of CaC variable overrides
+#                            e.g. { var_accounts_tmout: 900 }
 #
 # The CaC playbook is maintained by Red Hat as part of scap-security-guide.
 # DISA releases quarterly STIG updates -> Red Hat updates the RPM -> rebuild EE.
-#
-# Default variables defined in the CaC playbook can be overridden via
-# --extra-vars from the Remediation Profile Builder UI, for example:
-#   var_accounts_tmout: 600
-#   var_system_crypto_policy: "FIPS:STIG"
-#   var_sshd_set_keepalive: 600
-#
+
 - name: "Compliance: Apply CaC STIG remediation"
-  ansible.builtin.import_playbook: /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    remediation_rules: ""
+    remediation_extra_vars: {}
+  tasks:
+    - name: Build remediation command
+      ansible.builtin.set_fact:
+        _remediation_cmd: >-
+          ansible-playbook
+          /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml
+          --connection=local
+          --become
+          -i localhost,
+          {{ ('--tags ' + remediation_rules) if (remediation_rules | length > 0) else '' }}
+        _extra_var_args: >-
+          {% for key, value in remediation_extra_vars.items() %}
+          -e {{ key }}={{ value }}
+          {% endfor %}
+
+    - name: Apply STIG remediation
+      ansible.builtin.command:
+        cmd: "{{ _remediation_cmd }} {{ _extra_var_args }}"
+      register: _result
+      changed_when: "'changed=' in _result.stdout"

@@ -348,19 +348,14 @@ export class ComplianceService {
       return MockDataProvider.launchRemediation();
     }
 
-    const templates = await this.controllerClient!.listWorkflowJobTemplates('compliance', token);
-    const template = templates.results.find(t =>
-      t.name.toLowerCase().includes('remediat'),
-    ) ?? templates.results[0];
-
-    if (!template) {
-      throw new Error('No compliance remediation workflow job template found');
-    }
-
     // Build the optimized remediation plan from selections + findings
     const plan = this.buildRemediationPlan(request.selections, findings);
 
-    // Collect all rule IDs (tags) and host limits from the plan groups
+    // Collect all rule IDs and host limits from the plan groups.
+    // Instead of using job_tags (which don't propagate from workflows to
+    // child JTs in AAP), pass the rule IDs as extra_vars. The remediate
+    // playbook reads `remediation_rules` and runs the CaC playbook with
+    // --tags internally.
     const allTags = plan.groups.flatMap(g => g.tags);
     const allHosts = new Set<string>();
     const mergedExtraVars: Record<string, unknown> = {};
@@ -371,32 +366,35 @@ export class ComplianceService {
 
     const extraVars: Record<string, unknown> = {
       compliance_profile: request.profileId,
-      remediation_selections: request.selections,
-      ...mergedExtraVars,
+      evaluate_only: false,
+      remediation_rules: allTags.length > 0 ? allTags.join(',') : '',
+      remediation_extra_vars: mergedExtraVars,
     };
 
-    // Build the limit string: use plan-derived hosts, or fall back to request.limit
     const limit = allHosts.size > 0
       ? Array.from(allHosts).join(',')
       : request.limit;
 
-    // Build job_tags from the selected rule IDs so the CaC playbook
-    // only runs the tasks tagged with these rules (not all 300+).
-    const jobTags = allTags.length > 0 ? allTags.join(',') : undefined;
+    // Launch the workflow (not the JT directly). The remediate playbook
+    // reads remediation_rules from extra_vars and applies --tags locally.
+    const resolvedTemplateId = await this.resolveWorkflowTemplateId(
+      request.profileId,
+      undefined,
+      token,
+    );
 
     this.logger.info(
-      `Launching remediation workflow template ${template.id} for profile=${request.profileId}` +
+      `Launching workflow ${resolvedTemplateId} for remediation profile=${request.profileId}` +
       ` (${allTags.length} rules, ${allHosts.size} hosts)` +
       (limit ? ` limit=${limit}` : '') +
-      (jobTags ? ` job_tags=${jobTags}` : ''),
+      ` remediation_rules=${allTags.join(',')}`,
     );
 
     const launch = await this.controllerClient!.launchWorkflow(
-      template.id,
+      resolvedTemplateId,
       extraVars,
       token,
       limit,
-      jobTags,
     );
 
     const workflowJobId = launch.workflow_job ?? launch.id;
@@ -730,6 +728,28 @@ export class ComplianceService {
     return this.controllerClient!.getWorkflowJobStatus(jobId, token);
   }
 
+  async getJobStatus(jobId: number, token?: string): Promise<WorkflowJobStatus> {
+    if (this.dataSource === 'mock') {
+      return {
+        id: jobId,
+        status: 'successful',
+        finished: new Date().toISOString(),
+        failed: false,
+        elapsed: 30.0,
+        name: 'compliance-remediate-mock',
+      };
+    }
+    const result = await this.controllerClient!.getJobStatus(jobId, token);
+    return {
+      id: result.id,
+      status: result.status,
+      finished: result.finished,
+      failed: result.failed,
+      elapsed: result.elapsed,
+      name: `job-${result.id}`,
+    };
+  }
+
   async getWorkflowNodes(
     jobId: number,
     token?: string,
@@ -940,6 +960,7 @@ export class ComplianceService {
           passRate: total > 0 ? Math.round((stats!.pass / total) * 100) : 0,
           timestamp: scan.completedAt || scan.startedAt,
           status: scan.status,
+          scanType: scan.scanType,
         };
       });
 
@@ -1035,5 +1056,12 @@ export class ComplianceService {
       updatedAt: new Date().toISOString(),
     };
     return MockDataProvider.saveRemediationProfile(profile);
+  }
+
+  async deleteRemediationProfile(id: string): Promise<boolean> {
+    if (this.dataSource === 'live' && this.database) {
+      return this.database.deleteRemediationProfile(id);
+    }
+    return MockDataProvider.deleteRemediationProfile(id);
   }
 }
