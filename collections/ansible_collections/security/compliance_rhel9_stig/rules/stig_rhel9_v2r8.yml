@@ -1,4 +1,16 @@
 ---
+# DISA STIG for RHEL 9 — Rule Definitions
+#
+# IMPORTANT: Rule titles MUST match the CaC (ComplianceAsCode) remediation
+# playbook's task name prefixes. The compliance dashboard uses title-prefix
+# matching to group remediation tasks under their parent rule.
+#
+# Convention: CaC tasks follow the pattern "Rule Title - Subtask Description".
+# The title field here must match the "Rule Title" portion exactly.
+#
+# Source: /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml
+# Reference: https://github.com/ComplianceAsCode/content
+
 profile:
   id: stig_rhel9_v2r8
   name: DISA STIG for RHEL 9
@@ -46,7 +58,7 @@ rules:
 
   - id: enable_fips_mode
     stig_id: V-257777
-    title: Enable FIPS 140-3 Mode
+    title: Enable FIPS Mode
     severity: high
     category: System and Communications Protection
     disruption: high
@@ -60,7 +72,7 @@ rules:
 
   - id: accounts_tmout
     stig_id: V-257893
-    title: Set Account Session Timeout
+    title: Set Interactive Session Timeout
     severity: medium
     category: Access Control
     disruption: low
@@ -80,7 +92,7 @@ rules:
 
   - id: package_aide_installed
     stig_id: V-257780
-    title: Install AIDE
+    title: Ensure aide is installed
     severity: medium
     category: System and Information Integrity
     disruption: low
@@ -108,7 +120,7 @@ rules:
 
   - id: grub2_password
     stig_id: V-257785
-    title: Set GRUB2 Boot Loader Password
+    title: Set Boot Loader Password in grub2
     severity: high
     category: Configuration Management
     disruption: medium
@@ -120,7 +132,7 @@ rules:
 
   - id: no_empty_passwords
     stig_id: V-257832
-    title: Prevent Empty Passwords
+    title: Prevent Login to Accounts With Empty Password
     severity: high
     category: Authentication
     disruption: low
@@ -132,7 +144,7 @@ rules:
 
   - id: disable_ctrlaltdel_reboot
     stig_id: V-257790
-    title: Disable Ctrl-Alt-Del Reboot
+    title: Disable Ctrl-Alt-Del Reboot Activation
     severity: high
     category: Configuration Management
     disruption: low
@@ -146,7 +158,7 @@ rules:
 
   - id: sysctl_accept_redirects
     stig_id: V-257800
-    title: Disable ICMP Redirect Acceptance
+    title: Disable Accepting ICMP Redirects
     severity: medium
     category: Network Configuration
     disruption: low
@@ -161,7 +173,7 @@ rules:
 
   - id: mount_tmp_noexec
     stig_id: V-257793
-    title: Mount /tmp with noexec
+    title: Add noexec Option to /tmp
     severity: medium
     category: Configuration Management
     disruption: medium
@@ -176,7 +188,7 @@ rules:
 
   - id: banner_etc_issue
     stig_id: V-257795
-    title: Configure Login Banner
+    title: Modify the System Login Banner
     severity: medium
     category: Access Control
     disruption: low
@@ -196,7 +208,7 @@ rules:
 
   - id: selinux_enforcing
     stig_id: V-257786
-    title: SELinux Must Be Enforcing
+    title: Ensure SELinux State is Enforcing
     severity: high
     category: Access Control
     disruption: high
@@ -208,7 +220,7 @@ rules:
 
   - id: package_rsyslog_installed
     stig_id: V-257810
-    title: Install rsyslog
+    title: Ensure rsyslog is installed
     severity: medium
     category: Audit and Accountability
     disruption: low
@@ -222,7 +234,7 @@ rules:
 
   - id: audit_chmod
     stig_id: V-257910
-    title: Audit DAC Permission Changes — chmod
+    title: Record Events that Modify the System's Discretionary Access Controls - chmod
     severity: medium
     category: Audit and Accountability
     disruption: low
@@ -236,7 +248,7 @@ rules:
 
   - id: sshd_disable_empty_passwords
     stig_id: V-257848
-    title: Disable SSH Empty Passwords
+    title: Disable SSH Access via Empty Passwords
     severity: high
     category: Access Control
     disruption: low
@@ -274,7 +286,7 @@ rules:
 
   - id: passwd_permissions
     stig_id: V-257820
-    title: Verify /etc/passwd Permissions
+    title: Verify Permissions on passwd File
     severity: medium
     category: Configuration Management
     disruption: low
@@ -289,7 +301,7 @@ rules:
 
   - id: shadow_permissions
     stig_id: V-257821
-    title: Verify /etc/shadow Permissions
+    title: Verify Permissions on shadow File
     severity: medium
     category: Configuration Management
     disruption: low
@@ -304,7 +316,7 @@ rules:
 
   - id: package_telnet_not_installed
     stig_id: V-257835
-    title: Remove telnet Package
+    title: Uninstall telnet Package
     severity: high
     category: Configuration Management
     disruption: low

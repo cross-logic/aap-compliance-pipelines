@@ -393,13 +393,30 @@ export class ComplianceService {
     // Build the optimized remediation plan from selections + findings
     const plan = this.buildRemediationPlan(request.selections, findings);
 
-    // Collect all rule IDs (tags) and host limits from the plan groups.
-    const allTags = plan.groups.flatMap(g => g.tags);
+    // Collect rule IDs (tags) and host limits from the plan groups.
+    let allTags = plan.groups.flatMap(g => g.tags);
     const allHosts = new Set<string>();
     const mergedExtraVars: Record<string, unknown> = {};
     for (const group of plan.groups) {
       group.limit.split(',').filter(Boolean).forEach(h => allHosts.add(h));
       Object.assign(mergedExtraVars, group.extraVars);
+    }
+
+    // If plan produced 0 groups (e.g., all selected rules already pass),
+    // use the selected rule IDs as tags directly and target all hosts.
+    if (allTags.length === 0) {
+      const enabledRuleIds = request.selections
+        .filter(s => s.enabled)
+        .map(s => s.ruleId);
+      if (enabledRuleIds.length > 0) {
+        allTags = enabledRuleIds;
+        for (const f of findings) {
+          f.hosts.forEach(h => allHosts.add(h.host));
+        }
+        this.logger.info(
+          `Plan produced 0 groups — using ${enabledRuleIds.length} selected rule IDs as tags directly`,
+        );
+      }
     }
 
     const limit = allHosts.size > 0

@@ -519,7 +519,7 @@ export async function createRouter(
 
     const saveRequest: SaveCartridgeRequest = {
       id: body.id,
-      displayName: body.displayName,
+      displayName: body.displayName.trim(),
       description: body.description ?? '',
       framework: body.framework,
       version: body.version ?? '',

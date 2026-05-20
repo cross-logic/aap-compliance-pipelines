@@ -251,61 +251,82 @@ function extractTasksFromEvents(
 }
 
 /**
- * Group tasks by rule, using findings metadata for titles and STIG IDs.
- * Tasks that cannot be matched to a rule go into an "Other Tasks" group.
+ * Group tasks by rule using sequential assignment.
+ *
+ * CaC playbooks run tasks grouped by rule: all tasks for rule A, then
+ * all tasks for rule B, etc. We identify "anchor" tasks that clearly
+ * belong to a rule (their name starts with the rule title), then assign
+ * all tasks between anchors to the same rule. Tasks before the first
+ * anchor are pre-requisites (Gathering Facts, etc.).
  */
 function groupTasksByRule(
   tasks: RemediationTask[],
   selections: RemediationSelection[],
   findingsMap: Map<string, MultiHostFinding>,
 ): RuleGroup[] {
-  const groups: RuleGroup[] = [];
-  const usedTaskIndices = new Set<number>();
-
-  // Create a group for each selected rule
-  for (const sel of selections) {
-    if (!sel.enabled) continue;
+  // Build a map of rule title prefixes for anchor detection
+  const enabledRules = selections.filter(s => s.enabled);
+  const ruleTitleMap = new Map<string, { ruleId: string; stigId: string; title: string }>();
+  for (const sel of enabledRules) {
     const finding = findingsMap.get(sel.ruleId);
-    const group: RuleGroup = {
+    const title = finding?.title || sel.ruleId;
+    ruleTitleMap.set(sel.ruleId, {
       ruleId: sel.ruleId,
       stigId: finding?.stigId || '',
-      title: finding?.title || sel.ruleId,
-      tasks: [],
-    };
-
-    // Match tasks to this rule by multiple strategies:
-    // 1. Exact ruleId or stigId match (from event tags/role)
-    // 2. Task name contains key words from the rule ID (e.g., "empty_passwords" → "Empty Passwords")
-    // 3. Task name contains key words from the rule title
-    const ruleWords = sel.ruleId.replace(/_/g, ' ').toLowerCase().split(' ').filter(w => w.length > 3);
-    const titleWords = (finding?.title || '').toLowerCase().split(' ').filter(w => w.length > 3);
-    tasks.forEach((task, idx) => {
-      if (usedTaskIndices.has(idx)) return;
-      const taskLower = task.name.toLowerCase();
-      const matched =
-        task.ruleId === sel.ruleId ||
-        (task.stigId && finding?.stigId && task.stigId === finding.stigId) ||
-        (ruleWords.length >= 2 && ruleWords.every(w => taskLower.includes(w))) ||
-        (titleWords.length >= 2 && titleWords.filter(w => w.length > 4).every(w => taskLower.includes(w)));
-      if (matched) {
-        group.tasks.push(task);
-        usedTaskIndices.add(idx);
-      }
+      title,
     });
-
-    groups.push(group);
   }
 
-  // Gather unmatched tasks into a "Pre-requisite Tasks" group
-  const otherTasks = tasks.filter((_, idx) => !usedTaskIndices.has(idx));
-  if (otherTasks.length > 0) {
-    // Pre-requisite tasks (like Gathering Facts, package checks) run first,
-    // so insert them at the beginning of the list.
-    groups.unshift({
+  // Sequential assignment: walk tasks in order, detect rule boundaries
+  const prereqTasks: RemediationTask[] = [];
+  const ruleTaskMap = new Map<string, RemediationTask[]>();
+  let currentRuleId: string | null = null;
+
+  for (const task of tasks) {
+    const taskLower = task.name.toLowerCase();
+
+    // Check if this task anchors to a new rule (title prefix match)
+    let anchoredRule: string | null = null;
+    for (const [ruleId, meta] of ruleTitleMap) {
+      const prefix = meta.title.toLowerCase();
+      if (prefix.length > 5 && taskLower.startsWith(prefix)) {
+        anchoredRule = ruleId;
+        break;
+      }
+    }
+
+    if (anchoredRule) {
+      currentRuleId = anchoredRule;
+    }
+
+    if (currentRuleId) {
+      const existing = ruleTaskMap.get(currentRuleId) || [];
+      existing.push(task);
+      ruleTaskMap.set(currentRuleId, existing);
+    } else {
+      prereqTasks.push(task);
+    }
+  }
+
+  // Build groups in selection order
+  const groups: RuleGroup[] = [];
+
+  if (prereqTasks.length > 0) {
+    groups.push({
       ruleId: 'pre-requisite',
       stigId: '',
       title: 'Pre-Requisite Tasks',
-      tasks: otherTasks,
+      tasks: prereqTasks,
+    });
+  }
+
+  for (const sel of enabledRules) {
+    const meta = ruleTitleMap.get(sel.ruleId)!;
+    groups.push({
+      ruleId: sel.ruleId,
+      stigId: meta.stigId,
+      title: meta.title,
+      tasks: ruleTaskMap.get(sel.ruleId) || [],
     });
   }
 
@@ -313,8 +334,8 @@ function groupTasksByRule(
 }
 
 /** Compute per-rule progress as percentage of completed/failed tasks. */
-function computeRuleProgress(group: RuleGroup): number {
-  if (group.tasks.length === 0) return 0;
+function computeRuleProgress(group: RuleGroup, jobComplete: boolean = false): number {
+  if (group.tasks.length === 0) return jobComplete ? 100 : 0;
   const done = group.tasks.filter(
     t => t.status === 'completed' || t.status === 'failed',
   ).length;
@@ -322,8 +343,8 @@ function computeRuleProgress(group: RuleGroup): number {
 }
 
 /** Compute overall status for a rule group. */
-function computeRuleStatus(group: RuleGroup): TaskStatus {
-  if (group.tasks.length === 0) return 'pending';
+function computeRuleStatus(group: RuleGroup, jobComplete: boolean): TaskStatus {
+  if (group.tasks.length === 0) return jobComplete ? 'completed' : 'pending';
   if (group.tasks.some(t => t.status === 'failed')) return 'failed';
   if (group.tasks.every(t => t.status === 'completed')) return 'completed';
   if (group.tasks.some(t => t.status === 'running')) return 'running';
@@ -415,8 +436,12 @@ export const RemediationExecution = () => {
       setSelections(loadedSelections);
 
       // Load findings to get rule titles, STIG IDs, etc.
+      // Try with scanId first; if empty, load latest.
       try {
-        const findings = await api.getFindings(scanId);
+        let findings = await api.getFindings(scanId).catch(() => []);
+        if (findings.length === 0) {
+          findings = await api.getFindings().catch(() => []);
+        }
         const fMap = new Map<string, MultiHostFinding>();
         for (const f of findings) {
           fMap.set(f.ruleId, f);
@@ -525,7 +550,7 @@ export const RemediationExecution = () => {
   // Auto-expand rules that are currently running
   useEffect(() => {
     const running = ruleGroups
-      .filter(g => computeRuleStatus(g) === 'running')
+      .filter(g => computeRuleStatus(g, TERMINAL_STATUSES.includes(overallStatus)) === 'running')
       .map(g => g.ruleId);
     if (running.length > 0) {
       setExpandedRules(prev => {
@@ -578,9 +603,9 @@ export const RemediationExecution = () => {
 
   // Count rules that have all tasks completed
   const rulesCompleted = ruleGroups.filter(
-    g => g.ruleId !== '__other__' && computeRuleProgress(g) === 100,
+    g => g.ruleId !== 'pre-requisite' && computeRuleProgress(g) === 100,
   ).length;
-  const totalRules = ruleGroups.filter(g => g.ruleId !== '__other__').length;
+  const totalRules = ruleGroups.filter(g => g.ruleId !== 'pre-requisite').length;
 
   return (
     <>
@@ -779,15 +804,15 @@ export const RemediationExecution = () => {
             <Grid item xs={12}>
               <InfoCard title="Remediation Progress">
                 {ruleGroups.map(group => {
-                  const pct = computeRuleProgress(group);
-                  const ruleStatus = computeRuleStatus(group);
+                  const pct = computeRuleProgress(group, TERMINAL_STATUSES.includes(overallStatus));
+                  const ruleStatus = computeRuleStatus(group, TERMINAL_STATUSES.includes(overallStatus));
                   const isExpanded = expandedRules.has(group.ruleId);
                   const hasTasks = group.tasks.length > 0;
 
                   return (
                     <Accordion
                       key={group.ruleId}
-                      className={`${classes.ruleAccordion} ${!hasTasks ? classes.pendingRule : ''}`}
+                      className={`${classes.ruleAccordion} ${!hasTasks && ruleStatus === 'pending' ? classes.pendingRule : ''}`}
                       expanded={isExpanded}
                       onChange={() => toggleRule(group.ruleId)}
                     >
@@ -802,7 +827,7 @@ export const RemediationExecution = () => {
                           </Box>
                           <div className={classes.ruleTitle}>
                             <Typography variant="body2" style={{ fontWeight: 500 }}>
-                              {group.ruleId !== '__other__' ? (
+                              {group.ruleId !== 'pre-requisite' ? (
                                 <>
                                   <span style={{ fontFamily: 'monospace' }}>{group.ruleId}</span>
                                   {group.stigId && (
@@ -815,7 +840,7 @@ export const RemediationExecution = () => {
                                 group.title
                               )}
                             </Typography>
-                            {group.ruleId !== '__other__' && (
+                            {group.ruleId !== 'pre-requisite' && (
                               <Typography variant="caption" color="textSecondary">
                                 {group.title}
                               </Typography>
@@ -834,7 +859,7 @@ export const RemediationExecution = () => {
                               variant="caption"
                               className={classes.ruleProgressLabel}
                             >
-                              {pct}%
+                              {!hasTasks && ruleStatus === 'completed' ? 'Already Compliant' : `${pct}%`}
                             </Typography>
                           </div>
                         </div>
