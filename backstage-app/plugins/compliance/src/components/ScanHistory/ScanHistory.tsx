@@ -187,7 +187,11 @@ export const ScanHistory = () => {
                   className={classes.clickableRow}
                   onClick={() => {
                     const jobId = scan.workflowJobId ?? scan.id;
-                    navigate(`/compliance/results/${jobId}`);
+                    if (scan.scanner === 'remediation') {
+                      navigate(`/compliance/remediations`);
+                    } else {
+                      navigate(`/compliance/results/${jobId}`);
+                    }
                   }}
                 >
                   <TableCell>
