@@ -154,6 +154,7 @@ export const RemediationProfileBuilder = () => {
   const [loading, setLoading] = useState(true);
 
   // In edit mode, first load the remediation profile, then load findings
+  // using the saved scanId (the workflow job ID from the original scan).
   useEffect(() => {
     if (!isEditMode || !remediationId) return;
     let cancelled = false;
@@ -167,7 +168,12 @@ export const RemediationProfileBuilder = () => {
         setEditProfile(profile);
         setProfileName(profile.name);
         setProfileDescription(profile.description);
-        return api.getFindings(profile.complianceProfileId);
+
+        if (profile.scanId) {
+          return api.getFindings(profile.scanId);
+        }
+        // For profiles saved before scanId was introduced, load the latest findings
+        return api.getFindings();
       })
       .then(data => {
         if (!cancelled && data) setAllFindings(data);
@@ -323,9 +329,6 @@ export const RemediationProfileBuilder = () => {
   const renderFinding = (finding: MultiHostFinding) => {
     const sel = selections[finding.ruleId];
     if (!sel) return null;
-
-    const failRatio = finding.failCount / finding.totalCount;
-    const showHomogeneityAdvice = finding.failCount > 0 && finding.failCount <= 3 && finding.totalCount >= 10;
 
     return (
       <div
@@ -692,20 +695,27 @@ export const RemediationProfileBuilder = () => {
                   parameters: selections[f.ruleId].parameters,
                 }));
 
+              // Resolve the scan ID: in edit mode use the saved profile's scanId,
+              // in scan mode use the route param jobId.
+              const effectiveScanId = isEditMode
+                ? (editProfile?.scanId || editProfile?.complianceProfileId || '')
+                : (jobId ?? '');
+
               // Save as a transient remediation profile so the execution
               // page can load the full selections
               const saved = await api.saveRemediationProfile({
-                name: `remediation-${jobId}-${Date.now()}`,
+                name: `remediation-${effectiveScanId}-${Date.now()}`,
                 description: 'Auto-saved for immediate execution',
-                complianceProfileId: 'rhel9-stig',
+                complianceProfileId: editProfile?.complianceProfileId || 'rhel9-stig',
+                scanId: effectiveScanId,
                 selections: enabledSelections,
               });
 
               // Navigate to execution with the profile ID and scan context
               const params = new URLSearchParams();
               params.set('profileId', saved.id);
-              params.set('scanId', jobId ?? '');
-              navigate(`/compliance/execute/${jobId}?${params.toString()}`);
+              params.set('scanId', effectiveScanId);
+              navigate(`/compliance/execute/${effectiveScanId}?${params.toString()}`);
             } catch (err) {
               setSaveError(err instanceof Error ? err.message : 'Failed to prepare remediation');
               setLaunching(false);
@@ -781,10 +791,18 @@ export const RemediationProfileBuilder = () => {
                     parameters: selections[f.ruleId].parameters,
                   }));
 
+                // Include the scanId so this profile can reload findings later.
+                // In edit mode, preserve the original scanId from the loaded profile;
+                // in scan mode, use the current route param jobId.
+                const effectiveScanId = isEditMode
+                  ? (editProfile?.scanId || editProfile?.complianceProfileId)
+                  : jobId;
+
                 await api.saveRemediationProfile({
                   name: profileName,
                   description: profileDescription,
-                  complianceProfileId: 'rhel9-stig',
+                  complianceProfileId: editProfile?.complianceProfileId || 'rhel9-stig',
+                  scanId: effectiveScanId,
                   selections: enabledSelections,
                 });
 

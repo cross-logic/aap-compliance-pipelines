@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   InfoCard,
@@ -19,18 +19,21 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   Stepper,
   Step,
   StepLabel,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
   makeStyles,
 } from '@material-ui/core';
 import CheckCircleIcon from '@material-ui/icons/CheckCircle';
+import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import RefreshIcon from '@material-ui/icons/Refresh';
 import { useApi } from '@backstage/core-plugin-api';
 import { complianceApiRef } from '../../api';
-import type { JobEvent, RemediationSelection } from '@aap-compliance/common';
+import type { JobEvent, MultiHostFinding, RemediationSelection } from '@aap-compliance/common';
 
 const useStyles = makeStyles(theme => ({
   progressSection: {
@@ -47,6 +50,55 @@ const useStyles = makeStyles(theme => ({
     color: theme.palette.text.secondary,
     marginTop: theme.spacing(1),
   },
+  ruleAccordion: {
+    '&:before': {
+      display: 'none',
+    },
+    boxShadow: 'none',
+    borderBottom: `1px solid ${theme.palette.divider}`,
+  },
+  ruleAccordionSummary: {
+    '& .MuiAccordionSummary-content': {
+      alignItems: 'center',
+      margin: `${theme.spacing(1)}px 0`,
+    },
+  },
+  ruleHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    width: '100%',
+    gap: theme.spacing(2),
+  },
+  ruleTitle: {
+    flex: 1,
+    minWidth: 0,
+  },
+  ruleProgress: {
+    width: 140,
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing(1),
+  },
+  ruleProgressBar: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+  },
+  ruleProgressLabel: {
+    fontFamily: 'monospace',
+    fontSize: '0.75rem',
+    minWidth: 36,
+    textAlign: 'right',
+  },
+  taskTable: {
+    '& td': {
+      paddingTop: theme.spacing(0.5),
+      paddingBottom: theme.spacing(0.5),
+    },
+  },
+  pendingRule: {
+    opacity: 0.6,
+  },
 }));
 
 type ExecutionPhase = 'launching' | 'preparing' | 'running' | 'verifying' | 'complete' | 'failed';
@@ -58,8 +110,18 @@ type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
 interface RemediationTask {
   name: string;
   stigId: string;
+  /** The rule ID this task belongs to (e.g. 'sshd_set_idle_timeout'). Empty if unmatched. */
+  ruleId: string;
   status: TaskStatus;
   hosts: Array<{ host: string; status: TaskStatus }>;
+}
+
+/** A group of tasks under a single compliance rule. */
+interface RuleGroup {
+  ruleId: string;
+  stigId: string;
+  title: string;
+  tasks: RemediationTask[];
 }
 
 /** Terminal statuses where the workflow will not change further. */
@@ -93,9 +155,14 @@ function formatElapsed(seconds: number): string {
  * Extract remediation tasks from Controller job events.
  *
  * Maps runner events (runner_on_ok, runner_on_failed, runner_on_start, etc.)
- * into task entries for the progress table.
+ * into task entries for the progress table. Tasks are matched to rule IDs
+ * by checking for Ansible role names, task tags in event data, and
+ * falling back to substring matching against known rule IDs.
  */
-function extractTasksFromEvents(events: JobEvent[]): RemediationTask[] {
+function extractTasksFromEvents(
+  events: JobEvent[],
+  knownRuleIds: string[],
+): RemediationTask[] {
   const taskMap = new Map<string, RemediationTask>();
 
   for (const event of events) {
@@ -107,6 +174,37 @@ function extractTasksFromEvents(events: JobEvent[]): RemediationTask[] {
     const stigMatch = taskName.match(/V-\d+/);
     const stigId = stigMatch ? stigMatch[0] : '';
     const hostName = event.host_name || (event.event_data?.host as string) || '';
+
+    // Try to match this task to a known rule ID:
+    // 1. Check event_data.role (CaC roles are named after rule IDs)
+    // 2. Check task tags in event_data
+    // 3. Check if the task name contains a known rule ID substring
+    let ruleId = '';
+    const role = (event.event_data?.role as string) || '';
+    if (role && knownRuleIds.includes(role)) {
+      ruleId = role;
+    }
+    if (!ruleId) {
+      const taskTags = event.event_data?.task_tags as string | undefined;
+      if (taskTags) {
+        const tags = taskTags.split(',').map(t => t.trim());
+        for (const tag of tags) {
+          if (knownRuleIds.includes(tag)) {
+            ruleId = tag;
+            break;
+          }
+        }
+      }
+    }
+    if (!ruleId) {
+      const nameLower = taskName.toLowerCase().replace(/[\s-]/g, '_');
+      for (const candidate of knownRuleIds) {
+        if (nameLower.includes(candidate.toLowerCase())) {
+          ruleId = candidate;
+          break;
+        }
+      }
+    }
 
     let hostStatus: TaskStatus = 'pending';
     if (event.event === 'runner_on_ok' || event.event === 'runner_on_skipped') {
@@ -122,10 +220,15 @@ function extractTasksFromEvents(events: JobEvent[]): RemediationTask[] {
       taskMap.set(taskName, {
         name: taskName,
         stigId,
+        ruleId,
         status: hostStatus,
         hosts: hostName ? [{ host: hostName, status: hostStatus }] : [],
       });
     } else {
+      // Update ruleId if we found a better match
+      if (!existing.ruleId && ruleId) {
+        existing.ruleId = ruleId;
+      }
       if (hostName) {
         const existingHost = existing.hosts.find(h => h.host === hostName);
         if (existingHost) {
@@ -147,6 +250,77 @@ function extractTasksFromEvents(events: JobEvent[]): RemediationTask[] {
   return Array.from(taskMap.values());
 }
 
+/**
+ * Group tasks by rule, using findings metadata for titles and STIG IDs.
+ * Tasks that cannot be matched to a rule go into an "Other Tasks" group.
+ */
+function groupTasksByRule(
+  tasks: RemediationTask[],
+  selections: RemediationSelection[],
+  findingsMap: Map<string, MultiHostFinding>,
+): RuleGroup[] {
+  const groups: RuleGroup[] = [];
+  const usedTaskIndices = new Set<number>();
+
+  // Create a group for each selected rule
+  for (const sel of selections) {
+    if (!sel.enabled) continue;
+    const finding = findingsMap.get(sel.ruleId);
+    const group: RuleGroup = {
+      ruleId: sel.ruleId,
+      stigId: finding?.stigId || '',
+      title: finding?.title || sel.ruleId,
+      tasks: [],
+    };
+
+    // Match tasks by ruleId or stigId
+    tasks.forEach((task, idx) => {
+      if (usedTaskIndices.has(idx)) return;
+      if (
+        task.ruleId === sel.ruleId ||
+        (task.stigId && finding?.stigId && task.stigId === finding.stigId)
+      ) {
+        group.tasks.push(task);
+        usedTaskIndices.add(idx);
+      }
+    });
+
+    groups.push(group);
+  }
+
+  // Gather unmatched tasks into an "Other Tasks" group
+  const otherTasks = tasks.filter((_, idx) => !usedTaskIndices.has(idx));
+  if (otherTasks.length > 0) {
+    groups.push({
+      ruleId: '__other__',
+      stigId: '',
+      title: 'Other Tasks',
+      tasks: otherTasks,
+    });
+  }
+
+  return groups;
+}
+
+/** Compute per-rule progress as percentage of completed/failed tasks. */
+function computeRuleProgress(group: RuleGroup): number {
+  if (group.tasks.length === 0) return 0;
+  const done = group.tasks.filter(
+    t => t.status === 'completed' || t.status === 'failed',
+  ).length;
+  return Math.round((done / group.tasks.length) * 100);
+}
+
+/** Compute overall status for a rule group. */
+function computeRuleStatus(group: RuleGroup): TaskStatus {
+  if (group.tasks.length === 0) return 'pending';
+  if (group.tasks.some(t => t.status === 'failed')) return 'failed';
+  if (group.tasks.every(t => t.status === 'completed')) return 'completed';
+  if (group.tasks.some(t => t.status === 'running')) return 'running';
+  if (group.tasks.some(t => t.status === 'completed')) return 'running';
+  return 'pending';
+}
+
 export const RemediationExecution = () => {
   const classes = useStyles();
   const navigate = useNavigate();
@@ -161,26 +335,65 @@ export const RemediationExecution = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [overallStatus, setOverallStatus] = useState('pending');
   const completeFired = useRef(false);
+  const [verificationLaunching, setVerificationLaunching] = useState(false);
+
+  // Selections and findings for rule grouping
+  const [selections, setSelections] = useState<RemediationSelection[]>([]);
+  const [findingsMap, setFindingsMap] = useState<Map<string, MultiHostFinding>>(new Map());
+  const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set());
 
   // Extract the remediation profile ID and scan ID from query params
   // (set by the RemediationProfileBuilder when "Apply Remediation" is clicked)
   const remediationProfileId = searchParams.get('profileId');
   const scanId = searchParams.get('scanId') ?? jobId;
 
+  // Track the compliance profile and inventory used by this remediation
+  // so we can auto-launch a verification scan without the wizard.
+  const complianceProfileIdRef = useRef<string>('rhel9-stig');
+  const inventoryIdRef = useRef<number>(1);
+
+  // Launch a verification scan using the same profile/inventory as the remediation.
+  const launchVerificationScan = useCallback(async () => {
+    setVerificationLaunching(true);
+    try {
+      // Resolve cartridge to get workflowTemplateId for the scan
+      const cartridges = await api.getCartridges().catch(() => []);
+      const cartridge = cartridges.find(c => c.id === complianceProfileIdRef.current);
+
+      const result = await api.launchScan({
+        profileId: complianceProfileIdRef.current,
+        inventoryId: inventoryIdRef.current,
+        evaluateOnly: true,
+        scanType: 'verification',
+        workflowTemplateId: cartridge?.workflowTemplateId ?? undefined,
+      });
+      navigate(`/compliance/results/${result.workflowJobId}`);
+    } catch (err) {
+      setVerificationLaunching(false);
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Failed to launch verification scan',
+      );
+    }
+  }, [api, navigate]);
+
   // Launch the remediation via the backend
   const launchRemediation = useCallback(async () => {
     try {
       // Load selections from the saved remediation profile
-      let selections: RemediationSelection[] = [];
+      let loadedSelections: RemediationSelection[] = [];
 
       if (remediationProfileId) {
         const profile = await api.getRemediationProfile(remediationProfileId);
         if (profile && profile.selections.length > 0) {
-          selections = profile.selections;
+          loadedSelections = profile.selections;
+          // Capture the compliance profile ID for the verification scan
+          if (profile.complianceProfileId) {
+            complianceProfileIdRef.current = profile.complianceProfileId;
+          }
         }
       }
 
-      if (selections.length === 0) {
+      if (loadedSelections.length === 0) {
         setPhase('failed');
         setErrorMessage(
           'No rule selections found. Go back to the Remediation Profile Builder and select rules before applying.',
@@ -188,10 +401,25 @@ export const RemediationExecution = () => {
         return;
       }
 
+      // Store selections for rule grouping
+      setSelections(loadedSelections);
+
+      // Load findings to get rule titles, STIG IDs, etc.
+      try {
+        const findings = await api.getFindings(scanId);
+        const fMap = new Map<string, MultiHostFinding>();
+        for (const f of findings) {
+          fMap.set(f.ruleId, f);
+        }
+        setFindingsMap(fMap);
+      } catch {
+        // Findings may not be available; rule groups will use ruleId as title
+      }
+
       const result = await api.launchRemediation({
         profileId: 'rhel9-stig',
         inventoryId: 1,
-        selections,
+        selections: loadedSelections,
         scanId,
       });
       setWorkflowJobId(result.workflowJobId);
@@ -207,6 +435,12 @@ export const RemediationExecution = () => {
   useEffect(() => {
     launchRemediation();
   }, [launchRemediation]);
+
+  // Derive known rule IDs from selections for task matching
+  const knownRuleIds = useMemo(
+    () => selections.filter(s => s.enabled).map(s => s.ruleId),
+    [selections],
+  );
 
   // Poll the remediate job directly (not a workflow — remediation
   // launches the JT with native job_tags for proper scoping).
@@ -242,7 +476,7 @@ export const RemediationExecution = () => {
         try {
           const events = await api.getJobEvents(workflowJobId);
           if (!cancelled) {
-            const extracted = extractTasksFromEvents(events);
+            const extracted = extractTasksFromEvents(events, knownRuleIds);
             if (extracted.length > 0) {
               setTasks(extracted);
               const done = extracted.filter(t => t.status === 'completed' || t.status === 'failed').length;
@@ -270,7 +504,39 @@ export const RemediationExecution = () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [api, workflowJobId]);
+  }, [api, workflowJobId, knownRuleIds]);
+
+  // Group tasks by rule
+  const ruleGroups = useMemo(
+    () => groupTasksByRule(tasks, selections, findingsMap),
+    [tasks, selections, findingsMap],
+  );
+
+  // Auto-expand rules that are currently running
+  useEffect(() => {
+    const running = ruleGroups
+      .filter(g => computeRuleStatus(g) === 'running')
+      .map(g => g.ruleId);
+    if (running.length > 0) {
+      setExpandedRules(prev => {
+        const next = new Set(prev);
+        for (const id of running) next.add(id);
+        return next;
+      });
+    }
+  }, [ruleGroups]);
+
+  const toggleRule = (ruleId: string) => {
+    setExpandedRules(prev => {
+      const next = new Set(prev);
+      if (next.has(ruleId)) {
+        next.delete(ruleId);
+      } else {
+        next.add(ruleId);
+      }
+      return next;
+    });
+  };
 
   const activeStep =
     phase === 'launching' || phase === 'preparing'
@@ -299,6 +565,12 @@ export const RemediationExecution = () => {
 
   const completedCount = tasks.filter(t => t.status === 'completed').length;
   const failedCount = tasks.filter(t => t.status === 'failed').length;
+
+  // Count rules that have all tasks completed
+  const rulesCompleted = ruleGroups.filter(
+    g => g.ruleId !== '__other__' && computeRuleProgress(g) === 100,
+  ).length;
+  const totalRules = ruleGroups.filter(g => g.ruleId !== '__other__').length;
 
   return (
     <>
@@ -379,9 +651,11 @@ export const RemediationExecution = () => {
                         color="textSecondary"
                         style={{ marginTop: 8 }}
                       >
-                        {tasks.length > 0
-                          ? `${completedCount}/${tasks.length} tasks complete${failedCount > 0 ? ` (${failedCount} failed)` : ''}`
-                          : `${progress}% complete`}
+                        {totalRules > 0
+                          ? `${rulesCompleted}/${totalRules} rules complete, ${completedCount}/${tasks.length} tasks${failedCount > 0 ? ` (${failedCount} failed)` : ''}`
+                          : tasks.length > 0
+                            ? `${completedCount}/${tasks.length} tasks complete${failedCount > 0 ? ` (${failedCount} failed)` : ''}`
+                            : `${progress}% complete`}
                       </Typography>
                       <Typography variant="body2" className={classes.elapsed}>
                         Elapsed: {formatElapsed(elapsed)}
@@ -414,9 +688,10 @@ export const RemediationExecution = () => {
                         <Button
                           variant="contained"
                           color="primary"
-                          onClick={() => navigate('/compliance/scan?scanType=verification')}
+                          disabled={verificationLaunching}
+                          onClick={launchVerificationScan}
                         >
-                          Run Verification Scan
+                          {verificationLaunching ? 'Launching...' : 'Run Verification Scan'}
                         </Button>
                       </Box>
                     </>
@@ -472,9 +747,10 @@ export const RemediationExecution = () => {
                   <Button
                     variant="outlined"
                     startIcon={<RefreshIcon />}
-                    onClick={() => navigate('/compliance/scan?scanType=verification')}
+                    disabled={verificationLaunching}
+                    onClick={launchVerificationScan}
                   >
-                    Run Verification Scan
+                    {verificationLaunching ? 'Launching...' : 'Run Verification Scan'}
                   </Button>
                   <Button
                     variant="contained"
@@ -488,68 +764,178 @@ export const RemediationExecution = () => {
             </>
           )}
 
-          {/* Task List */}
-          {tasks.length > 0 && (
+          {/* Rule-Grouped Task List */}
+          {ruleGroups.length > 0 && (
             <Grid item xs={12}>
-              <InfoCard title="Remediation Tasks">
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell width={40}>Status</TableCell>
-                      <TableCell>Rule</TableCell>
-                      <TableCell>Hosts</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {tasks.map((task, idx) => (
-                      <TableRow key={`${task.name}-${idx}`} className={classes.taskRow}>
-                        <TableCell>{statusIcon(task.status)}</TableCell>
-                        <TableCell>
-                          <Typography variant="body2" style={{ fontWeight: 500 }}>
-                            {task.name}
-                          </Typography>
-                          {task.stigId && (
-                            <Typography variant="caption" color="textSecondary" style={{ fontFamily: 'monospace' }}>
-                              {task.stigId}
+              <InfoCard title="Remediation Progress">
+                {ruleGroups.map(group => {
+                  const pct = computeRuleProgress(group);
+                  const ruleStatus = computeRuleStatus(group);
+                  const isExpanded = expandedRules.has(group.ruleId);
+                  const hasTasks = group.tasks.length > 0;
+
+                  return (
+                    <Accordion
+                      key={group.ruleId}
+                      className={`${classes.ruleAccordion} ${!hasTasks ? classes.pendingRule : ''}`}
+                      expanded={isExpanded}
+                      onChange={() => toggleRule(group.ruleId)}
+                    >
+                      <AccordionSummary
+                        expandIcon={hasTasks ? <ExpandMoreIcon /> : undefined}
+                        className={classes.ruleAccordionSummary}
+                        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${group.title}`}
+                      >
+                        <div className={classes.ruleHeader}>
+                          <Box display="flex" alignItems="center" style={{ minWidth: 24 }}>
+                            {statusIcon(ruleStatus)}
+                          </Box>
+                          <div className={classes.ruleTitle}>
+                            <Typography variant="body2" style={{ fontWeight: 500 }}>
+                              {group.ruleId !== '__other__' ? (
+                                <>
+                                  <span style={{ fontFamily: 'monospace' }}>{group.ruleId}</span>
+                                  {group.stigId && (
+                                    <span style={{ fontFamily: 'monospace', marginLeft: 8, opacity: 0.7 }}>
+                                      ({group.stigId})
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                group.title
+                              )}
                             </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {task.hosts.length > 0 ? (
-                            <Box display="flex" flexWrap="wrap" style={{ gap: 4 }}>
-                              {task.hosts.map(h => (
-                                <Chip
-                                  key={h.host}
-                                  size="small"
-                                  label={h.host}
-                                  variant="outlined"
-                                  style={{
-                                    borderColor: h.status === 'failed' ? '#C9190B'
-                                      : h.status === 'completed' ? '#3E8635'
-                                      : undefined,
-                                    color: h.status === 'failed' ? '#C9190B'
-                                      : h.status === 'completed' ? '#3E8635'
-                                      : undefined,
-                                  }}
-                                />
+                            {group.ruleId !== '__other__' && (
+                              <Typography variant="caption" color="textSecondary">
+                                {group.title}
+                              </Typography>
+                            )}
+                          </div>
+                          <div className={classes.ruleProgress}>
+                            <LinearProgress
+                              variant="determinate"
+                              value={pct}
+                              className={classes.ruleProgressBar}
+                              color={
+                                ruleStatus === 'failed' ? 'secondary' : 'primary'
+                              }
+                            />
+                            <Typography
+                              variant="caption"
+                              className={classes.ruleProgressLabel}
+                            >
+                              {pct}%
+                            </Typography>
+                          </div>
+                        </div>
+                      </AccordionSummary>
+                      {hasTasks && (
+                        <AccordionDetails style={{ padding: 0 }}>
+                          <Table size="small" className={classes.taskTable}>
+                            <TableBody>
+                              {group.tasks.map((task, idx) => (
+                                <TableRow
+                                  key={`${task.name}-${idx}`}
+                                  className={classes.taskRow}
+                                >
+                                  <TableCell width={40} style={{ paddingLeft: 24 }}>
+                                    {statusIcon(task.status)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Typography variant="body2">
+                                      {task.name}
+                                    </Typography>
+                                  </TableCell>
+                                  <TableCell>
+                                    {task.hosts.length > 0 ? (
+                                      <Box display="flex" flexWrap="wrap" style={{ gap: 4 }}>
+                                        {task.hosts.map(h => (
+                                          <Chip
+                                            key={h.host}
+                                            size="small"
+                                            label={h.host}
+                                            variant="outlined"
+                                            style={{
+                                              borderColor: h.status === 'failed' ? '#C9190B'
+                                                : h.status === 'completed' ? '#3E8635'
+                                                : undefined,
+                                              color: h.status === 'failed' ? '#C9190B'
+                                                : h.status === 'completed' ? '#3E8635'
+                                                : undefined,
+                                            }}
+                                          />
+                                        ))}
+                                      </Box>
+                                    ) : (
+                                      <Typography variant="body2" color="textSecondary">
+                                        —
+                                      </Typography>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
                               ))}
-                            </Box>
-                          ) : (
-                            <Typography variant="body2" color="textSecondary">—</Typography>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                            </TableBody>
+                          </Table>
+                        </AccordionDetails>
+                      )}
+                    </Accordion>
+                  );
+                })}
               </InfoCard>
             </Grid>
           )}
 
-          {/* Empty task list placeholder while waiting for events */}
-          {tasks.length === 0 && (phase === 'preparing' || phase === 'launching') && (
+          {/* Placeholder: rules loaded but no task events yet */}
+          {ruleGroups.length === 0 && selections.length > 0 && (phase === 'preparing' || phase === 'running') && (
             <Grid item xs={12}>
-              <InfoCard title="Remediation Tasks">
+              <InfoCard title="Remediation Progress">
+                {selections.filter(s => s.enabled).map(sel => {
+                  const finding = findingsMap.get(sel.ruleId);
+                  return (
+                    <Box
+                      key={sel.ruleId}
+                      className={classes.pendingRule}
+                      display="flex"
+                      alignItems="center"
+                      px={2}
+                      py={1}
+                      style={{ gap: 16, borderBottom: '1px solid rgba(0,0,0,0.12)' }}
+                    >
+                      <StatusPending />
+                      <div style={{ flex: 1 }}>
+                        <Typography variant="body2" style={{ fontWeight: 500, fontFamily: 'monospace' }}>
+                          {sel.ruleId}
+                          {finding?.stigId && (
+                            <span style={{ marginLeft: 8, opacity: 0.7 }}>
+                              ({finding.stigId})
+                            </span>
+                          )}
+                        </Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          {finding?.title || 'Waiting for tasks...'}
+                        </Typography>
+                      </div>
+                      <div className={classes.ruleProgress}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={0}
+                          className={classes.ruleProgressBar}
+                        />
+                        <Typography variant="caption" className={classes.ruleProgressLabel}>
+                          0%
+                        </Typography>
+                      </div>
+                    </Box>
+                  );
+                })}
+              </InfoCard>
+            </Grid>
+          )}
+
+          {/* Empty state: no selections loaded yet */}
+          {ruleGroups.length === 0 && selections.length === 0 && (phase === 'preparing' || phase === 'launching') && (
+            <Grid item xs={12}>
+              <InfoCard title="Remediation Progress">
                 <Box p={3} textAlign="center">
                   <Typography variant="body2" color="textSecondary">
                     Waiting for workflow to start...
@@ -559,9 +945,9 @@ export const RemediationExecution = () => {
             </Grid>
           )}
 
-          {tasks.length === 0 && phase === 'running' && (
+          {ruleGroups.length === 0 && selections.length === 0 && phase === 'running' && (
             <Grid item xs={12}>
-              <InfoCard title="Remediation Tasks">
+              <InfoCard title="Remediation Progress">
                 <Box p={3} textAlign="center">
                   <Typography variant="body2" color="textSecondary">
                     Collecting task events from the automation controller...

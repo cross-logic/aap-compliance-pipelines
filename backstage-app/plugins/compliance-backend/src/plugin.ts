@@ -89,7 +89,6 @@ export const complianceBackendPlugin = createBackendPlugin({
         httpRouter.addAuthPolicy({ path: '/findings', allow: 'unauthenticated' });
         httpRouter.addAuthPolicy({ path: '/cartridges', allow: 'unauthenticated' });
         httpRouter.addAuthPolicy({ path: '/inventories', allow: 'unauthenticated' });
-        httpRouter.addAuthPolicy({ path: '/remediations', allow: 'unauthenticated' });
         httpRouter.addAuthPolicy({ path: '/dashboard', allow: 'unauthenticated' });
         httpRouter.addAuthPolicy({ path: '/posture', allow: 'unauthenticated' });
         httpRouter.addAuthPolicy({ path: '/workflow-templates', allow: 'unauthenticated' });

@@ -152,6 +152,8 @@ export interface SaveRemediationProfileRequest {
   name: string;
   description: string;
   complianceProfileId: string;
+  /** The scan ID (workflow job ID) whose findings were used to build this remediation. */
+  scanId?: string;
   selections: RemediationSelection[];
 }
 

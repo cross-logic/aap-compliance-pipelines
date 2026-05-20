@@ -448,6 +448,7 @@ export async function createRouter(
       name: body.name,
       description: body.description ?? '',
       complianceProfileId: body.complianceProfileId ?? '',
+      scanId: body.scanId,
       selections: body.selections,
     };
 

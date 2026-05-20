@@ -25,6 +25,8 @@ export interface RemediationProfile {
   name: string;
   description: string;
   complianceProfileId: string;
+  /** The scan ID (workflow job ID) whose findings were used to create this profile. */
+  scanId?: string;
   targetInventory: string;
   selections: RemediationSelection[];
   createdAt: string;

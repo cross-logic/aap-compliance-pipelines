@@ -1069,6 +1069,7 @@ export class ComplianceService {
         name: request.name,
         description: request.description,
         profileId: request.complianceProfileId,
+        scanId: request.scanId,
         selections: request.selections,
       });
       return {
@@ -1076,6 +1077,7 @@ export class ComplianceService {
         name: request.name,
         description: request.description,
         complianceProfileId: request.complianceProfileId,
+        scanId: request.scanId,
         targetInventory: '',
         selections: request.selections,
         createdAt: new Date().toISOString(),
@@ -1089,6 +1091,7 @@ export class ComplianceService {
       name: request.name,
       description: request.description,
       complianceProfileId: request.complianceProfileId,
+      scanId: request.scanId,
       targetInventory: '',
       selections: request.selections,
       createdAt: new Date().toISOString(),

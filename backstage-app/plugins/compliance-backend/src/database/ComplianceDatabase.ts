@@ -246,6 +246,7 @@ export class ComplianceDatabase {
       name: string;
       description: string;
       profileId: string;
+      scanId?: string;
       selections: RemediationSelection[];
     },
   ): Promise<{ id: string }> {
@@ -256,6 +257,7 @@ export class ComplianceDatabase {
       name: profile.name,
       description: profile.description,
       profile_id: profile.profileId,
+      scan_id: profile.scanId ?? null,
       selections_json: JSON.stringify(profile.selections),
       created_at: now,
       updated_at: now,
@@ -296,6 +298,7 @@ export class ComplianceDatabase {
       name: row.name as string,
       description: (row.description as string) || '',
       complianceProfileId: row.profile_id as string,
+      scanId: (row.scan_id as string) || undefined,
       targetInventory: '',
       selections,
       createdAt: String(row.created_at),

@@ -181,6 +181,7 @@ export const MOCK_REMEDIATION_PROFILES: RemediationProfile[] = [
     name: 'prod-web-stig',
     description: 'Production web server STIG remediation',
     complianceProfileId: 'rhel9-stig',
+    scanId: '42',
     targetInventory: 'production-web-servers',
     selections: [
       { ruleId: 'sshd_set_idle_timeout', enabled: true, parameters: { interval: 600 } },

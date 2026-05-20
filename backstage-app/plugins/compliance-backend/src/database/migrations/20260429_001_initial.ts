@@ -56,6 +56,7 @@ export async function up(knex: Knex): Promise<void> {
     table.string('name').notNullable();
     table.text('description').defaultTo('');
     table.string('profile_id').notNullable();
+    table.string('scan_id').nullable();
     table.text('selections_json').notNullable();
     table.timestamp('created_at').notNullable().defaultTo(knex.fn.now());
     table.timestamp('updated_at').notNullable().defaultTo(knex.fn.now());
