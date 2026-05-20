@@ -366,11 +366,6 @@ export class ControllerClient {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => {
-      const id = setTimeout(() => {
-        resolve();
-        clearTimeout(id);
-      }, ms);
-    });
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

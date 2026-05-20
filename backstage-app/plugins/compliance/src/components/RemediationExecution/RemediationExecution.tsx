@@ -559,7 +559,7 @@ export const RemediationExecution = () => {
         return next;
       });
     }
-  }, [ruleGroups]);
+  }, [ruleGroups, overallStatus]);
 
   const toggleRule = (ruleId: string) => {
     setExpandedRules(prev => {

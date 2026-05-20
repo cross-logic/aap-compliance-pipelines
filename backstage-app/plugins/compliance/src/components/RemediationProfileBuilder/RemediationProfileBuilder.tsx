@@ -770,15 +770,6 @@ export const RemediationProfileBuilder = () => {
         </Button>
       </Box>
 
-      {/* In apply mode, show a secondary Save button above the dialog */}
-      {isApplyMode && (
-        <Box display="flex" justifyContent="flex-end" style={{ marginTop: -8 }}>
-          <Button size="small" startIcon={<SaveIcon />} onClick={() => { setSaveError(null); setSaveDialogOpen(true); }}>
-            Save Changes
-          </Button>
-        </Box>
-      )}
-
       {/* Save/Update Remediation Dialog */}
       <Dialog open={saveDialogOpen} onClose={() => { setSaveDialogOpen(false); if (isEditMode) navigate('/compliance/remediations'); }} maxWidth="sm" fullWidth>
         <DialogTitle>{isEditMode ? 'Remediation Updated' : 'Save Remediation'}</DialogTitle>

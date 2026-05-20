@@ -104,35 +104,37 @@ const ComplianceRouter = () => {
   };
 
   return (
-    <Page themeId="app">
-      <Header
-        title="Compliance"
-        subtitle="Scan, review, and remediate infrastructure compliance"
-        style={{ background: 'inherit' }}
-      />
-      <HeaderTabs
-        selectedIndex={selectedTab}
-        onChange={handleTabChange}
-        tabs={TABS}
-      />
+    <>
+      <Page themeId="app">
+        <Header
+          title="Compliance"
+          subtitle="Scan, review, and remediate infrastructure compliance"
+          style={{ background: 'inherit' }}
+        />
+        <HeaderTabs
+          selectedIndex={selectedTab}
+          onChange={handleTabChange}
+          tabs={TABS}
+        />
+        <Content>
+          <ComplianceErrorBoundary>
+            <Routes>
+              <Route path="/" element={<ComplianceDashboard />} />
+              <Route path="/profiles/:profileId" element={<ProfileBrowser />} />
+              <Route path="/scan" element={<ScanLauncher />} />
+              <Route path="/results" element={<ScanHistory />} />
+              <Route path="/results/:jobId" element={<ResultsViewer />} />
+              <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
+              <Route path="/remediation-edit/:remediationId" element={<RemediationProfileBuilder />} />
+              <Route path="/execute/:jobId" element={<RemediationExecution />} />
+              <Route path="/remediations" element={<RemediationsList />} />
+              <Route path="/settings" element={<CartridgeSettings />} />
+            </Routes>
+          </ComplianceErrorBoundary>
+        </Content>
+      </Page>
       <ActiveJobsBanner />
-      <Content>
-        <ComplianceErrorBoundary>
-          <Routes>
-            <Route path="/" element={<ComplianceDashboard />} />
-            <Route path="/profiles/:profileId" element={<ProfileBrowser />} />
-            <Route path="/scan" element={<ScanLauncher />} />
-            <Route path="/results" element={<ScanHistory />} />
-            <Route path="/results/:jobId" element={<ResultsViewer />} />
-            <Route path="/remediation/:jobId" element={<RemediationProfileBuilder />} />
-            <Route path="/remediation-edit/:remediationId" element={<RemediationProfileBuilder />} />
-            <Route path="/execute/:jobId" element={<RemediationExecution />} />
-            <Route path="/remediations" element={<RemediationsList />} />
-            <Route path="/settings" element={<CartridgeSettings />} />
-          </Routes>
-        </ComplianceErrorBoundary>
-      </Content>
-    </Page>
+    </>
   );
 };
 

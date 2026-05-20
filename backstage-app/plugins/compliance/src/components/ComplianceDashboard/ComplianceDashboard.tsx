@@ -21,6 +21,7 @@ import PlayCircleFilledIcon from '@material-ui/icons/PlayCircleFilled';
 import SecurityIcon from '@material-ui/icons/Security';
 import HistoryIcon from '@material-ui/icons/History';
 import SettingsIcon from '@material-ui/icons/Settings';
+import AssessmentIcon from '@material-ui/icons/Assessment';
 import { ComplianceGauge } from './ComplianceGauge';
 import { complianceApiRef } from '../../api';
 import type { DashboardStats } from '@aap-compliance/common';
@@ -290,7 +291,7 @@ export const ComplianceDashboard = () => {
         </div>
       </div>
 
-      {/* Quick Actions + Recent Scans */}
+      {/* Quick Actions + Recent Activity */}
       <div className={classes.section}>
         <div className={classes.row}>
           <div className={classes.actionsColumn}>
@@ -326,7 +327,7 @@ export const ComplianceDashboard = () => {
           </div>
           <div className={classes.scansColumn}>
             <InfoCard
-              title="Recent Scans"
+              title="Recent Activity"
               action={
                 <Chip
                   icon={<HistoryIcon />}
@@ -334,6 +335,7 @@ export const ComplianceDashboard = () => {
                   variant="outlined"
                   size="small"
                   clickable
+                  onClick={() => navigate('results')}
                 />
               }
             >
@@ -350,9 +352,13 @@ export const ComplianceDashboard = () => {
                   <div>
                     <Box display="flex" alignItems="center" style={{ gap: 6 }}>
                       <Typography variant="subtitle2">{scan.profileName}</Typography>
-                      {scan.scanType === 'verification' && (
-                        <Chip label="Verification" size="small" variant="outlined" style={{ height: 18, fontSize: '0.65rem' }} />
-                      )}
+                      <Chip
+                        label={scan.scanType === 'verification' ? 'Verification' : 'Assessment'}
+                        size="small"
+                        variant="outlined"
+                        color={scan.scanType === 'verification' ? 'secondary' : 'default'}
+                        style={{ height: 18, fontSize: '0.65rem' }}
+                      />
                     </Box>
                     <Typography variant="body2" color="textSecondary">
                       {scan.inventoryName} &middot; {scan.timestamp}
@@ -399,13 +405,23 @@ export const ComplianceDashboard = () => {
                         color={fw.rate >= 80 ? 'primary' : 'secondary'}
                       />
                     </Box>
-                    <Typography
-                      variant="caption"
-                      color="textSecondary"
-                      style={{ marginTop: 8, display: 'block' }}
-                    >
-                      Last scan: {fw.lastScan}
-                    </Typography>
+                    <Box mt={1.5} display="flex" justifyContent="space-between" alignItems="center">
+                      <Typography
+                        variant="caption"
+                        color="textSecondary"
+                      >
+                        Last scan: {fw.lastScan}
+                      </Typography>
+                      <Chip
+                        icon={<AssessmentIcon style={{ fontSize: 14 }} />}
+                        label="Scan"
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        clickable
+                        onClick={() => navigate(`scan?profile=${fw.profileId}`)}
+                      />
+                    </Box>
                   </CardContent>
                 </Card>
               </div>

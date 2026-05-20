@@ -751,10 +751,11 @@ export class ComplianceService {
         parameters: (meta?.parameters ?? []).map(p => ({
           name: p.name,
           label: p.label,
-          type: p.type,
-          default: p.default,
-          value: p.default,
-          options: p.options,
+          description: p.label,
+          type: p.type as 'string' | 'number' | 'boolean' | 'select',
+          default: p.default as string | number | boolean,
+          value: p.default as string | number | boolean,
+          options: p.options as Array<{ label: string; value: string | number }> | undefined,
         })),
         hosts: entry.hosts,
         passCount,
@@ -881,7 +882,7 @@ export class ComplianceService {
 
       // Collect parameter overrides (exclude internal scope parameter)
       const extraVars: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(sel.parameters)) {
+      for (const [key, value] of Object.entries(sel.parameters ?? {})) {
         if (key !== 'scope') {
           extraVars[key] = value;
         }
@@ -1023,6 +1024,7 @@ export class ComplianceService {
       const frameworkScores = Array.from(profileStats.entries()).map(([pid, stats]) => {
         const total = stats.pass + stats.fail;
         return {
+          profileId: pid,
           name: profileNameMap.get(pid) || pid,
           target: 'RHEL 9',
           rules: stats.rules,

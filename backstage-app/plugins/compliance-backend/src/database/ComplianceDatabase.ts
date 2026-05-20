@@ -212,16 +212,21 @@ export class ComplianceDatabase {
   }
 
   async getPostureHistory(
-    profileId: string,
+    profileId?: string,
     days: number = 30,
   ): Promise<PostureSnapshot[]> {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
 
-    const rows = await this.db('compliance_posture_snapshots')
-      .where('profile_id', profileId)
+    let query = this.db('compliance_posture_snapshots')
       .where('timestamp', '>=', cutoff.toISOString())
       .orderBy('timestamp', 'asc');
+
+    if (profileId) {
+      query = query.where('profile_id', profileId);
+    }
+
+    const rows = await query;
 
     return rows.map(this.mapPostureRow);
   }

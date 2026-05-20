@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   StatusRunning,
@@ -10,22 +10,35 @@ import {
   Chip,
   Paper,
   LinearProgress,
+  IconButton,
   makeStyles,
 } from '@material-ui/core';
+import CloseIcon from '@material-ui/icons/Close';
 import { useApi } from '@backstage/core-plugin-api';
 import { complianceApiRef } from '../../api';
 import type { ComplianceScan } from '@aap-compliance/common';
 
 const useStyles = makeStyles(theme => ({
   root: {
-    padding: theme.spacing(0, 3),
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1300,
+    padding: theme.spacing(0.5, 2),
+    backgroundColor: theme.palette.background.paper,
+    borderTop: `1px solid ${theme.palette.divider}`,
+    boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
   },
   banner: {
     display: 'flex',
     alignItems: 'center',
-    padding: theme.spacing(1.5, 2),
-    marginBottom: theme.spacing(1),
+    padding: theme.spacing(0.75, 1.5),
+    marginBottom: theme.spacing(0.5),
     cursor: 'pointer',
+    '&:last-child': {
+      marginBottom: 0,
+    },
     '&:hover': {
       backgroundColor: theme.palette.action.hover,
     },
@@ -34,7 +47,7 @@ const useStyles = makeStyles(theme => ({
     display: 'flex',
     alignItems: 'center',
     gap: theme.spacing(1),
-    minWidth: 200,
+    minWidth: 180,
   },
   progressSection: {
     flex: 1,
@@ -42,15 +55,19 @@ const useStyles = makeStyles(theme => ({
     marginRight: theme.spacing(2),
   },
   progressBar: {
-    height: 6,
-    borderRadius: 3,
+    height: 4,
+    borderRadius: 2,
   },
   elapsed: {
     fontFamily: 'monospace',
-    fontSize: '0.8rem',
+    fontSize: '0.75rem',
     color: theme.palette.text.secondary,
-    minWidth: 60,
+    minWidth: 50,
     textAlign: 'right' as const,
+  },
+  dismissButton: {
+    marginLeft: theme.spacing(1),
+    padding: theme.spacing(0.5),
   },
 }));
 
@@ -80,8 +97,13 @@ export const ActiveJobsBanner = () => {
   const navigate = useNavigate();
   const api = useApi(complianceApiRef);
   const [activeJobs, setActiveJobs] = useState<ActiveJob[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [visible, setVisible] = useState(true);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const dismissJob = useCallback((scanId: string) => {
+    setDismissedIds(prev => new Set(prev).add(scanId));
+  }, []);
 
   // Track tab visibility for polling pause
   useEffect(() => {
@@ -156,11 +178,13 @@ export const ActiveJobsBanner = () => {
     };
   }, [activeJobs.length]);
 
-  if (activeJobs.length === 0) return null;
+  const visibleJobs = activeJobs.filter(job => !dismissedIds.has(job.scan.id));
+
+  if (visibleJobs.length === 0) return null;
 
   return (
     <Box className={classes.root}>
-      {activeJobs.map(job => (
+      {visibleJobs.map(job => (
         <Paper
           key={job.scan.id}
           variant="outlined"
@@ -192,6 +216,18 @@ export const ActiveJobsBanner = () => {
           <Typography variant="body2" className={classes.elapsed}>
             {formatElapsed(job.elapsed)}
           </Typography>
+
+          <IconButton
+            className={classes.dismissButton}
+            size="small"
+            onClick={e => {
+              e.stopPropagation();
+              dismissJob(job.scan.id);
+            }}
+            aria-label="Dismiss job notification"
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
         </Paper>
       ))}
     </Box>

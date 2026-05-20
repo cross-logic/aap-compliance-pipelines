@@ -146,9 +146,9 @@ export const MOCK_DASHBOARD_STATS: DashboardStats = {
     },
   ],
   frameworkScores: [
-    { name: 'DISA STIG V2R8', target: 'RHEL 9', rules: 366, rate: 78, lastScan: '2026-04-28' },
-    { name: 'CIS Benchmark L1', target: 'RHEL 9', rules: 189, rate: 92, lastScan: '2026-04-27' },
-    { name: 'PCI-DSS v4.0', target: 'RHEL 9', rules: 142, rate: 85, lastScan: '2026-04-25' },
+    { profileId: 'rhel9-stig', name: 'DISA STIG V2R8', target: 'RHEL 9', rules: 366, rate: 78, lastScan: '2026-04-28' },
+    { profileId: 'rhel9-cis-l1', name: 'CIS Benchmark L1', target: 'RHEL 9', rules: 189, rate: 92, lastScan: '2026-04-27' },
+    { profileId: 'rhel9-pci-dss', name: 'PCI-DSS v4.0', target: 'RHEL 9', rules: 142, rate: 85, lastScan: '2026-04-25' },
   ],
 };
 

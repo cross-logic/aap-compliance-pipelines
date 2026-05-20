@@ -2,7 +2,7 @@
  * Types for the compliance backend REST API and Controller integration.
  */
 
-import type { Finding, ScanResult } from './findings';
+import type { Finding, ScanResult, FindingParameter } from './findings';
 import type { ComplianceProfile, RemediationProfile, RemediationSelection } from './profiles';
 
 /** Request to launch a compliance scan via the backend. */
@@ -89,15 +89,7 @@ export interface MultiHostFinding {
   severity: 'CAT_I' | 'CAT_II' | 'CAT_III';
   category: string;
   disruption: 'low' | 'medium' | 'high';
-  parameters: Array<{
-    name: string;
-    label: string;
-    description: string;
-    type: 'string' | 'number' | 'boolean' | 'select';
-    default: string | number | boolean;
-    value: string | number | boolean;
-    options?: Array<{ label: string; value: string | number }>;
-  }>;
+  parameters: FindingParameter[];
   hosts: Array<{
     host: string;
     status: 'pass' | 'fail' | 'error';
@@ -177,6 +169,7 @@ export interface DashboardStats {
   activeProfiles: number;
   recentScans: RecentScan[];
   frameworkScores: Array<{
+    profileId: string;
     name: string;
     target: string;
     rules: number;

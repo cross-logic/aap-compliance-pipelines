@@ -279,8 +279,9 @@ export class MockDataProvider {
     nameFilter?: string,
   ): Array<{ id: number; name: string; description: string }> {
     if (!nameFilter) return MOCK_WORKFLOW_TEMPLATES;
+    const lowerFilter = nameFilter.toLowerCase();
     return MOCK_WORKFLOW_TEMPLATES.filter(t =>
-      t.name.startsWith(nameFilter),
+      t.name.toLowerCase().includes(lowerFilter),
     );
   }
 
@@ -314,9 +315,9 @@ export class MockDataProvider {
         { id: '3', profileName: 'RHEL 9 STIG V2R8', inventoryName: 'dev-servers', passRate: 62, timestamp: '3 days ago', status: 'completed' },
       ],
       frameworkScores: [
-        { name: 'DISA STIG V2R8', target: 'RHEL 9', rules: 366, rate: 78, lastScan: '2 hours ago' },
-        { name: 'CIS Benchmark L1', target: 'RHEL 9', rules: 189, rate: 85, lastScan: '1 day ago' },
-        { name: 'PCI-DSS v4.0', target: 'RHEL 9', rules: 142, rate: 62, lastScan: '3 days ago' },
+        { profileId: 'rhel9-stig', name: 'DISA STIG V2R8', target: 'RHEL 9', rules: 366, rate: 78, lastScan: '2 hours ago' },
+        { profileId: 'rhel9-cis-l1', name: 'CIS Benchmark L1', target: 'RHEL 9', rules: 189, rate: 85, lastScan: '1 day ago' },
+        { profileId: 'rhel9-pci-dss', name: 'PCI-DSS v4.0', target: 'RHEL 9', rules: 142, rate: 62, lastScan: '3 days ago' },
       ],
     };
   }

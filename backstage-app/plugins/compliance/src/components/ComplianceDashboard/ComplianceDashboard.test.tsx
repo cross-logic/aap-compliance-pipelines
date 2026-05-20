@@ -52,13 +52,13 @@ describe('ComplianceDashboard', () => {
     expect(screen.getByText('Browse Profiles')).toBeInTheDocument();
   });
 
-  it('displays recent scans from mock data', async () => {
+  it('displays recent activity from mock data', async () => {
     await renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText('Recent Scans')).toBeInTheDocument();
+      expect(screen.getByText('Recent Activity')).toBeInTheDocument();
     });
     expect(screen.getByText('RHEL 9 STIG V2R8')).toBeInTheDocument();
-    // "CIS Benchmark L1" appears in both Recent Scans and Active Profiles
+    // "CIS Benchmark L1" appears in both Recent Activity and Active Profiles
     expect(screen.getAllByText('CIS Benchmark L1').length).toBeGreaterThanOrEqual(1);
   });
 
