@@ -169,11 +169,14 @@ export const RemediationProfileBuilder = () => {
         setProfileName(profile.name);
         setProfileDescription(profile.description);
 
-        if (profile.scanId) {
-          return api.getFindings(profile.scanId);
-        }
-        // For profiles saved before scanId was introduced, load the latest findings
-        return api.getFindings();
+        // Try loading findings from the saved scanId; if it's invalid
+        // (non-numeric profile ID from old saves), fall back to latest.
+        const scanIdToUse = profile.scanId && /^\d+$/.test(profile.scanId)
+          ? profile.scanId
+          : undefined;
+        return scanIdToUse
+          ? api.getFindings(scanIdToUse)
+          : api.getFindings();
       })
       .then(data => {
         if (!cancelled && data) setAllFindings(data);
@@ -205,6 +208,14 @@ export const RemediationProfileBuilder = () => {
     return () => { cancelled = true; };
   }, [api, jobId, isEditMode]);
 
+  // In edit mode, show ALL rules (so user can add/remove any).
+  // In new remediation mode, show only rules with failures.
+  const displayFindings = useMemo(
+    () => isEditMode ? allFindings : allFindings.filter(f => f.failCount > 0),
+    [allFindings, isEditMode],
+  );
+
+  // Keep failedFindings for stats display
   const failedFindings = useMemo(
     () => allFindings.filter(f => f.failCount > 0),
     [allFindings],
@@ -214,17 +225,15 @@ export const RemediationProfileBuilder = () => {
 
   // Initialize selections when findings load
   useEffect(() => {
-    if (failedFindings.length === 0) return;
+    if (displayFindings.length === 0) return;
     setSelections(prev => {
-      // Only initialize if empty (avoid resetting user changes)
       if (Object.keys(prev).length > 0) return prev;
 
-      // In edit mode, apply saved selections from the remediation profile
       const savedSelections = editProfile?.selections ?? [];
       const savedMap = new Map(savedSelections.map(s => [s.ruleId, s]));
 
       const initial: Record<string, RuleSelection> = {};
-      failedFindings.forEach(f => {
+      displayFindings.forEach(f => {
         const saved = savedMap.get(f.ruleId);
         initial[f.ruleId] = {
           enabled: saved ? saved.enabled : (isEditMode ? false : f.disruption !== 'high'),
@@ -237,7 +246,7 @@ export const RemediationProfileBuilder = () => {
       });
       return initial;
     });
-  }, [failedFindings, editProfile, isEditMode]);
+  }, [displayFindings, editProfile, isEditMode]);
 
   const toggleFinding = (ruleId: string) => {
     setSelections(prev => ({
@@ -286,7 +295,7 @@ export const RemediationProfileBuilder = () => {
   const selectBySeverity = (...severities: FindingSeverity[]) => {
     setSelections(prev => {
       const updated = { ...prev };
-      failedFindings.forEach(f => {
+      displayFindings.forEach(f => {
         updated[f.ruleId] = { ...updated[f.ruleId], enabled: severities.includes(f.severity) };
       });
       return updated;
@@ -298,7 +307,7 @@ export const RemediationProfileBuilder = () => {
 
   const totalAffectedHosts = useMemo(() => {
     const hostSet = new Set<string>();
-    failedFindings.forEach(f => {
+    displayFindings.forEach(f => {
       const sel = selections[f.ruleId];
       if (sel?.enabled) {
         if (sel.scope === 'standardize_all') {
@@ -309,13 +318,13 @@ export const RemediationProfileBuilder = () => {
       }
     });
     return hostSet.size;
-  }, [failedFindings, selections]);
+  }, [displayFindings, selections]);
 
   const groupedBySeverity = useMemo(() => {
     const groups: Record<FindingSeverity, MultiHostFinding[]> = { CAT_I: [], CAT_II: [], CAT_III: [] };
-    failedFindings.forEach(f => groups[f.severity].push(f));
+    displayFindings.forEach(f => groups[f.severity].push(f));
     return groups;
-  }, [failedFindings]);
+  }, [displayFindings]);
 
   const getSeverityClass = (severity: FindingSeverity) => {
     switch (severity) {
@@ -621,7 +630,7 @@ export const RemediationProfileBuilder = () => {
       {/* Summary Bar */}
       <div className={classes.summaryBar}>
         <div className={classes.summaryCount}>
-          <Typography variant="body1"><strong>{failedFindings.length}</strong> rules with failures</Typography>
+          <Typography variant="body1"><strong>{displayFindings.length}</strong> rules{isEditMode ? '' : ' with failures'}</Typography>
           <Typography variant="body1" style={{ color: '#3E8635' }}><strong>{enabledCount}</strong> selected</Typography>
           <Typography variant="body1" color="textSecondary"><strong>{disabledCount}</strong> skipped</Typography>
           <Typography variant="body1" color="textSecondary"><strong>{totalAffectedHosts}</strong> hosts affected</Typography>
@@ -670,9 +679,43 @@ export const RemediationProfileBuilder = () => {
 
       {/* Action Buttons */}
       <Box display="flex" justifyContent="flex-end" style={{ gap: 16 }}>
-        {!isApplyMode && (
+        {!isApplyMode && !isEditMode && (
           <Button variant="outlined" startIcon={<SaveIcon />} onClick={() => { setSaveError(null); setSaveDialogOpen(true); }}>
-            {isEditMode ? 'Update Remediation' : 'Save Remediation'}
+            Save Remediation
+          </Button>
+        )}
+        {!isApplyMode && isEditMode && (
+          <Button
+            variant="outlined"
+            startIcon={<SaveIcon />}
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              setSaveError(null);
+              try {
+                const allSelections = displayFindings.map(f => ({
+                  ruleId: f.ruleId,
+                  enabled: selections[f.ruleId]?.enabled ?? false,
+                  parameters: selections[f.ruleId]?.parameters ?? {},
+                  scope: selections[f.ruleId]?.scope,
+                }));
+                await api.saveRemediationProfile({
+                  id: editProfile?.id,
+                  name: profileName,
+                  description: profileDescription,
+                  complianceProfileId: editProfile?.complianceProfileId ?? '',
+                  scanId: editProfile?.scanId,
+                  selections: allSelections,
+                });
+                setSaveDialogOpen(true);
+              } catch (err) {
+                setSaveError(err instanceof Error ? err.message : 'Failed to save');
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            {saving ? 'Saving...' : 'Update Remediation'}
           </Button>
         )}
         <Button
@@ -686,7 +729,7 @@ export const RemediationProfileBuilder = () => {
             setLaunching(true);
             try {
               // Build selections with scope included
-              const enabledSelections = failedFindings
+              const enabledSelections = displayFindings
                 .filter(f => selections[f.ruleId]?.enabled)
                 .map(f => ({
                   ruleId: f.ruleId,
@@ -735,13 +778,13 @@ export const RemediationProfileBuilder = () => {
         </Box>
       )}
 
-      {/* Save Remediation Dialog */}
-      <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{isEditMode ? 'Update Remediation' : 'Save Remediation'}</DialogTitle>
+      {/* Save/Update Remediation Dialog */}
+      <Dialog open={saveDialogOpen} onClose={() => { setSaveDialogOpen(false); if (isEditMode) navigate('/compliance/remediations'); }} maxWidth="sm" fullWidth>
+        <DialogTitle>{isEditMode ? 'Remediation Updated' : 'Save Remediation'}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="textSecondary" paragraph>
             {isEditMode
-              ? 'Update the rule selections, scope choices, and parameter overrides for this remediation.'
+              ? 'Rule selections have been saved. You can also update the name and description below.'
               : 'Save your rule selections, scope choices, and parameter overrides as a reusable remediation. You can find and re-apply saved remediations from the Remediations tab.'}
           </Typography>
           <TextField
@@ -773,7 +816,9 @@ export const RemediationProfileBuilder = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSaveDialogOpen(false)} disabled={saving}>Cancel</Button>
+          {!isEditMode && (
+            <Button onClick={() => setSaveDialogOpen(false)} disabled={saving}>Cancel</Button>
+          )}
           <Button
             variant="contained"
             color="primary"
@@ -782,33 +827,33 @@ export const RemediationProfileBuilder = () => {
               setSaving(true);
               setSaveError(null);
               try {
-                const enabledSelections = failedFindings
-                  .filter(f => selections[f.ruleId]?.enabled)
-                  .map(f => ({
-                    ruleId: f.ruleId,
-                    enabled: true,
-                    scope: selections[f.ruleId].scope ?? 'failed_only' as const,
-                    parameters: selections[f.ruleId].parameters,
-                  }));
+                const allSelections = displayFindings.map(f => ({
+                  ruleId: f.ruleId,
+                  enabled: selections[f.ruleId]?.enabled ?? false,
+                  parameters: selections[f.ruleId]?.parameters ?? {},
+                  scope: selections[f.ruleId]?.scope,
+                }));
 
-                // Include the scanId so this profile can reload findings later.
-                // In edit mode, preserve the original scanId from the loaded profile;
-                // in scan mode, use the current route param jobId.
                 const effectiveScanId = isEditMode
                   ? (editProfile?.scanId || editProfile?.complianceProfileId)
                   : jobId;
 
                 await api.saveRemediationProfile({
+                  id: isEditMode ? editProfile?.id : undefined,
                   name: profileName,
                   description: profileDescription,
                   complianceProfileId: editProfile?.complianceProfileId || 'rhel9-stig',
                   scanId: effectiveScanId,
-                  selections: enabledSelections,
+                  selections: isEditMode ? allSelections : allSelections.filter(s => s.enabled),
                 });
 
                 setSaveDialogOpen(false);
-                setProfileName('');
-                setProfileDescription('');
+                if (isEditMode) {
+                  navigate('/compliance/remediations');
+                } else {
+                  setProfileName('');
+                  setProfileDescription('');
+                }
               } catch (err) {
                 setSaveError(err instanceof Error ? err.message : 'Failed to save remediation');
               } finally {
@@ -816,7 +861,7 @@ export const RemediationProfileBuilder = () => {
               }
             }}
           >
-            {saving ? 'Saving...' : (isEditMode ? 'Update' : 'Save')}
+            {saving ? 'Saving...' : (isEditMode ? 'Close' : 'Save')}
           </Button>
         </DialogActions>
       </Dialog>

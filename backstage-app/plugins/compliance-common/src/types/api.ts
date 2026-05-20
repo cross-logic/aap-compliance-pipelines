@@ -149,6 +149,7 @@ export interface JobEvent {
 
 /** Saved remediation profile request body. */
 export interface SaveRemediationProfileRequest {
+  id?: string;
   name: string;
   description: string;
   complianceProfileId: string;

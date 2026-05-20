@@ -369,11 +369,15 @@ export async function createRouter(
     }
 
     try {
-      // Fetch the latest findings so the plan builder uses real scan data.
-      // The service uses these to build the remediation plan internally,
-      // which determines job_tags and host limits.
-      const findings = await service.getFindings(body.scanId);
-      logger.info(`Findings for remediation: ${findings.length} rules (scanId=${body.scanId})`);
+      // Fetch findings for the remediation plan. Try the provided scanId
+      // first; if it returns nothing (e.g., old profile with non-numeric
+      // scanId), fall back to the latest findings.
+      let findings = await service.getFindings(body.scanId);
+      if (findings.length === 0 && body.scanId) {
+        logger.info(`No findings for scanId=${body.scanId}, falling back to latest`);
+        findings = await service.getFindings();
+      }
+      logger.info(`Findings for remediation: ${findings.length} rules`);
 
       // Build the plan for the response (the service also builds it
       // internally for the actual launch, so the plan in the response
@@ -445,6 +449,7 @@ export async function createRouter(
     }
 
     const saveRequest: SaveRemediationProfileRequest = {
+      id: body.id,
       name: body.name,
       description: body.description ?? '',
       complianceProfileId: body.complianceProfileId ?? '',

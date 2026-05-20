@@ -273,13 +273,21 @@ function groupTasksByRule(
       tasks: [],
     };
 
-    // Match tasks by ruleId or stigId
+    // Match tasks to this rule by multiple strategies:
+    // 1. Exact ruleId or stigId match (from event tags/role)
+    // 2. Task name contains key words from the rule ID (e.g., "empty_passwords" → "Empty Passwords")
+    // 3. Task name contains key words from the rule title
+    const ruleWords = sel.ruleId.replace(/_/g, ' ').toLowerCase().split(' ').filter(w => w.length > 3);
+    const titleWords = (finding?.title || '').toLowerCase().split(' ').filter(w => w.length > 3);
     tasks.forEach((task, idx) => {
       if (usedTaskIndices.has(idx)) return;
-      if (
+      const taskLower = task.name.toLowerCase();
+      const matched =
         task.ruleId === sel.ruleId ||
-        (task.stigId && finding?.stigId && task.stigId === finding.stigId)
-      ) {
+        (task.stigId && finding?.stigId && task.stigId === finding.stigId) ||
+        (ruleWords.length >= 2 && ruleWords.every(w => taskLower.includes(w))) ||
+        (titleWords.length >= 2 && titleWords.filter(w => w.length > 4).every(w => taskLower.includes(w)));
+      if (matched) {
         group.tasks.push(task);
         usedTaskIndices.add(idx);
       }
@@ -288,13 +296,15 @@ function groupTasksByRule(
     groups.push(group);
   }
 
-  // Gather unmatched tasks into an "Other Tasks" group
+  // Gather unmatched tasks into a "Pre-requisite Tasks" group
   const otherTasks = tasks.filter((_, idx) => !usedTaskIndices.has(idx));
   if (otherTasks.length > 0) {
-    groups.push({
-      ruleId: '__other__',
+    // Pre-requisite tasks (like Gathering Facts, package checks) run first,
+    // so insert them at the beginning of the list.
+    groups.unshift({
+      ruleId: 'pre-requisite',
       stigId: '',
-      title: 'Other Tasks',
+      title: 'Pre-Requisite Tasks',
       tasks: otherTasks,
     });
   }
@@ -417,8 +427,8 @@ export const RemediationExecution = () => {
       }
 
       const result = await api.launchRemediation({
-        profileId: 'rhel9-stig',
-        inventoryId: 1,
+        profileId: complianceProfileIdRef.current,
+        inventoryId: inventoryIdRef.current,
         selections: loadedSelections,
         scanId,
       });

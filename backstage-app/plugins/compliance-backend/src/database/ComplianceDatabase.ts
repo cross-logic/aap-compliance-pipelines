@@ -243,6 +243,7 @@ export class ComplianceDatabase {
 
   async saveRemediationProfile(
     profile: {
+      id?: string;
       name: string;
       description: string;
       profileId: string;
@@ -250,8 +251,22 @@ export class ComplianceDatabase {
       selections: RemediationSelection[];
     },
   ): Promise<{ id: string }> {
-    const id = randomUUID();
     const now = new Date().toISOString();
+
+    if (profile.id) {
+      await this.db('compliance_remediation_profiles')
+        .where('id', profile.id)
+        .update({
+          name: profile.name,
+          description: profile.description,
+          scan_id: profile.scanId ?? null,
+          selections_json: JSON.stringify(profile.selections),
+          updated_at: now,
+        });
+      return { id: profile.id };
+    }
+
+    const id = randomUUID();
     await this.db('compliance_remediation_profiles').insert({
       id,
       name: profile.name,

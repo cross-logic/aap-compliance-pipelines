@@ -176,7 +176,13 @@ export const RemediationsList = () => {
                       <IconButton
                         size="small"
                         title="Apply this remediation"
-                        onClick={() => navigate(`/compliance/remediation-edit/${r.id}?apply=true`)}
+                        onClick={() => {
+                          const scanId = r.scanId || '';
+                          const params = new URLSearchParams();
+                          params.set('profileId', r.id);
+                          if (scanId) params.set('scanId', scanId);
+                          navigate(`/compliance/execute/${r.id}?${params.toString()}`);
+                        }}
                       >
                         <PlayArrowIcon fontSize="small" />
                       </IconButton>

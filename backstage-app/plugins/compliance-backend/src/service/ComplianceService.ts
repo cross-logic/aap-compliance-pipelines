@@ -1066,6 +1066,7 @@ export class ComplianceService {
     // In live mode with a database, persist to the DB
     if (this.dataSource === 'live' && this.database) {
       const saved = await this.database.saveRemediationProfile({
+        id: request.id,
         name: request.name,
         description: request.description,
         profileId: request.complianceProfileId,
