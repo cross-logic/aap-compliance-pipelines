@@ -208,7 +208,8 @@ export const RemediationExecution = () => {
     launchRemediation();
   }, [launchRemediation]);
 
-  // Poll the workflow status and find the remediate node's job events
+  // Poll the remediate job directly (not a workflow — remediation
+  // launches the JT with native job_tags for proper scoping).
   useEffect(() => {
     if (!workflowJobId) return undefined;
 
@@ -216,86 +217,45 @@ export const RemediationExecution = () => {
 
     const pollStatus = async () => {
       try {
-        // Poll workflow status (remediation now launches via workflow)
-        const workflowStatus = await api.getWorkflowStatus(workflowJobId).catch(() => null);
-        if (cancelled || !workflowStatus) return;
+        const jobStatus = await api.getJobStatus(workflowJobId).catch(() => null);
+        if (cancelled || !jobStatus) return;
 
-        setOverallStatus(workflowStatus.status);
-        setElapsed(workflowStatus.elapsed ?? 0);
+        setOverallStatus(jobStatus.status);
+        setElapsed(jobStatus.elapsed ?? 0);
 
-        // Get workflow nodes to determine the phase and find the remediate job
-        let remediateJobId: number | undefined;
-        try {
-          const wfNodes = await api.getWorkflowNodes(workflowJobId);
-
-          // Derive phase from workflow nodes
-          const remediateNode = wfNodes.find(
-            n => n.identifier === 'remediate' ||
-              n.summary_fields?.unified_job_template?.name?.toLowerCase().includes('remediat'),
+        if (jobStatus.status === 'successful') {
+          setPhase('complete');
+          setProgress(100);
+        } else if (jobStatus.status === 'running' || jobStatus.status === 'waiting') {
+          setPhase('running');
+        } else if (TERMINAL_STATUSES.includes(jobStatus.status)) {
+          setPhase('failed');
+          setErrorMessage(
+            jobStatus.failed
+              ? `Remediation failed after ${formatElapsed(jobStatus.elapsed ?? 0)}`
+              : `Remediation ${jobStatus.status}`,
           );
-          const evaluateNode = wfNodes.find(
-            n => n.identifier === 'evaluate' ||
-              n.summary_fields?.unified_job_template?.name?.toLowerCase().includes('evaluat'),
-          );
-
-          remediateJobId = remediateNode?.summary_fields?.job?.id;
-
-          if (workflowStatus.status === 'successful') {
-            setPhase('complete');
-            setProgress(100);
-          } else if (TERMINAL_STATUSES.includes(workflowStatus.status)) {
-            setPhase('failed');
-            setErrorMessage(
-              workflowStatus.failed
-                ? `Remediation failed after ${formatElapsed(workflowStatus.elapsed ?? 0)}`
-                : `Remediation ${workflowStatus.status}`,
-            );
-            setProgress(100);
-          } else if (remediateNode?.summary_fields?.job?.status === 'running' ||
-                     remediateNode?.summary_fields?.job?.status === 'successful') {
-            setPhase('running');
-          } else if (evaluateNode?.summary_fields?.job?.status === 'running' ||
-                     evaluateNode?.summary_fields?.job?.status === 'successful') {
-            setPhase('verifying');
-          } else if (workflowStatus.status === 'running') {
-            setPhase('preparing');
-          }
-
-          // Update progress from node statuses
-          const nodeStatuses = wfNodes
-            .filter(n => n.summary_fields?.job)
-            .map(n => ({ status: n.summary_fields?.job?.status ?? 'pending' }));
-          if (nodeStatuses.length > 0 && !TERMINAL_STATUSES.includes(workflowStatus.status)) {
-            setProgress(computeProgress(nodeStatuses));
-          }
-        } catch {
-          // Workflow nodes may not be available yet
-          if (workflowStatus.status === 'running') {
-            setPhase('preparing');
-            setProgress(10);
-          }
+          setProgress(100);
         }
 
-        // Fetch task-level events from the remediate job within the workflow
-        if (remediateJobId) {
-          try {
-            const events = await api.getJobEvents(remediateJobId);
-            if (!cancelled) {
-              const extracted = extractTasksFromEvents(events);
-              if (extracted.length > 0) {
-                setTasks(extracted);
-                const done = extracted.filter(t => t.status === 'completed' || t.status === 'failed').length;
-                if (extracted.length > 0 && !TERMINAL_STATUSES.includes(workflowStatus.status)) {
-                  setProgress(Math.round((done / extracted.length) * 100));
-                }
+        // Fetch task-level events directly from the job
+        try {
+          const events = await api.getJobEvents(workflowJobId);
+          if (!cancelled) {
+            const extracted = extractTasksFromEvents(events);
+            if (extracted.length > 0) {
+              setTasks(extracted);
+              const done = extracted.filter(t => t.status === 'completed' || t.status === 'failed').length;
+              if (jobStatus.status === 'running') {
+                setProgress(Math.round((done / extracted.length) * 100));
               }
             }
-          } catch {
-            // Job events may not be available yet
           }
+        } catch {
+          // Job events may not be available yet
         }
 
-        if (TERMINAL_STATUSES.includes(workflowStatus.status) && !completeFired.current) {
+        if (TERMINAL_STATUSES.includes(jobStatus.status) && !completeFired.current) {
           completeFired.current = true;
         }
       } catch {

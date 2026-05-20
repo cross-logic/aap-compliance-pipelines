@@ -1,49 +1,25 @@
 ---
 # Compliance: Apply CaC STIG remediation
 #
-# This playbook wraps the ComplianceAsCode (CaC) remediation playbook
-# that ships with the scap-security-guide RPM inside the Execution
-# Environment.
+# This playbook imports the ComplianceAsCode (CaC) remediation playbook
+# from the scap-security-guide RPM inside the Execution Environment.
 #
-# It accepts `remediation_rules` as an extra_var (comma-separated rule
-# IDs) so that the compliance workflow can pass scoped tags without
-# relying on workflow-level job_tags, which don't propagate to child
-# job templates in AAP.
+# Scoping:
+#   The compliance dashboard launches this JT directly (not through the
+#   workflow) with native AAP job_tags to scope remediation to selected
+#   rules. The CaC playbook's tasks are tagged per rule ID, so AAP's
+#   built-in --tags filtering applies automatically.
 #
-# Variables (passed via extra_vars from the workflow):
-#   remediation_rules:      comma-separated CaC rule IDs (tags)
-#                            e.g. "sshd_set_idle_timeout,accounts_tmout"
-#                            When empty or undefined, full remediation runs.
-#   remediation_extra_vars: dict of CaC variable overrides
-#                            e.g. { var_accounts_tmout: 900 }
+#   No wrapper logic is needed — the JT has ask_tags_on_launch: true,
+#   and the Controller passes --tags at the CLI level.
 #
-# The CaC playbook is maintained by Red Hat as part of scap-security-guide.
-# DISA releases quarterly STIG updates -> Red Hat updates the RPM -> rebuild EE.
+# Parameter overrides:
+#   CaC variables (e.g., var_accounts_tmout: 900) are passed as
+#   extra_vars through the JT's ask_variables_on_launch setting.
+#
+# Content lifecycle:
+#   The CaC playbook is maintained by Red Hat as part of scap-security-guide.
+#   DISA quarterly STIG updates → Red Hat RPM update → rebuild EE → new content.
 
 - name: "Compliance: Apply CaC STIG remediation"
-  hosts: all
-  become: true
-  gather_facts: false
-  vars:
-    remediation_rules: ""
-    remediation_extra_vars: {}
-  tasks:
-    - name: Build remediation command
-      ansible.builtin.set_fact:
-        _remediation_cmd: >-
-          ansible-playbook
-          /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml
-          --connection=local
-          --become
-          -i localhost,
-          {{ ('--tags ' + remediation_rules) if (remediation_rules | length > 0) else '' }}
-        _extra_var_args: >-
-          {% for key, value in remediation_extra_vars.items() %}
-          -e {{ key }}={{ value }}
-          {% endfor %}
-
-    - name: Apply STIG remediation
-      ansible.builtin.command:
-        cmd: "{{ _remediation_cmd }} {{ _extra_var_args }}"
-      register: _result
-      changed_when: "'changed=' in _result.stdout"
+  ansible.builtin.import_playbook: /usr/share/scap-security-guide/ansible/rhel9-playbook-stig.yml

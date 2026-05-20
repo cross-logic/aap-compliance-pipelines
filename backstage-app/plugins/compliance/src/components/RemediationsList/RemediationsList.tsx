@@ -18,10 +18,15 @@ import {
   Paper,
   Chip,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   makeStyles,
 } from '@material-ui/core';
 import PlayArrowIcon from '@material-ui/icons/PlayArrow';
 import VisibilityIcon from '@material-ui/icons/Visibility';
+import DeleteIcon from '@material-ui/icons/Delete';
 import SettingsIcon from '@material-ui/icons/Settings';
 import AddIcon from '@material-ui/icons/Add';
 import { complianceApiRef } from '../../api';
@@ -53,6 +58,8 @@ export const RemediationsList = () => {
   const api = useApi(complianceApiRef);
   const [remediations, setRemediations] = useState<RemediationProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<RemediationProfile | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     api.getRemediationProfiles()
@@ -62,6 +69,20 @@ export const RemediationsList = () => {
       })
       .finally(() => setLoading(false));
   }, [api]);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.deleteRemediationProfile(deleteTarget.id);
+      setRemediations(prev => prev.filter(r => r.id !== deleteTarget.id));
+    } catch (err) {
+      console.error('Failed to delete remediation profile:', err);
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
   if (loading) return <Progress />;
 
@@ -155,9 +176,16 @@ export const RemediationsList = () => {
                       <IconButton
                         size="small"
                         title="Apply this remediation"
-                        onClick={() => navigate(`/compliance/execute/${r.id}`)}
+                        onClick={() => navigate(`/compliance/remediation-edit/${r.id}?apply=true`)}
                       >
                         <PlayArrowIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        title="Delete this remediation"
+                        onClick={() => setDeleteTarget(r)}
+                      >
+                        <DeleteIcon fontSize="small" />
                       </IconButton>
                     </div>
                   </TableCell>
@@ -167,6 +195,34 @@ export const RemediationsList = () => {
           </Table>
         </TableContainer>
       )}
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Delete Remediation</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleDelete}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </InfoCard>
   );
 };

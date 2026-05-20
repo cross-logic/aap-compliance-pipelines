@@ -337,6 +337,48 @@ export class ComplianceService {
     return template.id;
   }
 
+  /**
+   * Resolve the remediate job template ID.
+   *
+   * Looks up the workflow template from the cartridge registry, finds
+   * the remediate node within it, and returns that node's JT ID.
+   * Falls back to searching for a JT named "compliance-remediate".
+   */
+  private async resolveRemediateJobTemplateId(
+    profileId: string,
+    token?: string,
+  ): Promise<number> {
+    if (this.database) {
+      const cartridge = await this.database.getCartridge(profileId);
+      if (cartridge?.workflowTemplateId) {
+        try {
+          const nodes = await this.controllerClient!.getWorkflowTemplateNodes(
+            cartridge.workflowTemplateId,
+            token,
+          );
+          const remediateNode = nodes.results.find(
+            n => n.identifier === 'remediate' ||
+              n.summary_fields?.unified_job_template?.name?.toLowerCase().includes('remediate'),
+          );
+          const jtId = remediateNode?.summary_fields?.unified_job_template?.id;
+          if (jtId) {
+            this.logger.info(`Resolved remediate JT ${jtId} from workflow template ${cartridge.workflowTemplateId}`);
+            return jtId;
+          }
+        } catch {
+          // Fall through to name search
+        }
+      }
+    }
+
+    const result = await this.controllerClient!.listJobTemplates('compliance-remediate', token);
+    if (result.results.length > 0) {
+      return result.results[0].id;
+    }
+
+    throw new Error('No compliance remediate job template found');
+  }
+
   // ─── Remediation ────────────────────────────────────────────────────
 
   async launchRemediation(
@@ -351,11 +393,7 @@ export class ComplianceService {
     // Build the optimized remediation plan from selections + findings
     const plan = this.buildRemediationPlan(request.selections, findings);
 
-    // Collect all rule IDs and host limits from the plan groups.
-    // Instead of using job_tags (which don't propagate from workflows to
-    // child JTs in AAP), pass the rule IDs as extra_vars. The remediate
-    // playbook reads `remediation_rules` and runs the CaC playbook with
-    // --tags internally.
+    // Collect all rule IDs (tags) and host limits from the plan groups.
     const allTags = plan.groups.flatMap(g => g.tags);
     const allHosts = new Set<string>();
     const mergedExtraVars: Record<string, unknown> = {};
@@ -364,40 +402,41 @@ export class ComplianceService {
       Object.assign(mergedExtraVars, group.extraVars);
     }
 
-    const extraVars: Record<string, unknown> = {
-      compliance_profile: request.profileId,
-      evaluate_only: false,
-      remediation_rules: allTags.length > 0 ? allTags.join(',') : '',
-      remediation_extra_vars: mergedExtraVars,
-    };
-
     const limit = allHosts.size > 0
       ? Array.from(allHosts).join(',')
       : request.limit;
 
-    // Launch the workflow (not the JT directly). The remediate playbook
-    // reads remediation_rules from extra_vars and applies --tags locally.
-    const resolvedTemplateId = await this.resolveWorkflowTemplateId(
+    const jobTags = allTags.length > 0 ? allTags.join(',') : undefined;
+
+    // Launch the remediate JT directly with native job_tags.
+    // This is the proper AAP pattern: the CaC playbook's tasks are tagged
+    // per rule ID, and the Controller applies --tags at the CLI level.
+    // No wrapper or subprocess needed.
+    //
+    // We don't use the workflow for remediation because workflow-level
+    // job_tags don't propagate to child JTs in AAP. Direct JT launch
+    // is the correct mechanism for scoped remediation.
+    const resolvedJtId = await this.resolveRemediateJobTemplateId(
       request.profileId,
-      undefined,
       token,
     );
 
     this.logger.info(
-      `Launching workflow ${resolvedTemplateId} for remediation profile=${request.profileId}` +
+      `Launching remediate JT ${resolvedJtId} for profile=${request.profileId}` +
       ` (${allTags.length} rules, ${allHosts.size} hosts)` +
       (limit ? ` limit=${limit}` : '') +
-      ` remediation_rules=${allTags.join(',')}`,
+      (jobTags ? ` job_tags=${jobTags}` : ''),
     );
 
-    const launch = await this.controllerClient!.launchWorkflow(
-      resolvedTemplateId,
-      extraVars,
+    const launch = await this.controllerClient!.launchJobTemplate(
+      resolvedJtId,
+      mergedExtraVars,
       token,
       limit,
+      jobTags,
     );
 
-    const workflowJobId = launch.workflow_job ?? launch.id;
+    const workflowJobId = launch.id;
 
     return {
       remediationId: `remediation-${workflowJobId}`,

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   InfoCard,
   Breadcrumbs,
@@ -127,9 +127,12 @@ export const RemediationProfileBuilder = () => {
   const navigate = useNavigate();
   const api = useApi(complianceApiRef);
   const { jobId, remediationId } = useParams<{ jobId?: string; remediationId?: string }>();
+  const [searchParams] = useSearchParams();
 
   // Edit mode: when navigated via /remediation-edit/:remediationId
   const isEditMode = !!remediationId;
+  // Apply mode: edit mode with ?apply=true — shows Apply button instead of Update
+  const isApplyMode = isEditMode && searchParams.get('apply') === 'true';
   const [editProfile, setEditProfile] = useState<RemediationProfile | null>(null);
 
   // Permission check: reuse catalogEntityCreatePermission following
@@ -220,7 +223,7 @@ export const RemediationProfileBuilder = () => {
         initial[f.ruleId] = {
           enabled: saved ? saved.enabled : (isEditMode ? false : f.disruption !== 'high'),
           expanded: false,
-          scope: 'failed_only',
+          scope: (saved?.scope as RemediationScope) ?? 'failed_only',
           parameters: saved?.parameters
             ? { ...Object.fromEntries(f.parameters.map(p => [p.name, p.default])), ...saved.parameters }
             : Object.fromEntries(f.parameters.map(p => [p.name, p.default])),
@@ -572,31 +575,40 @@ export const RemediationProfileBuilder = () => {
             Scan Results
           </Typography>
         )}
-        <Typography>{isEditMode ? 'Edit Remediation' : 'Remediation'}</Typography>
+        <Typography>{isApplyMode ? 'Apply Remediation' : isEditMode ? 'Edit Remediation' : 'Remediation'}</Typography>
       </Breadcrumbs>
 
       <Box mt={2} />
 
-      {/* Edit mode banner */}
+      {/* Edit / Apply mode banner */}
       {isEditMode && editProfile && (
         <Box
           mb={2}
           p={2}
-          bgcolor="#E7F1FA"
+          bgcolor={isApplyMode ? '#F0FAF0' : '#E7F1FA'}
           borderRadius={4}
-          border="1px solid #0066CC"
+          border={isApplyMode ? '1px solid #3E8635' : '1px solid #0066CC'}
           display="flex"
           alignItems="center"
           style={{ gap: 12 }}
         >
-          <InfoIcon style={{ color: '#0066CC' }} />
+          {isApplyMode ? (
+            <PlayArrowIcon style={{ color: '#3E8635' }} />
+          ) : (
+            <InfoIcon style={{ color: '#0066CC' }} />
+          )}
           <div>
-            <Typography variant="subtitle2" style={{ color: '#0066CC' }}>
-              Editing: {editProfile.name}
+            <Typography variant="subtitle2" style={{ color: isApplyMode ? '#3E8635' : '#0066CC' }}>
+              {isApplyMode ? `Apply Remediation: ${editProfile.name}` : `Editing: ${editProfile.name}`}
             </Typography>
             {editProfile.description && (
               <Typography variant="caption" color="textSecondary">
                 {editProfile.description}
+              </Typography>
+            )}
+            {isApplyMode && (
+              <Typography variant="caption" color="textSecondary" style={{ display: 'block', marginTop: 4 }}>
+                Review the selections below and click "Apply Remediation" to launch.
               </Typography>
             )}
           </div>
@@ -655,9 +667,11 @@ export const RemediationProfileBuilder = () => {
 
       {/* Action Buttons */}
       <Box display="flex" justifyContent="flex-end" style={{ gap: 16 }}>
-        <Button variant="outlined" startIcon={<SaveIcon />} onClick={() => { setSaveError(null); setSaveDialogOpen(true); }}>
-          {isEditMode ? 'Update Remediation' : 'Save Remediation'}
-        </Button>
+        {!isApplyMode && (
+          <Button variant="outlined" startIcon={<SaveIcon />} onClick={() => { setSaveError(null); setSaveDialogOpen(true); }}>
+            {isEditMode ? 'Update Remediation' : 'Save Remediation'}
+          </Button>
+        )}
         <Button
           variant="contained"
           color="primary"
@@ -701,6 +715,15 @@ export const RemediationProfileBuilder = () => {
           {launching ? 'Preparing...' : `Apply Remediation (${enabledCount} rules, ${totalAffectedHosts} hosts)`}
         </Button>
       </Box>
+
+      {/* In apply mode, show a secondary Save button above the dialog */}
+      {isApplyMode && (
+        <Box display="flex" justifyContent="flex-end" style={{ marginTop: -8 }}>
+          <Button size="small" startIcon={<SaveIcon />} onClick={() => { setSaveError(null); setSaveDialogOpen(true); }}>
+            Save Changes
+          </Button>
+        </Box>
+      )}
 
       {/* Save Remediation Dialog */}
       <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="sm" fullWidth>

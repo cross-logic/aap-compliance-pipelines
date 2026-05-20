@@ -163,6 +163,7 @@ export interface RecentScan {
   passRate: number;
   timestamp: string;
   status: string;
+  scanType?: 'assessment' | 'verification';
 }
 
 /** Dashboard stats summary. */

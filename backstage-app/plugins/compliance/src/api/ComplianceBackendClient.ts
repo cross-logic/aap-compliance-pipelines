@@ -154,6 +154,10 @@ export class ComplianceBackendClient implements ComplianceApi {
     return this.request<WorkflowJobStatus>(`/workflow-status/${jobId}`);
   }
 
+  getJobStatus(jobId: number) {
+    return this.request<WorkflowJobStatus>(`/job-status/${jobId}`);
+  }
+
   getWorkflowNodes(jobId: number) {
     return this.request<WorkflowNode[]>(`/workflow-nodes/${jobId}`);
   }
@@ -198,6 +202,12 @@ export class ComplianceBackendClient implements ComplianceApi {
     return this.request<RemediationProfile>('/remediation-profiles', {
       method: 'POST',
       body,
+    });
+  }
+
+  deleteRemediationProfile(id: string) {
+    return this.request<void>(`/remediation-profiles/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     });
   }
 

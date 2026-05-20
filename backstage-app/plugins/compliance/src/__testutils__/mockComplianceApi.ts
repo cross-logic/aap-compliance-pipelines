@@ -237,6 +237,14 @@ export function createMockComplianceApi(): jest.Mocked<ComplianceApi> {
       elapsed: 900,
       name: 'compliance-stig-scan',
     } as WorkflowJobStatus),
+    getJobStatus: jest.fn().mockResolvedValue({
+      id: 42,
+      status: 'successful',
+      finished: '2026-04-28T14:45:00Z',
+      failed: false,
+      elapsed: 30,
+      name: 'compliance-remediate',
+    } as WorkflowJobStatus),
     getWorkflowNodes: jest.fn().mockResolvedValue([
       {
         id: 1,
@@ -255,6 +263,7 @@ export function createMockComplianceApi(): jest.Mocked<ComplianceApi> {
     getRemediationProfiles: jest.fn().mockResolvedValue(MOCK_REMEDIATION_PROFILES),
     getRemediationProfile: jest.fn().mockResolvedValue(MOCK_REMEDIATION_PROFILES[0]),
     saveRemediationProfile: jest.fn().mockResolvedValue(MOCK_REMEDIATION_PROFILES[0]),
+    deleteRemediationProfile: jest.fn().mockResolvedValue(undefined),
     getCartridges: jest.fn().mockResolvedValue(MOCK_CARTRIDGES),
     saveCartridge: jest.fn().mockResolvedValue(MOCK_CARTRIDGES[0]),
     deleteCartridge: jest.fn().mockResolvedValue(undefined),

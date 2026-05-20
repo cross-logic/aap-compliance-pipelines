@@ -36,6 +36,7 @@ export interface ComplianceApi {
   launchScan(body: LaunchScanRequest): Promise<LaunchScanResponse>;
   getFindings(scanId?: string): Promise<MultiHostFinding[]>;
   getWorkflowStatus(jobId: number): Promise<WorkflowJobStatus>;
+  getJobStatus(jobId: number): Promise<WorkflowJobStatus>;
   getWorkflowNodes(jobId: number): Promise<WorkflowNode[]>;
   getJobEvents(jobId: number): Promise<JobEvent[]>;
   launchRemediation(body: LaunchRemediationRequest): Promise<LaunchRemediationResponse>;
@@ -44,6 +45,7 @@ export interface ComplianceApi {
   getRemediationProfiles(): Promise<RemediationProfile[]>;
   getRemediationProfile(id: string): Promise<RemediationProfile | null>;
   saveRemediationProfile(body: SaveRemediationProfileRequest): Promise<RemediationProfile>;
+  deleteRemediationProfile(id: string): Promise<void>;
   getCartridges(): Promise<ComplianceCartridge[]>;
   saveCartridge(body: SaveCartridgeRequest): Promise<ComplianceCartridge>;
   deleteCartridge(id: string): Promise<void>;

@@ -348,7 +348,12 @@ export const ComplianceDashboard = () => {
                   onKeyDown={e => { if (e.key === 'Enter') navigate(`results/${scan.id}`); }}
                 >
                   <div>
-                    <Typography variant="subtitle2">{scan.profileName}</Typography>
+                    <Box display="flex" alignItems="center" style={{ gap: 6 }}>
+                      <Typography variant="subtitle2">{scan.profileName}</Typography>
+                      {scan.scanType === 'verification' && (
+                        <Chip label="Verification" size="small" variant="outlined" style={{ height: 18, fontSize: '0.65rem' }} />
+                      )}
+                    </Box>
                     <Typography variant="body2" color="textSecondary">
                       {scan.inventoryName} &middot; {scan.timestamp}
                     </Typography>

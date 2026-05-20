@@ -213,6 +213,53 @@ export class ControllerClient {
     );
   }
 
+  async listJobTemplates(
+    nameFilter?: string,
+    token?: string,
+  ): Promise<PaginatedResponse<{ id: number; name: string; description: string }>> {
+    const query = nameFilter
+      ? `?name__icontains=${encodeURIComponent(nameFilter)}&page_size=10`
+      : '?page_size=50';
+    return this.executeGetRequest(
+      `api/controller/v2/job_templates/${query}`,
+      token,
+    );
+  }
+
+  async getWorkflowTemplateNodes(
+    templateId: number,
+    token?: string,
+  ): Promise<PaginatedResponse<WorkflowNode>> {
+    return this.executeGetRequest(
+      `api/controller/v2/workflow_job_templates/${templateId}/workflow_nodes/?page_size=50`,
+      token,
+    );
+  }
+
+  async launchJobTemplate(
+    templateId: number,
+    extraVars?: Record<string, unknown>,
+    token?: string,
+    limit?: string,
+    jobTags?: string,
+  ): Promise<{ id: number; status: string }> {
+    const body: Record<string, unknown> = {};
+    if (extraVars) {
+      body.extra_vars = JSON.stringify(extraVars);
+    }
+    if (limit) {
+      body.limit = limit;
+    }
+    if (jobTags) {
+      body.job_tags = jobTags;
+    }
+    return this.executePostRequest(
+      `api/controller/v2/job_templates/${templateId}/launch/`,
+      body,
+      token,
+    );
+  }
+
   // ─── Workflow Jobs ──────────────────────────────────────────────────
 
   async getWorkflowJobStatus(jobId: number, token?: string): Promise<WorkflowJobStatus> {

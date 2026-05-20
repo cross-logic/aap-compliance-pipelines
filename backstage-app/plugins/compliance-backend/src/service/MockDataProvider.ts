@@ -341,4 +341,10 @@ export class MockDataProvider {
     mockRemediationProfiles = [...mockRemediationProfiles, saved];
     return saved;
   }
+
+  static deleteRemediationProfile(id: string): boolean {
+    const before = mockRemediationProfiles.length;
+    mockRemediationProfiles = mockRemediationProfiles.filter(p => p.id !== id);
+    return mockRemediationProfiles.length < before;
+  }
 }

@@ -277,6 +277,13 @@ export class ComplianceDatabase {
     return this.mapRemediationProfileRow(row);
   }
 
+  async deleteRemediationProfile(id: string): Promise<boolean> {
+    const deleted = await this.db('compliance_remediation_profiles')
+      .where('id', id)
+      .delete();
+    return deleted > 0;
+  }
+
   private mapRemediationProfileRow(row: Record<string, unknown>): RemediationProfile {
     let selections: RemediationSelection[] = [];
     try {

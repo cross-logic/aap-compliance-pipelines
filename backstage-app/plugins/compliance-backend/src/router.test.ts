@@ -104,6 +104,7 @@ function createMockService() {
     getRemediationProfiles: jest.fn().mockResolvedValue([]),
     getRemediationProfile: jest.fn().mockResolvedValue(null),
     saveRemediationProfile: jest.fn().mockResolvedValue({ id: 'rp-1' }),
+    deleteRemediationProfile: jest.fn().mockResolvedValue(true),
     buildRemediationPlan: jest
       .fn()
       .mockReturnValue({ groups: [], totalRules: 0, totalHosts: 0 }),
@@ -160,6 +161,7 @@ function createMockDatabase() {
     listRemediationProfiles: jest.fn().mockResolvedValue([]),
     getRemediationProfile: jest.fn().mockResolvedValue(null),
     saveRemediationProfile: jest.fn().mockResolvedValue({ id: 'rp-1' }),
+    deleteRemediationProfile: jest.fn().mockResolvedValue(true),
   } as any;
 }
 

@@ -50,9 +50,10 @@ const useStyles = makeStyles(theme => ({
   },
 }));
 
-const WORKFLOW_STEPS = ['Gather Facts', 'Evaluate', 'Remediate'];
-
-const NODE_IDENTIFIERS = ['gather-facts', 'evaluate', 'remediate'];
+const SCAN_STEPS = ['Gather Facts', 'Evaluate'];
+const SCAN_NODE_IDS = ['gather-facts', 'evaluate'];
+const FULL_STEPS = ['Gather Facts', 'Evaluate', 'Remediate'];
+const FULL_NODE_IDS = ['gather-facts', 'evaluate', 'remediate'];
 
 interface NodeStatus {
   identifier: string;
@@ -92,15 +93,19 @@ export interface ScanProgressProps {
   workflowJobId: number;
   profileName?: string;
   onComplete?: () => void;
+  scanType?: 'assessment' | 'verification' | 'remediation';
 }
 
 export const ScanProgress = ({
   workflowJobId,
   profileName,
   onComplete,
+  scanType = 'assessment',
 }: ScanProgressProps) => {
   const classes = useStyles();
   const api = useApi(complianceApiRef);
+  const steps = scanType === 'assessment' || scanType === 'verification' ? SCAN_STEPS : FULL_STEPS;
+  const nodeIds = scanType === 'assessment' || scanType === 'verification' ? SCAN_NODE_IDS : FULL_NODE_IDS;
   const [nodes, setNodes] = useState<NodeStatus[]>([]);
   const [overallStatus, setOverallStatus] = useState('pending');
   const [serverElapsed, setServerElapsed] = useState(0);
@@ -147,7 +152,7 @@ export const ScanProgress = ({
         setOverallStatus(status.status);
         setServerElapsed(status.elapsed);
 
-        const mapped: NodeStatus[] = NODE_IDENTIFIERS.map(id => {
+        const mapped: NodeStatus[] = nodeIds.map(id => {
           const node = wfNodes.find(
             n => n.identifier === id || n.summary_fields?.unified_job_template?.name?.toLowerCase().includes(id.replace('-', ' ')),
           );
@@ -167,7 +172,7 @@ export const ScanProgress = ({
             if (!cancelled) {
               const hosts = new Set(events.filter(e => e.host_name).map(e => e.host_name));
               if (hosts.size > 0) {
-                const stepLabel = WORKFLOW_STEPS[NODE_IDENTIFIERS.indexOf(runningNode.identifier)] || runningNode.identifier;
+                const stepLabel = steps[nodeIds.indexOf(runningNode.identifier)] || runningNode.identifier;
                 setHostProgress(`${stepLabel}: ${hosts.size} host${hosts.size !== 1 ? 's' : ''} processed`);
               }
             }
@@ -208,7 +213,7 @@ export const ScanProgress = ({
       <Paper className={classes.paper} variant="outlined">
         <Box className={classes.header}>
           <Typography variant="subtitle1">
-            <StatusRunning /> Active Scan{profileName ? `: ${profileName}` : ''}
+            <StatusRunning /> {scanType === 'verification' ? 'Verification Scan' : scanType === 'remediation' ? 'Remediation' : 'Assessment Scan'}{profileName ? `: ${profileName}` : ''}
           </Typography>
           <Chip
             size="small"
@@ -218,7 +223,7 @@ export const ScanProgress = ({
         </Box>
 
         <Stepper activeStep={activeStep} alternativeLabel>
-          {WORKFLOW_STEPS.map((label, i) => {
+          {steps.map((label, i) => {
             const node = nodes[i];
             return (
               <Step key={label} completed={node?.status === 'successful'}>

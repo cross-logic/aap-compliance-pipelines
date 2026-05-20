@@ -74,6 +74,7 @@ function createMockDatabase(): jest.Mocked<ComplianceDatabase> {
     saveRemediationProfile: jest.fn(),
     listRemediationProfiles: jest.fn(),
     getRemediationProfile: jest.fn(),
+    deleteRemediationProfile: jest.fn(),
     listCartridges: jest.fn(),
     saveCartridge: jest.fn(),
     deleteCartridge: jest.fn(),

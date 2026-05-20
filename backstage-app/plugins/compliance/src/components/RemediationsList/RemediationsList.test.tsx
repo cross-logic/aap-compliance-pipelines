@@ -24,6 +24,7 @@ function createMockApi(overrides: Partial<Record<string, jest.Mock>> = {}) {
     getRemediationProfiles: jest.fn().mockResolvedValue([]),
     getRemediationProfile: jest.fn().mockResolvedValue(null),
     saveRemediationProfile: jest.fn().mockResolvedValue({ id: '1', name: 'test', description: '', complianceProfileId: '', targetInventory: '', selections: [], createdAt: '', updatedAt: '' }),
+    deleteRemediationProfile: jest.fn().mockResolvedValue(undefined),
     saveCartridge: jest.fn().mockResolvedValue({}),
     deleteCartridge: jest.fn().mockResolvedValue(undefined),
     getControllerWorkflowTemplates: jest.fn().mockResolvedValue([]),

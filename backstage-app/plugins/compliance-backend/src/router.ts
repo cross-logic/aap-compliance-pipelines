@@ -262,6 +262,22 @@ export async function createRouter(
     }
   });
 
+  router.get('/job-status/:jobId', async (req, res) => {
+    const userToken = getUserAapToken(req);
+    const jobId = Number(req.params.jobId);
+    if (Number.isNaN(jobId)) {
+      res.status(400).json({ error: 'jobId must be a number' });
+      return;
+    }
+    try {
+      const status = await service.getJobStatus(jobId, userToken);
+      res.json(status);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: msg });
+    }
+  });
+
   // ─── Workflow nodes ─────────────────────────────────────────────────
 
   router.get('/workflow-nodes/:jobId', async (req, res) => {
@@ -433,6 +449,22 @@ export async function createRouter(
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       logger.error(`Failed to save remediation: ${msg}`);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  router.delete('/remediation-profiles/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      const deleted = await service.deleteRemediationProfile(id);
+      if (!deleted) {
+        res.status(404).json({ error: 'Remediation profile not found' });
+        return;
+      }
+      res.status(204).send();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to delete remediation profile: ${msg}`);
       res.status(500).json({ error: msg });
     }
   });
