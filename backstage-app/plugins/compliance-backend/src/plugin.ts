@@ -96,6 +96,7 @@ export const complianceBackendPlugin = createBackendPlugin({
         httpRouter.addAuthPolicy({ path: '/workflow-status', allow: 'unauthenticated' });
         httpRouter.addAuthPolicy({ path: '/workflow-nodes', allow: 'unauthenticated' });
         httpRouter.addAuthPolicy({ path: '/job-events', allow: 'unauthenticated' });
+        httpRouter.addAuthPolicy({ path: '/job-status', allow: 'unauthenticated' });
         httpRouter.addAuthPolicy({ path: '/controller', allow: 'unauthenticated' });
 
         // --- Mutating endpoints (TODO: gate behind permissions in production) ---

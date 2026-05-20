@@ -355,17 +355,25 @@ export async function createRouter(
       scanId: body.scanId,
     };
 
+    const enabledCount = body.selections.filter((s: { enabled: boolean }) => s.enabled).length;
     logger.info(
       `Launching remediation for profile=${remediateRequest.profileId}` +
-      ` with ${body.selections.length} selections` +
+      ` with ${body.selections.length} selections (${enabledCount} enabled)` +
       (body.scanId ? ` (scan=${body.scanId})` : ''),
     );
+    if (enabledCount > 0) {
+      const enabledRules = body.selections
+        .filter((s: { enabled: boolean }) => s.enabled)
+        .map((s: { ruleId: string }) => s.ruleId);
+      logger.info(`Enabled rules: ${enabledRules.join(', ')}`);
+    }
 
     try {
       // Fetch the latest findings so the plan builder uses real scan data.
       // The service uses these to build the remediation plan internally,
       // which determines job_tags and host limits.
       const findings = await service.getFindings(body.scanId);
+      logger.info(`Findings for remediation: ${findings.length} rules (scanId=${body.scanId})`);
 
       // Build the plan for the response (the service also builds it
       // internally for the actual launch, so the plan in the response
