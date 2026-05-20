@@ -310,10 +310,11 @@ export const RemediationProfileBuilder = () => {
     displayFindings.forEach(f => {
       const sel = selections[f.ruleId];
       if (sel?.enabled) {
-        if (sel.scope === 'standardize_all') {
+        const failedHosts = f.hosts.filter(h => h.status === 'fail');
+        if (sel.scope === 'standardize_all' || failedHosts.length === 0) {
           f.hosts.forEach(h => hostSet.add(h.host));
         } else {
-          f.hosts.filter(h => h.status === 'fail').forEach(h => hostSet.add(h.host));
+          failedHosts.forEach(h => hostSet.add(h.host));
         }
       }
     });
