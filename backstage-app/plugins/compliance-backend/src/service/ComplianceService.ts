@@ -970,7 +970,7 @@ export class ComplianceService {
     try {
       const scans = await this.database.getRecentScans(10);
       const profiles = await this.database.listCartridges();
-      const completedScans = scans.filter(s => s.status === 'completed');
+      const completedScans = scans.filter(s => s.status === 'completed' && s.scanner !== 'remediation');
 
       const hostsSet = new Set<string>();
       let criticalFindings = 0;
@@ -1007,7 +1007,9 @@ export class ComplianceService {
 
       const profileNameMap = new Map(profiles.map(p => [p.id, p.displayName]));
 
-      const recentScans = completedScans.slice(0, 5).map(scan => {
+      // Include ALL recent scans (not just completed) so remediation runs
+      // and in-progress scans appear in the Recent Activity section.
+      const recentScans = scans.slice(0, 5).map(scan => {
         const stats = profileStats.get(scan.profileId);
         const total = stats ? stats.pass + stats.fail : 0;
         return {
@@ -1018,6 +1020,7 @@ export class ComplianceService {
           timestamp: scan.completedAt || scan.startedAt,
           status: scan.status,
           scanType: scan.scanType,
+          scanner: scan.scanner,
         };
       });
 

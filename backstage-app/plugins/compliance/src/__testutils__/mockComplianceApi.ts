@@ -135,6 +135,7 @@ export const MOCK_DASHBOARD_STATS: DashboardStats = {
       passRate: 78,
       timestamp: '2026-04-28 14:30',
       status: 'completed',
+      scanner: 'oscap',
     },
     {
       id: 'scan-2',
@@ -143,6 +144,16 @@ export const MOCK_DASHBOARD_STATS: DashboardStats = {
       passRate: 92,
       timestamp: '2026-04-27 09:15',
       status: 'completed',
+      scanner: 'oscap',
+    },
+    {
+      id: 'scan-3',
+      profileName: 'RHEL 9 STIG V2R8',
+      inventoryName: 'production-web-servers',
+      passRate: 0,
+      timestamp: '2026-04-28 10:00',
+      status: 'successful',
+      scanner: 'remediation',
     },
   ],
   frameworkScores: [
@@ -230,6 +241,7 @@ export function createMockComplianceApi(): jest.Mocked<ComplianceApi> {
       status: 'pending',
     } as LaunchScanResponse),
     getFindings: jest.fn().mockResolvedValue(MOCK_FINDINGS),
+    getPreviousFindings: jest.fn().mockResolvedValue([]),
     getWorkflowStatus: jest.fn().mockResolvedValue({
       id: 42,
       status: 'successful',

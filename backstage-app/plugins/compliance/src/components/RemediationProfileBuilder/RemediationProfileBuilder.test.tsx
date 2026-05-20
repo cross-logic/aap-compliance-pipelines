@@ -75,22 +75,18 @@ describe('RemediationProfileBuilder', () => {
     });
   });
 
-  it('displays the save remediation button', async () => {
+  it('displays inline name and description fields (Insights pattern)', async () => {
     await renderBuilder();
     await waitFor(() => {
-      expect(screen.getByText('Save Remediation')).toBeInTheDocument();
+      expect(screen.getByLabelText('Remediation profile name')).toBeInTheDocument();
     });
+    expect(screen.getByLabelText('Remediation profile description')).toBeInTheDocument();
   });
 
-  it('opens save dialog when Save Remediation is clicked', async () => {
+  it('shows helper text when name is empty', async () => {
     await renderBuilder();
     await waitFor(() => {
-      expect(screen.getByText('Save Remediation')).toBeInTheDocument();
-    });
-    const saveButton = screen.getAllByText('Save Remediation')[0];
-    fireEvent.click(saveButton);
-    await waitFor(() => {
-      expect(screen.getByText(/Save your rule selections/)).toBeInTheDocument();
+      expect(screen.getByText('Name your remediation to enable auto-save')).toBeInTheDocument();
     });
   });
 

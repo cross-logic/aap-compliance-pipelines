@@ -244,6 +244,55 @@ export async function createRouter(
     res.json(findings);
   });
 
+  // ─── Previous scan findings (for verification comparison) ──────────
+
+  router.get('/previous-findings', async (req, res) => {
+    const scanId = req.query.scanId as string | undefined;
+
+    if (!scanId) {
+      res.status(400).json({ error: 'scanId query parameter is required' });
+      return;
+    }
+
+    try {
+      // Resolve the current scan — try by ID first, then by workflowJobId
+      let currentScan = await database.getScanByWorkflowJobId(
+        Number(scanId),
+      );
+      if (!currentScan) {
+        const scans = await database.getRecentScans(200);
+        currentScan = scans.find(s => s.id === scanId) ?? null;
+      }
+
+      if (!currentScan) {
+        res.json([]);
+        return;
+      }
+
+      // Find the previous assessment scan for the same profile
+      const previousScan = await database.getPreviousScan(currentScan);
+      if (!previousScan) {
+        res.json([]);
+        return;
+      }
+
+      // Get findings for the previous scan
+      const dbFindings = await database.getFindingsByScanId(previousScan.id);
+      if (dbFindings.length > 0) {
+        res.json(service.aggregateFindings(dbFindings));
+        return;
+      }
+
+      // Fall through to service for mock data
+      const findings = await service.getFindings(previousScan.id);
+      res.json(findings);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to get previous findings: ${msg}`);
+      res.status(500).json({ error: msg });
+    }
+  });
+
   // ─── Workflow job status (for polling) ──────────────────────────────
 
   router.get('/workflow-status/:jobId', async (req, res) => {

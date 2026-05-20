@@ -35,6 +35,7 @@ export interface ComplianceApi {
   getScans(): Promise<ComplianceScan[]>;
   launchScan(body: LaunchScanRequest): Promise<LaunchScanResponse>;
   getFindings(scanId?: string): Promise<MultiHostFinding[]>;
+  getPreviousFindings(scanId: string): Promise<MultiHostFinding[]>;
   getWorkflowStatus(jobId: number): Promise<WorkflowJobStatus>;
   getJobStatus(jobId: number): Promise<WorkflowJobStatus>;
   getWorkflowNodes(jobId: number): Promise<WorkflowNode[]>;

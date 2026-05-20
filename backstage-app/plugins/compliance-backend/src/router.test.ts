@@ -141,6 +141,7 @@ function createMockDatabase() {
     ]),
     getFindingsByScanId: jest.fn().mockResolvedValue([]),
     getScanByWorkflowJobId: jest.fn().mockResolvedValue(null),
+    getPreviousScan: jest.fn().mockResolvedValue(null),
     listCartridges: jest.fn().mockResolvedValue([]),
     saveCartridge: jest.fn().mockResolvedValue({
       id: 'cart-1',

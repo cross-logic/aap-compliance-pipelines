@@ -159,6 +159,8 @@ export interface RecentScan {
   timestamp: string;
   status: string;
   scanType?: 'assessment' | 'verification';
+  /** The scanner that produced this entry (e.g. 'oscap', 'remediation'). */
+  scanner?: string;
 }
 
 /** Dashboard stats summary. */

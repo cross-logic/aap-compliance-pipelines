@@ -1,7 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  InfoCard,
   Breadcrumbs,
   Progress,
 } from '@backstage/core-components';
@@ -9,118 +8,49 @@ import { useApi } from '@backstage/core-plugin-api';
 import { usePermission } from '@backstage/plugin-permission-react';
 import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/alpha';
 import {
-  Typography,
-  Button,
-  Chip,
-  Box,
-  Switch,
-  Collapse,
-  IconButton,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Divider,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Radio,
-  RadioGroup,
-  FormControlLabel,
-  makeStyles,
+  Typography, Button, Chip, Box, Switch, Collapse, IconButton,
+  TextField, FormControl, InputLabel, Select, MenuItem, Divider,
+  Radio, RadioGroup, FormControlLabel, makeStyles,
 } from '@material-ui/core';
 import SettingsIcon from '@material-ui/icons/Settings';
 import ExpandLessIcon from '@material-ui/icons/ExpandLess';
-import SaveIcon from '@material-ui/icons/Save';
 import PlayArrowIcon from '@material-ui/icons/PlayArrow';
 import WarningIcon from '@material-ui/icons/Warning';
 import InfoIcon from '@material-ui/icons/Info';
+import CheckCircleIcon from '@material-ui/icons/CheckCircle';
 import type { FindingSeverity, MultiHostFinding, RemediationProfile } from '@aap-compliance/common';
 import { complianceApiRef } from '../../api';
 
 const useStyles = makeStyles(theme => ({
-  findingCard: {
-    border: `1px solid ${theme.palette.divider}`,
-    borderRadius: theme.shape.borderRadius,
-    marginBottom: theme.spacing(1),
-    overflow: 'hidden',
-  },
-  findingHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: theme.spacing(1.5, 2),
-    gap: theme.spacing(1.5),
-  },
-  findingDisabled: {
-    opacity: 0.5,
-    backgroundColor: theme.palette.action.disabledBackground,
-  },
-  findingEnabled: {
-    backgroundColor: theme.palette.background.paper,
-  },
+  findingCard: { border: `1px solid ${theme.palette.divider}`, borderRadius: theme.shape.borderRadius, marginBottom: theme.spacing(1), overflow: 'hidden' },
+  findingHeader: { display: 'flex', alignItems: 'center', padding: theme.spacing(1.5, 2), gap: theme.spacing(1.5) },
+  findingDisabled: { opacity: 0.5, backgroundColor: theme.palette.action.disabledBackground },
+  findingEnabled: { backgroundColor: theme.palette.background.paper },
   severityChip: { fontWeight: 600, minWidth: 60 },
   catI: { backgroundColor: '#C9190B', color: '#fff' },
   catII: { backgroundColor: '#F0AB00', color: '#fff' },
   catIII: { backgroundColor: '#0066CC', color: '#fff' },
-  detailPanel: {
-    padding: theme.spacing(2, 3),
-    backgroundColor: theme.palette.background.default,
-    borderTop: `1px solid ${theme.palette.divider}`,
-  },
-  summaryBar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: theme.spacing(2),
-    backgroundColor: theme.palette.background.default,
-    borderRadius: theme.shape.borderRadius,
-    marginBottom: theme.spacing(2),
-  },
+  detailPanel: { padding: theme.spacing(2, 3), backgroundColor: theme.palette.background.default, borderTop: `1px solid ${theme.palette.divider}` },
+  summaryBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: theme.spacing(2), backgroundColor: theme.palette.background.default, borderRadius: theme.shape.borderRadius, marginBottom: theme.spacing(2) },
   summaryCount: { display: 'flex', gap: theme.spacing(3) },
   bulkActions: { display: 'flex', gap: theme.spacing(1), flexWrap: 'wrap' as const },
-  disruptionWarning: {
-    display: 'flex', alignItems: 'center', gap: theme.spacing(0.5),
-    color: theme.palette.warning.main, fontSize: '0.75rem',
-  },
-  sectionHeader: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: theme.spacing(1.5, 2), backgroundColor: theme.palette.action.hover,
-    borderRadius: theme.shape.borderRadius, marginBottom: theme.spacing(1), marginTop: theme.spacing(2),
-  },
+  disruptionWarning: { display: 'flex', alignItems: 'center', gap: theme.spacing(0.5), color: theme.palette.warning.main, fontSize: '0.75rem' },
+  sectionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: theme.spacing(1.5, 2), backgroundColor: theme.palette.action.hover, borderRadius: theme.shape.borderRadius, marginBottom: theme.spacing(1), marginTop: theme.spacing(2) },
   titleGroup: { display: 'flex', flexDirection: 'column' as const, flex: 1, minWidth: 0 },
-  impactText: { color: theme.palette.text.secondary, fontSize: '0.8rem', marginTop: 2 },
-  hostBreakdown: {
-    display: 'flex', alignItems: 'center', gap: theme.spacing(1),
-    fontSize: '0.8rem', color: theme.palette.text.secondary,
-  },
-  adviceBanner: {
-    display: 'flex', alignItems: 'flex-start', gap: theme.spacing(1),
-    padding: theme.spacing(1.5, 2), backgroundColor: '#FFF3CD',
-    borderRadius: theme.shape.borderRadius, marginBottom: theme.spacing(1.5),
-    border: '1px solid #FFECB5',
-  },
+  hostBreakdown: { display: 'flex', alignItems: 'center', gap: theme.spacing(1), fontSize: '0.8rem', color: theme.palette.text.secondary },
+  adviceBanner: { display: 'flex', alignItems: 'flex-start', gap: theme.spacing(1), padding: theme.spacing(1.5, 2), backgroundColor: '#FFF3CD', borderRadius: theme.shape.borderRadius, marginBottom: theme.spacing(1.5), border: '1px solid #FFECB5' },
   adviceIcon: { color: '#856404', marginTop: 2 },
-  remediationStrategy: {
-    padding: theme.spacing(1.5, 0),
-  },
+  remediationStrategy: { padding: theme.spacing(1.5, 0) },
+  profileHeader: { display: 'flex', alignItems: 'flex-start', gap: theme.spacing(2), padding: theme.spacing(2), backgroundColor: theme.palette.background.default, borderRadius: theme.shape.borderRadius, marginBottom: theme.spacing(2), border: `1px solid ${theme.palette.divider}` },
+  autoSaveIndicator: { display: 'flex', alignItems: 'center', gap: theme.spacing(0.5), fontSize: '0.75rem', color: theme.palette.text.secondary, minWidth: 80, flexShrink: 0 },
+  savedIcon: { fontSize: 14, color: '#3E8635' },
 }));
 
 type RemediationScope = 'failed_only' | 'standardize_all';
+interface RuleSelection { enabled: boolean; expanded: boolean; scope: RemediationScope; parameters: Record<string, string | number | boolean>; }
+type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-interface RuleSelection {
-  enabled: boolean;
-  expanded: boolean;
-  scope: RemediationScope;
-  parameters: Record<string, string | number | boolean>;
-}
-
-const severityLabel: Record<FindingSeverity, string> = {
-  CAT_I: 'CAT I — Critical',
-  CAT_II: 'CAT II — Medium',
-  CAT_III: 'CAT III — Low',
-};
+const severityLabel: Record<FindingSeverity, string> = { CAT_I: 'CAT I — Critical', CAT_II: 'CAT II — Medium', CAT_III: 'CAT III — Low' };
 
 export const RemediationProfileBuilder = () => {
   const classes = useStyles();
@@ -128,110 +58,55 @@ export const RemediationProfileBuilder = () => {
   const api = useApi(complianceApiRef);
   const { jobId, remediationId } = useParams<{ jobId?: string; remediationId?: string }>();
   const [searchParams] = useSearchParams();
-
-  // Edit mode: when navigated via /remediation-edit/:remediationId
   const isEditMode = !!remediationId;
-  // Apply mode: edit mode with ?apply=true — shows Apply button instead of Update
   const isApplyMode = isEditMode && searchParams.get('apply') === 'true';
   const [editProfile, setEditProfile] = useState<RemediationProfile | null>(null);
+  const { allowed: canRemediate } = usePermission({ permission: catalogEntityCreatePermission });
 
-  // Permission check: reuse catalogEntityCreatePermission following
-  // the upstream Ansible Portal pattern. Controls the Apply Remediation
-  // button — reading/viewing findings is always allowed.
-  const { allowed: canRemediate } = usePermission({
-    permission: catalogEntityCreatePermission,
-  });
-
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profileDescription, setProfileDescription] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
-
-  // Fetch findings from the backend (S2: no frontend mock data)
+  const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedProfileId, setSavedProfileId] = useState<string | undefined>(undefined);
   const [allFindings, setAllFindings] = useState<MultiHostFinding[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // In edit mode, first load the remediation profile, then load findings
-  // using the saved scanId (the workflow job ID from the original scan).
   useEffect(() => {
     if (!isEditMode || !remediationId) return;
     let cancelled = false;
-
     api.getRemediationProfile(remediationId)
       .then(profile => {
-        if (cancelled || !profile) {
-          if (!cancelled) setLoading(false);
-          return undefined;
-        }
-        setEditProfile(profile);
-        setProfileName(profile.name);
-        setProfileDescription(profile.description);
-
-        // Try loading findings from the saved scanId; if it's invalid
-        // (non-numeric profile ID from old saves), fall back to latest.
-        const scanIdToUse = profile.scanId && /^\d+$/.test(profile.scanId)
-          ? profile.scanId
-          : undefined;
-        return scanIdToUse
-          ? api.getFindings(scanIdToUse)
-          : api.getFindings();
+        if (cancelled || !profile) { if (!cancelled) setLoading(false); return undefined; }
+        setEditProfile(profile); setProfileName(profile.name); setProfileDescription(profile.description); setSavedProfileId(profile.id);
+        const scanIdToUse = profile.scanId && /^\d+$/.test(profile.scanId) ? profile.scanId : undefined;
+        return scanIdToUse ? api.getFindings(scanIdToUse) : api.getFindings();
       })
-      .then(data => {
-        if (!cancelled && data) setAllFindings(data);
-      })
-      .catch(err => {
-        console.error('Failed to load remediation profile for editing:', err);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
+      .then(data => { if (!cancelled && data) setAllFindings(data); })
+      .catch(err => { console.error('Failed to load remediation profile for editing:', err); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [api, isEditMode, remediationId]);
 
-  // In non-edit mode, load findings by jobId
   useEffect(() => {
     if (isEditMode) return;
     let cancelled = false;
     api.getFindings(jobId)
-      .then(data => {
-        if (!cancelled) setAllFindings(data);
-      })
-      .catch(err => {
-        console.error('Failed to load findings for remediation builder:', err);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      .then(data => { if (!cancelled) setAllFindings(data); })
+      .catch(err => { console.error('Failed to load findings:', err); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [api, jobId, isEditMode]);
 
-  // In edit mode, show ALL rules (so user can add/remove any).
-  // In new remediation mode, show only rules with failures.
-  const displayFindings = useMemo(
-    () => isEditMode ? allFindings : allFindings.filter(f => f.failCount > 0),
-    [allFindings, isEditMode],
-  );
-
-  // Keep failedFindings for stats display
-  const failedFindings = useMemo(
-    () => allFindings.filter(f => f.failCount > 0),
-    [allFindings],
-  );
-
+  const displayFindings = useMemo(() => isEditMode ? allFindings : allFindings.filter(f => f.failCount > 0), [allFindings, isEditMode]);
   const [selections, setSelections] = useState<Record<string, RuleSelection>>({});
 
-  // Initialize selections when findings load
   useEffect(() => {
     if (displayFindings.length === 0) return;
     setSelections(prev => {
       if (Object.keys(prev).length > 0) return prev;
-
       const savedSelections = editProfile?.selections ?? [];
       const savedMap = new Map(savedSelections.map(s => [s.ruleId, s]));
-
       const initial: Record<string, RuleSelection> = {};
       displayFindings.forEach(f => {
         const saved = savedMap.get(f.ruleId);
@@ -239,396 +114,121 @@ export const RemediationProfileBuilder = () => {
           enabled: saved ? saved.enabled : (isEditMode ? false : f.disruption !== 'high'),
           expanded: false,
           scope: (saved?.scope as RemediationScope) ?? 'failed_only',
-          parameters: saved?.parameters
-            ? { ...Object.fromEntries(f.parameters.map(p => [p.name, p.default])), ...saved.parameters }
-            : Object.fromEntries(f.parameters.map(p => [p.name, p.default])),
+          parameters: saved?.parameters ? { ...Object.fromEntries(f.parameters.map(p => [p.name, p.default])), ...saved.parameters } : Object.fromEntries(f.parameters.map(p => [p.name, p.default])),
         };
       });
       return initial;
     });
   }, [displayFindings, editProfile, isEditMode]);
 
-  const toggleFinding = (ruleId: string) => {
-    setSelections(prev => ({
-      ...prev,
-      [ruleId]: { ...prev[ruleId], enabled: !prev[ruleId].enabled },
-    }));
-  };
-
-  const toggleExpanded = (ruleId: string) => {
-    setSelections(prev => ({
-      ...prev,
-      [ruleId]: { ...prev[ruleId], expanded: !prev[ruleId].expanded },
-    }));
-  };
-
-  const setScope = (ruleId: string, scope: RemediationScope) => {
-    setSelections(prev => ({
-      ...prev,
-      [ruleId]: { ...prev[ruleId], scope },
-    }));
-  };
-
-  const updateParameter = (ruleId: string, paramName: string, value: string | number | boolean) => {
-    setSelections(prev => ({
-      ...prev,
-      [ruleId]: { ...prev[ruleId], parameters: { ...prev[ruleId].parameters, [paramName]: value } },
-    }));
-  };
-
-  const selectAll = () => {
-    setSelections(prev => {
-      const updated = { ...prev };
-      Object.keys(updated).forEach(k => { updated[k] = { ...updated[k], enabled: true }; });
-      return updated;
-    });
-  };
-
-  const clearAll = () => {
-    setSelections(prev => {
-      const updated = { ...prev };
-      Object.keys(updated).forEach(k => { updated[k] = { ...updated[k], enabled: false }; });
-      return updated;
-    });
-  };
-
-  const selectBySeverity = (...severities: FindingSeverity[]) => {
-    setSelections(prev => {
-      const updated = { ...prev };
-      displayFindings.forEach(f => {
-        updated[f.ruleId] = { ...updated[f.ruleId], enabled: severities.includes(f.severity) };
-      });
-      return updated;
-    });
-  };
+  const toggleFinding = (ruleId: string) => { setSelections(prev => ({ ...prev, [ruleId]: { ...prev[ruleId], enabled: !prev[ruleId].enabled } })); };
+  const toggleExpanded = (ruleId: string) => { setSelections(prev => ({ ...prev, [ruleId]: { ...prev[ruleId], expanded: !prev[ruleId].expanded } })); };
+  const setScope = (ruleId: string, scope: RemediationScope) => { setSelections(prev => ({ ...prev, [ruleId]: { ...prev[ruleId], scope } })); };
+  const updateParameter = (ruleId: string, paramName: string, value: string | number | boolean) => { setSelections(prev => ({ ...prev, [ruleId]: { ...prev[ruleId], parameters: { ...prev[ruleId].parameters, [paramName]: value } } })); };
+  const selectAll = () => { setSelections(prev => { const updated = { ...prev }; Object.keys(updated).forEach(k => { updated[k] = { ...updated[k], enabled: true }; }); return updated; }); };
+  const clearAll = () => { setSelections(prev => { const updated = { ...prev }; Object.keys(updated).forEach(k => { updated[k] = { ...updated[k], enabled: false }; }); return updated; }); };
+  const selectBySeverity = (...severities: FindingSeverity[]) => { setSelections(prev => { const updated = { ...prev }; displayFindings.forEach(f => { updated[f.ruleId] = { ...updated[f.ruleId], enabled: severities.includes(f.severity) }; }); return updated; }); };
 
   const enabledCount = Object.values(selections).filter(s => s.enabled).length;
   const disabledCount = Object.values(selections).filter(s => !s.enabled).length;
+  const totalAffectedHosts = useMemo(() => { const hostSet = new Set<string>(); displayFindings.forEach(f => { const sel = selections[f.ruleId]; if (sel?.enabled) { const failedHosts = f.hosts.filter(h => h.status === 'fail'); if (sel.scope === 'standardize_all' || failedHosts.length === 0) { f.hosts.forEach(h => hostSet.add(h.host)); } else { failedHosts.forEach(h => hostSet.add(h.host)); } } }); return hostSet.size; }, [displayFindings, selections]);
+  const groupedBySeverity = useMemo(() => { const groups: Record<FindingSeverity, MultiHostFinding[]> = { CAT_I: [], CAT_II: [], CAT_III: [] }; displayFindings.forEach(f => groups[f.severity].push(f)); return groups; }, [displayFindings]);
+  const getSeverityClass = (severity: FindingSeverity) => { switch (severity) { case 'CAT_I': return classes.catI; case 'CAT_II': return classes.catII; case 'CAT_III': return classes.catIII; default: return ''; } };
 
-  const totalAffectedHosts = useMemo(() => {
-    const hostSet = new Set<string>();
-    displayFindings.forEach(f => {
-      const sel = selections[f.ruleId];
-      if (sel?.enabled) {
-        const failedHosts = f.hosts.filter(h => h.status === 'fail');
-        if (sel.scope === 'standardize_all' || failedHosts.length === 0) {
-          f.hosts.forEach(h => hostSet.add(h.host));
-        } else {
-          failedHosts.forEach(h => hostSet.add(h.host));
-        }
-      }
-    });
-    return hostSet.size;
-  }, [displayFindings, selections]);
+  // Auto-save (Insights pattern)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectionsRef = useRef(selections); selectionsRef.current = selections;
+  const profileNameRef = useRef(profileName); profileNameRef.current = profileName;
+  const profileDescriptionRef = useRef(profileDescription); profileDescriptionRef.current = profileDescription;
+  const savedProfileIdRef = useRef(savedProfileId); savedProfileIdRef.current = savedProfileId;
 
-  const groupedBySeverity = useMemo(() => {
-    const groups: Record<FindingSeverity, MultiHostFinding[]> = { CAT_I: [], CAT_II: [], CAT_III: [] };
-    displayFindings.forEach(f => groups[f.severity].push(f));
-    return groups;
-  }, [displayFindings]);
+  const performAutoSave = useCallback(async () => {
+    const name = profileNameRef.current;
+    if (!name) return;
+    setAutoSaveStatus('saving'); setSaveError(null);
+    try {
+      const allSelections = displayFindings.map(f => ({ ruleId: f.ruleId, enabled: selectionsRef.current[f.ruleId]?.enabled ?? false, parameters: selectionsRef.current[f.ruleId]?.parameters ?? {}, scope: selectionsRef.current[f.ruleId]?.scope }));
+      const effectiveScanId = isEditMode ? (editProfile?.scanId || editProfile?.complianceProfileId || '') : (jobId ?? '');
+      const saved = await api.saveRemediationProfile({ id: savedProfileIdRef.current ?? (isEditMode ? editProfile?.id : undefined), name, description: profileDescriptionRef.current, complianceProfileId: editProfile?.complianceProfileId || 'rhel9-stig', scanId: effectiveScanId, selections: allSelections });
+      if (!savedProfileIdRef.current) { setSavedProfileId(saved.id); }
+      setAutoSaveStatus('saved');
+    } catch (err) { setAutoSaveStatus('error'); setSaveError(err instanceof Error ? err.message : 'Auto-save failed'); }
+  }, [api, displayFindings, editProfile, isEditMode, jobId]);
 
-  const getSeverityClass = (severity: FindingSeverity) => {
-    switch (severity) {
-      case 'CAT_I': return classes.catI;
-      case 'CAT_II': return classes.catII;
-      case 'CAT_III': return classes.catIII;
-      default: return '';
-    }
+  const hasInitializedRef = useRef(false);
+  useEffect(() => {
+    if (Object.keys(selections).length === 0 || !profileName) { hasInitializedRef.current = false; return; }
+    if (!hasInitializedRef.current) { hasInitializedRef.current = true; return; }
+    if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); }
+    autoSaveTimerRef.current = setTimeout(() => { performAutoSave(); }, 2000);
+    return () => { if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); } };
+  }, [selections, profileName, profileDescription, performAutoSave]);
+
+  const renderAutoSaveStatus = () => {
+    if (autoSaveStatus === 'saving') return (<div className={classes.autoSaveIndicator} data-testid="auto-save-status"><Typography variant="caption" style={{ color: '#6A6E73' }}>Saving...</Typography></div>);
+    if (autoSaveStatus === 'saved') return (<div className={classes.autoSaveIndicator} data-testid="auto-save-status"><CheckCircleIcon className={classes.savedIcon} /><Typography variant="caption" style={{ color: '#3E8635' }}>Saved</Typography></div>);
+    if (autoSaveStatus === 'error') return (<div className={classes.autoSaveIndicator} data-testid="auto-save-status"><WarningIcon style={{ fontSize: 14, color: '#C9190B' }} /><Typography variant="caption" style={{ color: '#C9190B' }}>Save failed</Typography></div>);
+    return null;
   };
 
   const renderFinding = (finding: MultiHostFinding) => {
     const sel = selections[finding.ruleId];
     if (!sel) return null;
-
     return (
-      <div
-        key={finding.ruleId}
-        className={`${classes.findingCard} ${sel.enabled ? classes.findingEnabled : classes.findingDisabled}`}
-      >
-        {/* Rule header */}
+      <div key={finding.ruleId} className={`${classes.findingCard} ${sel.enabled ? classes.findingEnabled : classes.findingDisabled}`}>
         <div className={classes.findingHeader}>
           <Switch checked={sel.enabled} onChange={() => toggleFinding(finding.ruleId)} color="primary" size="small" inputProps={{ 'aria-label': `Toggle rule ${finding.stigId} for remediation` }} />
-          <Chip
-            label={finding.stigId}
-            size="small"
-            variant="outlined"
-            style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
-          />
+          <Chip label={finding.stigId} size="small" variant="outlined" style={{ fontFamily: 'monospace', fontSize: '0.75rem' }} />
           <div className={classes.titleGroup}>
             <Typography variant="subtitle2">{finding.title}</Typography>
             <div className={classes.hostBreakdown}>
-              <span style={{ color: '#C9190B', fontWeight: 600 }}>{finding.failCount} failed</span>
-              <span>/</span>
-              <span>{finding.totalCount} hosts</span>
-              {finding.hosts.filter(h => h.status === 'fail').length > 0 && (
-                <span style={{ color: '#666' }}>
-                  ({finding.hosts.filter(h => h.status === 'fail').map(h => h.host).join(', ')})
-                </span>
-              )}
+              <span style={{ color: '#C9190B', fontWeight: 600 }}>{finding.failCount} failed</span><span>/</span><span>{finding.totalCount} hosts</span>
+              {finding.hosts.filter(h => h.status === 'fail').length > 0 && (<span style={{ color: '#666' }}>({finding.hosts.filter(h => h.status === 'fail').map(h => h.host).join(', ')})</span>)}
             </div>
           </div>
-
-          {finding.disruption === 'high' && (
-            <div className={classes.disruptionWarning}>
-              <WarningIcon fontSize="small" />
-              <span>High disruption</span>
-            </div>
-          )}
-
-          <IconButton
-            size="small"
-            onClick={e => { e.stopPropagation(); toggleExpanded(finding.ruleId); }}
-            aria-label={sel.expanded ? `Collapse rule details for ${finding.stigId}` : `Expand rule details for ${finding.stigId}`}
-          >
-            {sel.expanded ? <ExpandLessIcon /> : <SettingsIcon fontSize="small" />}
-          </IconButton>
+          {finding.disruption === 'high' && (<div className={classes.disruptionWarning}><WarningIcon fontSize="small" /><span>High disruption</span></div>)}
+          <IconButton size="small" onClick={e => { e.stopPropagation(); toggleExpanded(finding.ruleId); }} aria-label={sel.expanded ? `Collapse rule details for ${finding.stigId}` : `Expand rule details for ${finding.stigId}`}>{sel.expanded ? <ExpandLessIcon /> : <SettingsIcon fontSize="small" />}</IconButton>
         </div>
-
-        {/* Expanded: rule details, scope selection, parameters, host detail */}
         <Collapse in={sel.expanded}>
           <div className={classes.detailPanel}>
-            {/* Rule description and details */}
-            {finding.description && (
-              <Box mb={2}>
-                <Typography variant="body2">{finding.description}</Typography>
-              </Box>
-            )}
-
-            {(finding.checkText || finding.fixText) && (
-              <Box mb={2} display="flex" flexDirection="column" style={{ gap: 12 }}>
-                {finding.checkText && (
-                  <div>
-                    <Typography variant="caption" color="textSecondary" style={{ fontWeight: 600 }}>
-                      Check
-                    </Typography>
-                    <Typography variant="body2" style={{ fontFamily: 'monospace', fontSize: '0.8rem', marginTop: 2 }}>
-                      {finding.checkText}
-                    </Typography>
-                  </div>
-                )}
-                {finding.fixText && (
-                  <div>
-                    <Typography variant="caption" color="textSecondary" style={{ fontWeight: 600 }}>
-                      Fix
-                    </Typography>
-                    <Typography variant="body2" style={{ fontFamily: 'monospace', fontSize: '0.8rem', marginTop: 2 }}>
-                      {finding.fixText}
-                    </Typography>
-                  </div>
-                )}
-              </Box>
-            )}
-
-            {finding.disruption && (
-              <Box mb={2}>
-                <Chip
-                  size="small"
-                  label={`Disruption: ${finding.disruption}`}
-                  style={{
-                    backgroundColor: finding.disruption === 'high' ? '#C9190B'
-                      : finding.disruption === 'medium' ? '#F0AB00'
-                      : '#3E8635',
-                    color: '#fff',
-                    fontWeight: 600,
-                  }}
-                />
-              </Box>
-            )}
-
-            {/* Homogeneity advice — only when some pass and some fail */}
-            {finding.passCount > 0 && finding.failCount > 0 && (
-              <div className={classes.adviceBanner}>
-                <InfoIcon className={classes.adviceIcon} fontSize="small" />
-                <div>
-                  <Typography variant="body2" style={{ color: '#856404', fontWeight: 600 }}>
-                    Only {finding.failCount} of {finding.totalCount} hosts failed this rule.
-                  </Typography>
-                  <Typography variant="caption" style={{ color: '#856404' }}>
-                    Consider whether{' '}
-                    {finding.hosts.filter(h => h.status === 'fail').map(h => h.host).join(', ')}{' '}
-                    should belong to a different inventory with different compliance requirements.
-                  </Typography>
-                </div>
-              </div>
-            )}
-
-            {/* Remediation scope */}
+            {finding.description && (<Box mb={2}><Typography variant="body2">{finding.description}</Typography></Box>)}
+            {(finding.checkText || finding.fixText) && (<Box mb={2} display="flex" flexDirection="column" style={{ gap: 12 }}>{finding.checkText && (<div><Typography variant="caption" color="textSecondary" style={{ fontWeight: 600 }}>Check</Typography><Typography variant="body2" style={{ fontFamily: 'monospace', fontSize: '0.8rem', marginTop: 2 }}>{finding.checkText}</Typography></div>)}{finding.fixText && (<div><Typography variant="caption" color="textSecondary" style={{ fontWeight: 600 }}>Fix</Typography><Typography variant="body2" style={{ fontFamily: 'monospace', fontSize: '0.8rem', marginTop: 2 }}>{finding.fixText}</Typography></div>)}</Box>)}
+            {finding.disruption && (<Box mb={2}><Chip size="small" label={`Disruption: ${finding.disruption}`} style={{ backgroundColor: finding.disruption === 'high' ? '#C9190B' : finding.disruption === 'medium' ? '#F0AB00' : '#3E8635', color: '#fff', fontWeight: 600 }} /></Box>)}
+            {finding.passCount > 0 && finding.failCount > 0 && (<div className={classes.adviceBanner}><InfoIcon className={classes.adviceIcon} fontSize="small" /><div><Typography variant="body2" style={{ color: '#856404', fontWeight: 600 }}>Only {finding.failCount} of {finding.totalCount} hosts failed this rule.</Typography><Typography variant="caption" style={{ color: '#856404' }}>Consider whether {finding.hosts.filter(h => h.status === 'fail').map(h => h.host).join(', ')} should belong to a different inventory with different compliance requirements.</Typography></div></div>)}
             <div className={classes.remediationStrategy}>
-              <Typography variant="caption" color="textSecondary" gutterBottom>
-                Remediation Scope
-              </Typography>
-              {finding.failCount === finding.totalCount ? (
-                /* All hosts failed — no "standardize" option, just apply to all */
-                <Typography variant="body2" color="textSecondary" style={{ marginTop: 4 }}>
-                  All {finding.totalCount} hosts failed — remediation will apply to all hosts.
-                </Typography>
-              ) : (
-              <RadioGroup
-                value={sel.scope}
-                onChange={e => setScope(finding.ruleId, e.target.value as RemediationScope)}
-              >
-                <FormControlLabel
-                  value="failed_only"
-                  control={<Radio size="small" color="primary" />}
-                  label={
-                    <Typography variant="body2">
-                      Remediate failed hosts only ({finding.failCount} hosts)
-                    </Typography>
-                  }
-                />
-                <FormControlLabel
-                  value="standardize_all"
-                  control={<Radio size="small" color="primary" />}
-                  label={
-                    <Typography variant="body2">
-                      Apply to all hosts — standardize to same setting ({finding.totalCount} hosts)
-                    </Typography>
-                  }
-                />
-              </RadioGroup>
-              )}
+              <Typography variant="caption" color="textSecondary" gutterBottom>Remediation Scope</Typography>
+              {finding.failCount === finding.totalCount ? (<Typography variant="body2" color="textSecondary" style={{ marginTop: 4 }}>All {finding.totalCount} hosts failed {'—'} remediation will apply to all hosts.</Typography>) : (
+                <RadioGroup value={sel.scope} onChange={e => setScope(finding.ruleId, e.target.value as RemediationScope)}>
+                  <FormControlLabel value="failed_only" control={<Radio size="small" color="primary" />} label={<Typography variant="body2">Remediate failed hosts only ({finding.failCount} hosts)</Typography>} />
+                  <FormControlLabel value="standardize_all" control={<Radio size="small" color="primary" />} label={<Typography variant="body2">Apply to all hosts {'—'} standardize to same setting ({finding.totalCount} hosts)</Typography>} />
+                </RadioGroup>)}
             </div>
-
-            {/* Parameters */}
-            {finding.parameters.length > 0 && (
-              <Box mt={2}>
-                <Typography variant="caption" color="textSecondary" gutterBottom>
-                  Parameters
-                  {sel.scope === 'standardize_all' && (
-                    <span style={{ fontStyle: 'italic' }}> — applied to all {finding.totalCount} hosts</span>
-                  )}
-                </Typography>
-                <Box display="flex" flexWrap="wrap" style={{ gap: 16, marginTop: 8 }}>
-                  {finding.parameters.map(param => (
-                    <div key={param.name} style={{ flex: '1 1 200px', maxWidth: 300 }}>
-                      {param.type === 'select' ? (
-                        <FormControl variant="outlined" size="small" fullWidth>
-                          <InputLabel>{param.label}</InputLabel>
-                          <Select
-                            value={sel.parameters[param.name] ?? param.default}
-                            onChange={e => updateParameter(finding.ruleId, param.name, e.target.value as string)}
-                            label={param.label}
-                          >
-                            {param.options?.map(opt => (
-                              <MenuItem key={String(opt.value)} value={opt.value}>{opt.label}</MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      ) : (
-                        <TextField
-                          label={param.label}
-                          variant="outlined"
-                          size="small"
-                          fullWidth
-                          type={param.type === 'number' ? 'number' : 'text'}
-                          value={sel.parameters[param.name] ?? param.default}
-                          onChange={e => updateParameter(
-                            finding.ruleId, param.name,
-                            param.type === 'number' ? Number(e.target.value) : e.target.value,
-                          )}
-                          helperText={param.description}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </Box>
-              </Box>
-            )}
-
-            {/* Failed host detail */}
-            <Box mt={2}>
-              <Typography variant="caption" color="textSecondary">
-                Failed Hosts — Actual Values
-              </Typography>
-              <Box mt={1}>
-                {finding.hosts.filter(h => h.status === 'fail').map(h => (
-                  <Box key={h.host} display="flex" style={{ gap: 16 }} py={0.5}>
-                    <Typography variant="body2" style={{ fontFamily: 'monospace', minWidth: 120 }}>
-                      {h.host}
-                    </Typography>
-                    <Typography variant="body2" style={{ fontFamily: 'monospace', color: '#C9190B' }}>
-                      {h.actualValue}
-                    </Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      (expected: {h.expectedValue})
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
-            </Box>
+            {finding.parameters.length > 0 && (<Box mt={2}><Typography variant="caption" color="textSecondary" gutterBottom>Parameters{sel.scope === 'standardize_all' && (<span style={{ fontStyle: 'italic' }}> {'—'} applied to all {finding.totalCount} hosts</span>)}</Typography><Box display="flex" flexWrap="wrap" style={{ gap: 16, marginTop: 8 }}>{finding.parameters.map(param => (<div key={param.name} style={{ flex: '1 1 200px', maxWidth: 300 }}>{param.type === 'select' ? (<FormControl variant="outlined" size="small" fullWidth><InputLabel>{param.label}</InputLabel><Select value={sel.parameters[param.name] ?? param.default} onChange={e => updateParameter(finding.ruleId, param.name, e.target.value as string)} label={param.label}>{param.options?.map(opt => (<MenuItem key={String(opt.value)} value={opt.value}>{opt.label}</MenuItem>))}</Select></FormControl>) : (<TextField label={param.label} variant="outlined" size="small" fullWidth type={param.type === 'number' ? 'number' : 'text'} value={sel.parameters[param.name] ?? param.default} onChange={e => updateParameter(finding.ruleId, param.name, param.type === 'number' ? Number(e.target.value) : e.target.value)} helperText={param.description} />)}</div>))}</Box></Box>)}
+            <Box mt={2}><Typography variant="caption" color="textSecondary">Failed Hosts {'—'} Actual Values</Typography><Box mt={1}>{finding.hosts.filter(h => h.status === 'fail').map(h => (<Box key={h.host} display="flex" style={{ gap: 16 }} py={0.5}><Typography variant="body2" style={{ fontFamily: 'monospace', minWidth: 120 }}>{h.host}</Typography><Typography variant="body2" style={{ fontFamily: 'monospace', color: '#C9190B' }}>{h.actualValue}</Typography><Typography variant="caption" color="textSecondary">(expected: {h.expectedValue})</Typography></Box>))}</Box></Box>
           </div>
         </Collapse>
       </div>
     );
   };
 
-  if (loading) {
-    return (
-      <Box p={4}>
-        <Progress />
-        <Typography variant="body2" align="center" style={{ marginTop: 16 }}>
-          Loading findings for remediation...
-        </Typography>
-      </Box>
-    );
-  }
+  if (loading) return (<Box p={4}><Progress /><Typography variant="body2" align="center" style={{ marginTop: 16 }}>Loading findings for remediation...</Typography></Box>);
 
   return (
     <>
       <Breadcrumbs>
-        <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance')}>
-          Compliance
-        </Typography>
-        {isEditMode ? (
-          <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance/remediations')}>
-            Remediations
-          </Typography>
-        ) : (
-          <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate(`/compliance/results/${jobId}`)}>
-            Scan Results
-          </Typography>
-        )}
+        <Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance')}>Compliance</Typography>
+        {isEditMode ? (<Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate('/compliance/remediations')}>Remediations</Typography>) : (<Typography color="primary" style={{ cursor: 'pointer' }} onClick={() => navigate(`/compliance/results/${jobId}`)}>Scan Results</Typography>)}
         <Typography>{isApplyMode ? 'Apply Remediation' : isEditMode ? 'Edit Remediation' : 'Remediation'}</Typography>
       </Breadcrumbs>
-
       <Box mt={2} />
-
-      {/* Edit / Apply mode banner */}
-      {isEditMode && editProfile && (
-        <Box
-          mb={2}
-          p={2}
-          bgcolor={isApplyMode ? '#F0FAF0' : '#E7F1FA'}
-          borderRadius={4}
-          border={isApplyMode ? '1px solid #3E8635' : '1px solid #0066CC'}
-          display="flex"
-          alignItems="center"
-          style={{ gap: 12 }}
-        >
-          {isApplyMode ? (
-            <PlayArrowIcon style={{ color: '#3E8635' }} />
-          ) : (
-            <InfoIcon style={{ color: '#0066CC' }} />
-          )}
-          <div>
-            <Typography variant="subtitle2" style={{ color: isApplyMode ? '#3E8635' : '#0066CC' }}>
-              {isApplyMode ? `Apply Remediation: ${editProfile.name}` : `Editing: ${editProfile.name}`}
-            </Typography>
-            {editProfile.description && (
-              <Typography variant="caption" color="textSecondary">
-                {editProfile.description}
-              </Typography>
-            )}
-            {isApplyMode && (
-              <Typography variant="caption" color="textSecondary" style={{ display: 'block', marginTop: 4 }}>
-                Review the selections below and click "Apply Remediation" to launch.
-              </Typography>
-            )}
-          </div>
+      <div className={classes.profileHeader}>
+        <Box flex={1} display="flex" flexDirection="column" style={{ gap: 12 }}>
+          <TextField label="Remediation Name" variant="outlined" size="small" fullWidth required value={profileName} onChange={e => setProfileName(e.target.value)} placeholder="e.g., production-web-servers-stig-v2r8" helperText={!profileName ? 'Name your remediation to enable auto-save' : undefined} inputProps={{ 'aria-label': 'Remediation profile name' }} />
+          <TextField label="Description (optional)" variant="outlined" size="small" fullWidth multiline minRows={1} maxRows={3} value={profileDescription} onChange={e => setProfileDescription(e.target.value)} placeholder="e.g., STIG for production web tier" inputProps={{ 'aria-label': 'Remediation profile description' }} />
         </Box>
-      )}
-
-      {/* Summary Bar */}
+        <Box display="flex" flexDirection="column" alignItems="flex-end" justifyContent="flex-start" pt={1}>{renderAutoSaveStatus()}</Box>
+      </div>
+      {saveError && (<Box mb={2}><Typography color="error" variant="body2">{saveError}</Typography></Box>)}
       <div className={classes.summaryBar}>
         <div className={classes.summaryCount}>
           <Typography variant="body1"><strong>{displayFindings.length}</strong> rules{isEditMode ? '' : ' with failures'}</Typography>
@@ -643,220 +243,27 @@ export const RemediationProfileBuilder = () => {
           <Button size="small" variant="outlined" onClick={clearAll}>Clear All</Button>
         </div>
       </div>
-
-      {/* Findings by Severity */}
       {(['CAT_I', 'CAT_II', 'CAT_III'] as FindingSeverity[]).map(severity => {
         const group = groupedBySeverity[severity];
         if (group.length === 0) return null;
         const groupEnabled = group.filter(f => selections[f.ruleId]?.enabled).length;
-
-        return (
-          <React.Fragment key={severity}>
-            <div className={classes.sectionHeader}>
-              <Box display="flex" alignItems="center" style={{ gap: 8 }}>
-                <Chip
-                  label={severityLabel[severity]}
-                  size="small"
-                  className={`${classes.severityChip} ${getSeverityClass(severity)}`}
-                />
-                <Typography variant="body2" color="textSecondary">
-                  {groupEnabled}/{group.length} selected
-                </Typography>
-              </Box>
-            </div>
-            {group.map(finding => renderFinding(finding))}
-          </React.Fragment>
-        );
+        return (<React.Fragment key={severity}><div className={classes.sectionHeader}><Box display="flex" alignItems="center" style={{ gap: 8 }}><Chip label={severityLabel[severity]} size="small" className={`${classes.severityChip} ${getSeverityClass(severity)}`} /><Typography variant="body2" color="textSecondary">{groupEnabled}/{group.length} selected</Typography></Box></div>{group.map(finding => renderFinding(finding))}</React.Fragment>);
       })}
-
       <Divider style={{ margin: '24px 0' }} />
-
-      {/* Error display for launch failures */}
-      {saveError && !saveDialogOpen && (
-        <Box mb={2}>
-          <Typography color="error" variant="body2">{saveError}</Typography>
-        </Box>
-      )}
-
-      {/* Action Buttons */}
       <Box display="flex" justifyContent="flex-end" style={{ gap: 16 }}>
-        {!isApplyMode && !isEditMode && (
-          <Button variant="outlined" startIcon={<SaveIcon />} onClick={() => { setSaveError(null); setSaveDialogOpen(true); }}>
-            Save Remediation
-          </Button>
-        )}
-        {!isApplyMode && isEditMode && (
-          <Button
-            variant="outlined"
-            startIcon={<SaveIcon />}
-            disabled={saving}
-            onClick={async () => {
-              setSaving(true);
-              setSaveError(null);
-              try {
-                const allSelections = displayFindings.map(f => ({
-                  ruleId: f.ruleId,
-                  enabled: selections[f.ruleId]?.enabled ?? false,
-                  parameters: selections[f.ruleId]?.parameters ?? {},
-                  scope: selections[f.ruleId]?.scope,
-                }));
-                await api.saveRemediationProfile({
-                  id: editProfile?.id,
-                  name: profileName,
-                  description: profileDescription,
-                  complianceProfileId: editProfile?.complianceProfileId ?? '',
-                  scanId: editProfile?.scanId,
-                  selections: allSelections,
-                });
-                setSaveDialogOpen(true);
-              } catch (err) {
-                setSaveError(err instanceof Error ? err.message : 'Failed to save');
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            {saving ? 'Saving...' : 'Update Remediation'}
-          </Button>
-        )}
-        <Button
-          variant="contained"
-          color="primary"
-          size="large"
-          startIcon={<PlayArrowIcon />}
-          disabled={enabledCount === 0 || !canRemediate || launching}
-          title={!canRemediate ? 'You do not have permission to apply remediations' : undefined}
+        <Button variant="contained" color="primary" size="large" startIcon={<PlayArrowIcon />} disabled={enabledCount === 0 || !canRemediate || launching || !profileName} title={!canRemediate ? 'You do not have permission to apply remediations' : !profileName ? 'Enter a remediation name first' : undefined}
           onClick={async () => {
-            if (!isEditMode && !profileName) {
-              setSaveError(null);
-              setSaveDialogOpen(true);
-              return;
-            }
             setLaunching(true);
             try {
-              const enabledSelections = displayFindings
-                .filter(f => selections[f.ruleId]?.enabled)
-                .map(f => ({
-                  ruleId: f.ruleId,
-                  enabled: true,
-                  scope: selections[f.ruleId].scope ?? 'failed_only' as const,
-                  parameters: selections[f.ruleId].parameters,
-                }));
-
-              const effectiveScanId = isEditMode
-                ? (editProfile?.scanId || editProfile?.complianceProfileId || '')
-                : (jobId ?? '');
-
-              const saved = await api.saveRemediationProfile({
-                id: isEditMode ? editProfile?.id : undefined,
-                name: profileName || editProfile?.name || 'Remediation',
-                description: profileDescription || editProfile?.description || '',
-                complianceProfileId: editProfile?.complianceProfileId || 'rhel9-stig',
-                scanId: effectiveScanId,
-                selections: enabledSelections,
-              });
-
-              const params = new URLSearchParams();
-              params.set('profileId', saved.id);
-              params.set('scanId', effectiveScanId);
+              const enabledSelections = displayFindings.filter(f => selections[f.ruleId]?.enabled).map(f => ({ ruleId: f.ruleId, enabled: true, scope: selections[f.ruleId].scope ?? 'failed_only' as const, parameters: selections[f.ruleId].parameters }));
+              const effectiveScanId = isEditMode ? (editProfile?.scanId || editProfile?.complianceProfileId || '') : (jobId ?? '');
+              const saved = await api.saveRemediationProfile({ id: savedProfileId ?? (isEditMode ? editProfile?.id : undefined), name: profileName || editProfile?.name || 'Remediation', description: profileDescription || editProfile?.description || '', complianceProfileId: editProfile?.complianceProfileId || 'rhel9-stig', scanId: effectiveScanId, selections: enabledSelections });
+              const params = new URLSearchParams(); params.set('profileId', saved.id); params.set('scanId', effectiveScanId);
               navigate(`/compliance/execute/${effectiveScanId}?${params.toString()}`);
-            } catch (err) {
-              setSaveError(err instanceof Error ? err.message : 'Failed to prepare remediation');
-              setLaunching(false);
-            }
+            } catch (err) { setSaveError(err instanceof Error ? err.message : 'Failed to prepare remediation'); setLaunching(false); }
           }}
-        >
-          {launching ? 'Preparing...' : `Apply Remediation (${enabledCount} rules, ${totalAffectedHosts} hosts)`}
-        </Button>
+        >{launching ? 'Preparing...' : `Apply Remediation (${enabledCount} rules, ${totalAffectedHosts} hosts)`}</Button>
       </Box>
-
-      {/* Save/Update Remediation Dialog */}
-      <Dialog open={saveDialogOpen} onClose={() => { setSaveDialogOpen(false); if (isEditMode) navigate('/compliance/remediations'); }} maxWidth="sm" fullWidth>
-        <DialogTitle>{isEditMode ? 'Remediation Updated' : 'Save Remediation'}</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="textSecondary" paragraph>
-            {isEditMode
-              ? 'Rule selections have been saved. You can also update the name and description below.'
-              : 'Save your rule selections, scope choices, and parameter overrides as a reusable remediation. You can find and re-apply saved remediations from the Remediations tab.'}
-          </Typography>
-          <TextField
-            label="Name"
-            variant="outlined"
-            fullWidth
-            value={profileName}
-            onChange={e => setProfileName(e.target.value)}
-            placeholder="e.g., production-web-servers-stig-v2r8"
-            helperText="A descriptive name to identify this remediation later"
-            style={{ marginTop: 8 }}
-          />
-          <TextField
-            label="Description (optional)"
-            variant="outlined"
-            fullWidth
-            multiline
-            rows={3}
-            value={profileDescription}
-            onChange={e => setProfileDescription(e.target.value)}
-            placeholder="e.g., STIG for production web tier — FIPS disabled due to legacy TLS, SSH timeout set to 900"
-            helperText="Capture institutional knowledge about why rules were included or excluded"
-            style={{ marginTop: 16 }}
-          />
-          {saveError && (
-            <Typography color="error" variant="body2" style={{ marginTop: 8 }}>
-              {saveError}
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          {!isEditMode && (
-            <Button onClick={() => setSaveDialogOpen(false)} disabled={saving}>Cancel</Button>
-          )}
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={!profileName || saving}
-            onClick={async () => {
-              setSaving(true);
-              setSaveError(null);
-              try {
-                const allSelections = displayFindings.map(f => ({
-                  ruleId: f.ruleId,
-                  enabled: selections[f.ruleId]?.enabled ?? false,
-                  parameters: selections[f.ruleId]?.parameters ?? {},
-                  scope: selections[f.ruleId]?.scope,
-                }));
-
-                const effectiveScanId = isEditMode
-                  ? (editProfile?.scanId || editProfile?.complianceProfileId)
-                  : jobId;
-
-                await api.saveRemediationProfile({
-                  id: isEditMode ? editProfile?.id : undefined,
-                  name: profileName,
-                  description: profileDescription,
-                  complianceProfileId: editProfile?.complianceProfileId || 'rhel9-stig',
-                  scanId: effectiveScanId,
-                  selections: isEditMode ? allSelections : allSelections.filter(s => s.enabled),
-                });
-
-                setSaveDialogOpen(false);
-                if (isEditMode) {
-                  navigate('/compliance/remediations');
-                } else {
-                  setProfileName('');
-                  setProfileDescription('');
-                }
-              } catch (err) {
-                setSaveError(err instanceof Error ? err.message : 'Failed to save remediation');
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            {saving ? 'Saving...' : (isEditMode ? 'Close' : 'Save')}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </>
   );
 };

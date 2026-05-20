@@ -22,6 +22,7 @@ import SecurityIcon from '@material-ui/icons/Security';
 import HistoryIcon from '@material-ui/icons/History';
 import SettingsIcon from '@material-ui/icons/Settings';
 import AssessmentIcon from '@material-ui/icons/Assessment';
+import BuildIcon from '@material-ui/icons/Build';
 import { ComplianceGauge } from './ComplianceGauge';
 import { complianceApiRef } from '../../api';
 import type { DashboardStats } from '@aap-compliance/common';
@@ -339,43 +340,64 @@ export const ComplianceDashboard = () => {
                 />
               }
             >
-              {stats.recentScans.map(scan => (
-                <div
-                  key={scan.id}
-                  className={classes.scanRow}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => navigate(`results/${scan.id}`)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={e => { if (e.key === 'Enter') navigate(`results/${scan.id}`); }}
-                >
-                  <div>
-                    <Box display="flex" alignItems="center" style={{ gap: 6 }}>
-                      <Typography variant="subtitle2">{scan.profileName}</Typography>
-                      <Chip
-                        label={scan.scanType === 'verification' ? 'Verification' : 'Assessment'}
-                        size="small"
-                        variant="outlined"
-                        color={scan.scanType === 'verification' ? 'secondary' : 'default'}
-                        style={{ height: 18, fontSize: '0.65rem' }}
-                      />
-                    </Box>
-                    <Typography variant="body2" color="textSecondary">
-                      {scan.inventoryName} &middot; {new Date(scan.timestamp).toLocaleString()}
-                    </Typography>
+              {stats.recentScans.map(scan => {
+                const isRemediation = scan.scanner === 'remediation';
+                const activityLabel = isRemediation
+                  ? 'Remediation'
+                  : scan.scanType === 'verification'
+                    ? 'Verification'
+                    : 'Assessment';
+                const activityColor = isRemediation
+                  ? 'primary'
+                  : scan.scanType === 'verification'
+                    ? 'secondary'
+                    : 'default';
+
+                return (
+                  <div
+                    key={scan.id}
+                    className={classes.scanRow}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`results/${scan.id}`)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => { if (e.key === 'Enter') navigate(`results/${scan.id}`); }}
+                  >
+                    <div>
+                      <Box display="flex" alignItems="center" style={{ gap: 6 }}>
+                        <Typography variant="subtitle2">{scan.profileName}</Typography>
+                        <Chip
+                          icon={isRemediation ? <BuildIcon style={{ fontSize: 12 }} /> : undefined}
+                          label={activityLabel}
+                          size="small"
+                          variant="outlined"
+                          color={activityColor as 'primary' | 'secondary' | 'default'}
+                          style={isRemediation
+                            ? { height: 18, fontSize: '0.65rem', borderColor: '#3E8635', color: '#3E8635' }
+                            : { height: 18, fontSize: '0.65rem' }}
+                        />
+                      </Box>
+                      <Typography variant="body2" color="textSecondary">
+                        {scan.inventoryName} &middot; {new Date(scan.timestamp).toLocaleString()}
+                      </Typography>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {isRemediation ? (
+                        <StatusOK />
+                      ) : scan.passRate >= 80 ? (
+                        <StatusOK />
+                      ) : scan.passRate >= 65 ? (
+                        <StatusWarning />
+                      ) : (
+                        <StatusError />
+                      )}
+                      <Typography variant="subtitle2">
+                        {isRemediation ? scan.status : `${scan.passRate}%`}
+                      </Typography>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {scan.passRate >= 80 ? (
-                      <StatusOK />
-                    ) : scan.passRate >= 65 ? (
-                      <StatusWarning />
-                    ) : (
-                      <StatusError />
-                    )}
-                    <Typography variant="subtitle2">{scan.passRate}%</Typography>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </InfoCard>
           </div>
         </div>

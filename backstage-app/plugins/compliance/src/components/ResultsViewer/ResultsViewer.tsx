@@ -7,6 +7,7 @@ import {
 } from '@backstage/core-components';
 import { useApi } from '@backstage/core-plugin-api';
 import { ScanProgress } from '../ScanProgress';
+import { ComplianceGauge } from '../ComplianceDashboard/ComplianceGauge';
 import {
   Typography,
   Button,
@@ -36,6 +37,10 @@ import BuildIcon from '@material-ui/icons/Build';
 import CheckCircleIcon from '@material-ui/icons/CheckCircle';
 import ErrorIcon from '@material-ui/icons/Error';
 import AssessmentIcon from '@material-ui/icons/Assessment';
+import ArrowForwardIcon from '@material-ui/icons/ArrowForward';
+import TrendingUpIcon from '@material-ui/icons/TrendingUp';
+import TrendingDownIcon from '@material-ui/icons/TrendingDown';
+import RemoveIcon from '@material-ui/icons/Remove';
 import type { FindingSeverity, MultiHostFinding, ComplianceScan } from '@aap-compliance/common';
 import { complianceApiRef } from '../../api';
 import { ExportButton } from './ExportButton';
@@ -117,6 +122,57 @@ const useStyles = makeStyles(theme => ({
     textAlign: 'center',
     padding: theme.spacing(8, 4),
   },
+  comparisonHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing(4),
+    padding: theme.spacing(3),
+  },
+  comparisonArrow: {
+    display: 'flex',
+    alignItems: 'center',
+    color: theme.palette.text.secondary,
+    fontSize: '2rem',
+  },
+  comparisonGauge: {
+    textAlign: 'center' as const,
+    minWidth: 140,
+  },
+  deltaStats: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: theme.spacing(4),
+    padding: theme.spacing(1, 3, 2, 3),
+    flexWrap: 'wrap' as const,
+  },
+  deltaStat: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing(0.5),
+    fontSize: '0.9rem',
+  },
+  deltaPositive: {
+    color: '#3E8635',
+    fontWeight: 600,
+  },
+  deltaNegative: {
+    color: '#C9190B',
+    fontWeight: 600,
+  },
+  deltaUnchanged: {
+    color: theme.palette.text.secondary,
+    fontWeight: 500,
+  },
+  findingsCollapseTrigger: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    padding: theme.spacing(1.5),
+    '&:hover': { backgroundColor: theme.palette.action.hover },
+    borderRadius: theme.shape.borderRadius,
+  },
 }));
 
 const severityLabel: Record<FindingSeverity, string> = {
@@ -146,9 +202,11 @@ export const ResultsViewer = () => {
 
   // Fetch findings from the backend -- no frontend mock fallback (S2)
   const [findings, setFindings] = useState<MultiHostFinding[]>([]);
+  const [previousFindings, setPreviousFindings] = useState<MultiHostFinding[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [scanType, setScanType] = useState<'assessment' | 'verification'>('assessment');
+  const [findingsExpanded, setFindingsExpanded] = useState(true);
 
   // Determine scan type from scan history
   useEffect(() => {
@@ -157,11 +215,27 @@ export const ResultsViewer = () => {
       const match = scans.find(
         s => s.id === jobId || String(s.workflowJobId) === jobId,
       );
-      if (match?.scanType) setScanType(match.scanType);
+      if (match?.scanType) {
+        setScanType(match.scanType);
+        // For verification scans, collapse findings by default
+        if (match.scanType === 'verification') {
+          setFindingsExpanded(false);
+        }
+      }
     }).catch(err => {
       console.error('Failed to load scan metadata for scan type:', err);
     });
   }, [api, jobId]);
+
+  // Fetch previous scan findings for verification scans
+  useEffect(() => {
+    if (scanType !== 'verification' || !jobId) return;
+    api.getPreviousFindings(jobId).then(data => {
+      setPreviousFindings(data);
+    }).catch(err => {
+      console.error('Failed to load previous findings for comparison:', err);
+    });
+  }, [api, jobId, scanType]);
 
   const isWorkflowPoll = jobId ? /^\d+$/.test(jobId) : false;
 
@@ -208,6 +282,54 @@ export const ResultsViewer = () => {
         (findings.reduce((sum, f) => sum + f.passCount, 0) / totalChecks) * 100,
       )
     : 0;
+
+  // Comparison metrics for verification scans
+  const isVerification = scanType === 'verification';
+  const previousPassRate = useMemo(() => {
+    if (previousFindings.length === 0) return 0;
+    const prevTotalChecks = previousFindings.reduce((sum, f) => sum + f.totalCount, 0);
+    return prevTotalChecks > 0
+      ? Math.round(
+          (previousFindings.reduce((sum, f) => sum + f.passCount, 0) / prevTotalChecks) * 100,
+        )
+      : 0;
+  }, [previousFindings]);
+
+  const comparisonStats = useMemo(() => {
+    if (!isVerification || previousFindings.length === 0) {
+      return { improved: 0, regressed: 0, unchanged: 0 };
+    }
+
+    // Build a map of previous findings by ruleId
+    const prevMap = new Map<string, MultiHostFinding>();
+    for (const f of previousFindings) {
+      prevMap.set(f.ruleId, f);
+    }
+
+    let improved = 0;
+    let regressed = 0;
+    let unchanged = 0;
+
+    for (const current of findings) {
+      const prev = prevMap.get(current.ruleId);
+      if (!prev) {
+        // New rule not in previous scan — treat as unchanged
+        unchanged++;
+        continue;
+      }
+      const prevFailing = prev.failCount > 0;
+      const currentFailing = current.failCount > 0;
+      if (prevFailing && !currentFailing) {
+        improved++;
+      } else if (!prevFailing && currentFailing) {
+        regressed++;
+      } else {
+        unchanged++;
+      }
+    }
+
+    return { improved, regressed, unchanged };
+  }, [isVerification, findings, previousFindings]);
 
   const filtered = useMemo(() =>
     findings
@@ -361,37 +483,88 @@ export const ResultsViewer = () => {
 
       <Box mt={2} />
 
-      {/* Summary Cards */}
-      <div className={classes.summarySection}>
-        <InfoCard>
-          <div className={classes.summaryCard}>
-            <Typography className={classes.summaryValue} style={{ color: overallPassRate >= 80 ? '#3E8635' : '#C9190B' }}>
-              {overallPassRate}%
-            </Typography>
-            <Typography className={classes.summaryLabel}>Overall Compliance</Typography>
+      {/* Verification Comparison Header */}
+      {isVerification && previousFindings.length > 0 ? (
+        <InfoCard title="Verification Results">
+          <div className={classes.comparisonHeader}>
+            <div className={classes.comparisonGauge}>
+              <ComplianceGauge value={previousPassRate} label="Before" />
+            </div>
+            <div className={classes.comparisonArrow}>
+              <ArrowForwardIcon fontSize="large" />
+            </div>
+            <div className={classes.comparisonGauge}>
+              <ComplianceGauge value={overallPassRate} label="After" />
+            </div>
+          </div>
+          <div className={classes.deltaStats}>
+            <div className={classes.deltaStat}>
+              <Typography variant="body2" color="textSecondary">Hosts Scanned:</Typography>
+              <Typography variant="body2" style={{ fontWeight: 600 }}>{totalHosts}</Typography>
+            </div>
+            <div className={classes.deltaStat}>
+              <Typography variant="body2" color="textSecondary">Rules:</Typography>
+              <Typography variant="body2" style={{ fontWeight: 600 }}>{totalRules}</Typography>
+            </div>
+            <div className={classes.deltaStat}>
+              <TrendingUpIcon fontSize="small" style={{ color: '#3E8635' }} />
+              <Typography variant="body2" className={classes.deltaPositive}>
+                {comparisonStats.improved} Improved
+              </Typography>
+            </div>
+            {comparisonStats.regressed > 0 && (
+              <div className={classes.deltaStat}>
+                <TrendingDownIcon fontSize="small" style={{ color: '#C9190B' }} />
+                <Typography variant="body2" className={classes.deltaNegative}>
+                  {comparisonStats.regressed} Regressed
+                </Typography>
+              </div>
+            )}
+            <div className={classes.deltaStat}>
+              <RemoveIcon fontSize="small" style={{ color: '#6A6E73' }} />
+              <Typography variant="body2" className={classes.deltaUnchanged}>
+                {comparisonStats.unchanged} Unchanged
+              </Typography>
+            </div>
           </div>
         </InfoCard>
-        <InfoCard>
-          <div className={classes.summaryCard}>
-            <Typography className={classes.summaryValue}>{totalHosts}</Typography>
-            <Typography className={classes.summaryLabel}>Hosts Scanned</Typography>
+      ) : (
+        <>
+          {/* Summary Cards (assessment or verification without previous data) */}
+          <div className={classes.summarySection}>
+            <InfoCard>
+              <div className={classes.summaryCard}>
+                <Typography className={classes.summaryValue} style={{ color: overallPassRate >= 80 ? '#3E8635' : '#C9190B' }}>
+                  {overallPassRate}%
+                </Typography>
+                <Typography className={classes.summaryLabel}>Overall Compliance</Typography>
+              </div>
+            </InfoCard>
+            <InfoCard>
+              <div className={classes.summaryCard}>
+                <Typography className={classes.summaryValue}>{totalHosts}</Typography>
+                <Typography className={classes.summaryLabel}>Hosts Scanned</Typography>
+              </div>
+            </InfoCard>
+            <InfoCard>
+              <div className={classes.summaryCard}>
+                <Typography className={classes.summaryValue}>{totalRules}</Typography>
+                <Typography className={classes.summaryLabel}>Rules Evaluated</Typography>
+              </div>
+            </InfoCard>
+            <InfoCard>
+              <div className={classes.summaryCard}>
+                <Typography className={classes.summaryValue} style={{ color: '#C9190B' }}>
+                  {rulesWithFailures}
+                </Typography>
+                <Typography className={classes.summaryLabel}>Rules with Failures</Typography>
+              </div>
+            </InfoCard>
           </div>
-        </InfoCard>
-        <InfoCard>
-          <div className={classes.summaryCard}>
-            <Typography className={classes.summaryValue}>{totalRules}</Typography>
-            <Typography className={classes.summaryLabel}>Rules Evaluated</Typography>
-          </div>
-        </InfoCard>
-        <InfoCard>
-          <div className={classes.summaryCard}>
-            <Typography className={classes.summaryValue} style={{ color: '#C9190B' }}>
-              {rulesWithFailures}
-            </Typography>
-            <Typography className={classes.summaryLabel}>Rules with Failures</Typography>
-          </div>
-        </InfoCard>
-      </div>
+        </>
+      )}
+
+      <Box mt={2} />
 
       {/* Action Buttons: Remediate + Export (P3-2) */}
       <Box display="flex" justifyContent="flex-end" mb={2} style={{ gap: 8 }}>
@@ -407,7 +580,22 @@ export const ResultsViewer = () => {
         </Button>
       </Box>
 
-      {/* Findings Table */}
+      {/* Findings Table — collapsed by default for verification scans */}
+      {isVerification && previousFindings.length > 0 && (
+        <div
+          className={classes.findingsCollapseTrigger}
+          onClick={() => setFindingsExpanded(!findingsExpanded)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setFindingsExpanded(!findingsExpanded); }}
+        >
+          {findingsExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          <Typography variant="body2" style={{ fontWeight: 500, marginLeft: 4 }}>
+            {findingsExpanded ? 'Collapse Findings' : `Expand Findings (${filtered.length} rules)`}
+          </Typography>
+        </div>
+      )}
+      <Collapse in={findingsExpanded}>
       <InfoCard title="Findings by Rule">
         {/* Filters */}
         <div className={classes.filterRow}>
@@ -608,6 +796,7 @@ export const ResultsViewer = () => {
           </Table>
         </TableContainer>
       </InfoCard>
+      </Collapse>
     </>
   );
 };

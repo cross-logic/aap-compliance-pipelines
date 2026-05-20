@@ -16,6 +16,7 @@ import {
   Box,
   LinearProgress,
   Chip,
+  Collapse,
   Table,
   TableBody,
   TableCell,
@@ -98,6 +99,21 @@ const useStyles = makeStyles(theme => ({
   },
   pendingRule: {
     opacity: 0.6,
+  },
+  hostSummary: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing(1),
+    fontSize: '0.85rem',
+  },
+  showAllLink: {
+    color: theme.palette.primary.main,
+    cursor: 'pointer',
+    fontWeight: 500,
+    fontSize: '0.8rem',
+    '&:hover': {
+      textDecoration: 'underline',
+    },
   },
 }));
 
@@ -351,6 +367,97 @@ function computeRuleStatus(group: RuleGroup, jobComplete: boolean): TaskStatus {
   if (group.tasks.some(t => t.status === 'completed')) return 'running';
   return 'pending';
 }
+
+const HOST_CHIP_THRESHOLD = 10;
+
+/**
+ * Renders host chips for a task. For small host counts (<= 10), renders
+ * individual Chip components. For large host counts (> 10), renders a
+ * summary line with "Show all" toggle.
+ */
+const HostChips: React.FC<{
+  hosts: Array<{ host: string; status: TaskStatus }>;
+  classes: ReturnType<typeof useStyles>;
+}> = ({ hosts, classes }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  if (hosts.length === 0) {
+    return (
+      <Typography variant="body2" color="textSecondary">
+        —
+      </Typography>
+    );
+  }
+
+  if (hosts.length <= HOST_CHIP_THRESHOLD) {
+    return (
+      <Box display="flex" flexWrap="wrap" style={{ gap: 4 }}>
+        {hosts.map(h => (
+          <Chip
+            key={h.host}
+            size="small"
+            label={h.host}
+            variant="outlined"
+            style={{
+              borderColor: h.status === 'failed' ? '#C9190B'
+                : h.status === 'completed' ? '#3E8635'
+                : undefined,
+              color: h.status === 'failed' ? '#C9190B'
+                : h.status === 'completed' ? '#3E8635'
+                : undefined,
+            }}
+          />
+        ))}
+      </Box>
+    );
+  }
+
+  // Large host count: summary view
+  const completedHosts = hosts.filter(h => h.status === 'completed').length;
+  const failedHosts = hosts.filter(h => h.status === 'failed').length;
+
+  return (
+    <div>
+      <div className={classes.hostSummary}>
+        <Typography variant="body2">
+          {completedHosts}/{hosts.length} hosts completed
+          {failedHosts > 0 && (
+            <span style={{ color: '#C9190B' }}> ({failedHosts} failed)</span>
+          )}
+        </Typography>
+        <span
+          className={classes.showAllLink}
+          onClick={e => { e.stopPropagation(); setExpanded(!expanded); }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setExpanded(!expanded); } }}
+        >
+          {expanded ? 'Hide hosts' : 'Show all'}
+        </span>
+      </div>
+      <Collapse in={expanded}>
+        <Box display="flex" flexWrap="wrap" style={{ gap: 4, marginTop: 4 }}>
+          {hosts.map(h => (
+            <Chip
+              key={h.host}
+              size="small"
+              label={h.host}
+              variant="outlined"
+              style={{
+                borderColor: h.status === 'failed' ? '#C9190B'
+                  : h.status === 'completed' ? '#3E8635'
+                  : undefined,
+                color: h.status === 'failed' ? '#C9190B'
+                  : h.status === 'completed' ? '#3E8635'
+                  : undefined,
+              }}
+            />
+          ))}
+        </Box>
+      </Collapse>
+    </div>
+  );
+};
 
 export const RemediationExecution = () => {
   const classes = useStyles();
@@ -882,30 +989,7 @@ export const RemediationExecution = () => {
                                     </Typography>
                                   </TableCell>
                                   <TableCell>
-                                    {task.hosts.length > 0 ? (
-                                      <Box display="flex" flexWrap="wrap" style={{ gap: 4 }}>
-                                        {task.hosts.map(h => (
-                                          <Chip
-                                            key={h.host}
-                                            size="small"
-                                            label={h.host}
-                                            variant="outlined"
-                                            style={{
-                                              borderColor: h.status === 'failed' ? '#C9190B'
-                                                : h.status === 'completed' ? '#3E8635'
-                                                : undefined,
-                                              color: h.status === 'failed' ? '#C9190B'
-                                                : h.status === 'completed' ? '#3E8635'
-                                                : undefined,
-                                            }}
-                                          />
-                                        ))}
-                                      </Box>
-                                    ) : (
-                                      <Typography variant="body2" color="textSecondary">
-                                        —
-                                      </Typography>
-                                    )}
+                                    <HostChips hosts={task.hosts} classes={classes} />
                                   </TableCell>
                                 </TableRow>
                               ))}

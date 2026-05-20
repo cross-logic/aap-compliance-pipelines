@@ -150,6 +150,12 @@ export class ComplianceBackendClient implements ComplianceApi {
     return this.request<MultiHostFinding[]>(`/findings${q}`);
   }
 
+  getPreviousFindings(scanId: string) {
+    return this.request<MultiHostFinding[]>(
+      `/previous-findings?scanId=${encodeURIComponent(scanId)}`,
+    );
+  }
+
   getWorkflowStatus(jobId: number) {
     return this.request<WorkflowJobStatus>(`/workflow-status/${jobId}`);
   }

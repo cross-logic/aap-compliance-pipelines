@@ -57,9 +57,16 @@ describe('ComplianceDashboard', () => {
     await waitFor(() => {
       expect(screen.getByText('Recent Activity')).toBeInTheDocument();
     });
-    expect(screen.getByText('RHEL 9 STIG V2R8')).toBeInTheDocument();
+    expect(screen.getAllByText('RHEL 9 STIG V2R8').length).toBeGreaterThanOrEqual(1);
     // "CIS Benchmark L1" appears in both Recent Activity and Active Profiles
     expect(screen.getAllByText('CIS Benchmark L1').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('displays Remediation badge for remediation scanner entries', async () => {
+    await renderDashboard();
+    await waitFor(() => {
+      expect(screen.getByText('Remediation')).toBeInTheDocument();
+    });
   });
 
   it('displays active compliance profiles section', async () => {
