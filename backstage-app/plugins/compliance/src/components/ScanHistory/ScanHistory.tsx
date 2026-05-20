@@ -204,13 +204,13 @@ export const ScanHistory = () => {
                   </TableCell>
                   <TableCell>
                     <Chip
-                      icon={scan.scanType === 'verification' ? <VerifiedUserIcon /> : <AssessmentIcon />}
-                      label={scan.scanType === 'verification' ? 'Verification' : 'Assessment'}
+                      icon={scan.scanner === 'remediation' ? <PlayCircleFilledIcon /> : scan.scanType === 'verification' ? <VerifiedUserIcon /> : <AssessmentIcon />}
+                      label={scan.scanner === 'remediation' ? 'Remediation' : scan.scanType === 'verification' ? 'Verification' : 'Assessment'}
                       size="small"
                       variant="outlined"
                       style={{
-                        borderColor: scan.scanType === 'verification' ? '#0066CC' : undefined,
-                        color: scan.scanType === 'verification' ? '#0066CC' : undefined,
+                        borderColor: scan.scanner === 'remediation' ? '#3E8635' : scan.scanType === 'verification' ? '#0066CC' : undefined,
+                        color: scan.scanner === 'remediation' ? '#3E8635' : scan.scanType === 'verification' ? '#0066CC' : undefined,
                       }}
                     />
                   </TableCell>

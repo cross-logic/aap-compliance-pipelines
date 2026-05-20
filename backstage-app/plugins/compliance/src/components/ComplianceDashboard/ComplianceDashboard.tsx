@@ -361,7 +361,7 @@ export const ComplianceDashboard = () => {
                       />
                     </Box>
                     <Typography variant="body2" color="textSecondary">
-                      {scan.inventoryName} &middot; {scan.timestamp}
+                      {scan.inventoryName} &middot; {new Date(scan.timestamp).toLocaleString()}
                     </Typography>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

@@ -22,13 +22,16 @@ const useStyles = makeStyles(theme => ({
   root: {
     position: 'fixed',
     bottom: 0,
-    left: 0,
+    left: 248,
     right: 0,
     zIndex: 1300,
     padding: theme.spacing(0.5, 2),
     backgroundColor: theme.palette.background.paper,
     borderTop: `1px solid ${theme.palette.divider}`,
     boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
+    [theme.breakpoints.down('md')]: {
+      left: 72,
+    },
   },
   banner: {
     display: 'flex',
@@ -80,8 +83,9 @@ function formatElapsed(seconds: number): string {
 }
 
 function scanTypeLabel(scan: ComplianceScan): string {
-  if (scan.scanType === 'verification') return 'Verification';
-  return 'Assessment';
+  if (scan.scanType === 'verification') return 'Verification Scan';
+  if (scan.scanner === 'remediation') return 'Remediation';
+  return 'Assessment Scan';
 }
 
 interface ActiveJob {

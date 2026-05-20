@@ -388,6 +388,20 @@ export async function createRouter(
       );
 
       const result = await service.launchRemediation(remediateRequest, findings, userToken);
+
+      // Record the remediation as a scan-like event so it appears
+      // in the active jobs banner and Recent Activity.
+      await database.createScan({
+        profileId: remediateRequest.profileId,
+        inventoryId: remediateRequest.inventoryId,
+        scanner: 'remediation',
+        scanType: 'assessment',
+        workflowJobId: result.workflowJobId,
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        completedAt: null,
+      });
+
       res.json({ ...result, plan });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);

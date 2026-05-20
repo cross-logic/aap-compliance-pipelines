@@ -57,17 +57,21 @@ export const RemediationsList = () => {
   const navigate = useNavigate();
   const api = useApi(complianceApiRef);
   const [remediations, setRemediations] = useState<RemediationProfile[]>([]);
+  const [profileNames, setProfileNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<RemediationProfile | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    api.getRemediationProfiles()
-      .then(data => setRemediations(data))
-      .catch(err => {
-        console.error('Failed to load remediation profiles:', err);
-      })
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.getRemediationProfiles(),
+      api.getCartridges().catch(() => []),
+    ]).then(([data, cartridges]) => {
+      setRemediations(data);
+      setProfileNames(new Map(cartridges.map(c => [c.id, c.displayName])));
+    }).catch(err => {
+      console.error('Failed to load remediation profiles:', err);
+    }).finally(() => setLoading(false));
   }, [api]);
 
   const handleDelete = async () => {
@@ -150,7 +154,7 @@ export const RemediationsList = () => {
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={r.complianceProfileId}
+                      label={profileNames.get(r.complianceProfileId) || r.complianceProfileId}
                       size="small"
                       variant="outlined"
                     />

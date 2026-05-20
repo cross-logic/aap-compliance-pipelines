@@ -727,9 +727,13 @@ export const RemediationProfileBuilder = () => {
           disabled={enabledCount === 0 || !canRemediate || launching}
           title={!canRemediate ? 'You do not have permission to apply remediations' : undefined}
           onClick={async () => {
+            if (!isEditMode && !profileName) {
+              setSaveError(null);
+              setSaveDialogOpen(true);
+              return;
+            }
             setLaunching(true);
             try {
-              // Build selections with scope included
               const enabledSelections = displayFindings
                 .filter(f => selections[f.ruleId]?.enabled)
                 .map(f => ({
@@ -739,23 +743,19 @@ export const RemediationProfileBuilder = () => {
                   parameters: selections[f.ruleId].parameters,
                 }));
 
-              // Resolve the scan ID: in edit mode use the saved profile's scanId,
-              // in scan mode use the route param jobId.
               const effectiveScanId = isEditMode
                 ? (editProfile?.scanId || editProfile?.complianceProfileId || '')
                 : (jobId ?? '');
 
-              // Save as a transient remediation profile so the execution
-              // page can load the full selections
               const saved = await api.saveRemediationProfile({
-                name: `remediation-${effectiveScanId}-${Date.now()}`,
-                description: 'Auto-saved for immediate execution',
+                id: isEditMode ? editProfile?.id : undefined,
+                name: profileName || editProfile?.name || 'Remediation',
+                description: profileDescription || editProfile?.description || '',
                 complianceProfileId: editProfile?.complianceProfileId || 'rhel9-stig',
                 scanId: effectiveScanId,
                 selections: enabledSelections,
               });
 
-              // Navigate to execution with the profile ID and scan context
               const params = new URLSearchParams();
               params.set('profileId', saved.id);
               params.set('scanId', effectiveScanId);
